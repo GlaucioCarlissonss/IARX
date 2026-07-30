@@ -13,6 +13,12 @@
     "tokens:build": "pnpm --filter @iarx/tokens build",
     "db:migrate": "pnpm --filter @iarx/db migrate",
     "db:test": "pnpm --filter @iarx/db test",
-    "verificar": "pnpm a11y:tokens && pnpm db:test"
+    "a11y:dom": "playwright test",
+    "prototipo:build": "node apps/prototipo/build.mjs",
+    "verificar": "pnpm a11y:tokens && pnpm a11y:dom && pnpm db:test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.1"
   }
 }

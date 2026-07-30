@@ -46,6 +46,40 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
+  # Acessibilidade do DOM renderizado em navegador real.
+  # O validador de tokens mede cor no JSON; só um navegador mede contraste
+  # efetivo, ordem de foco e semântica ARIA (G.8).
+  # ---------------------------------------------------------------------------
+  acessibilidade-dom:
+    name: Acessibilidade — DOM renderizado (axe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+
+      - name: Protótipo sincronizado com a paleta
+        run: |
+          node apps/prototipo/build.mjs
+          if ! git diff --exit-code -- apps/prototipo/index.html; then
+            echo "::error::index.html fora de sincronia com template.html/palette.json. Rode 'node apps/prototipo/build.mjs'."
+            exit 1
+          fi
+
+      - name: axe, teclado, reflow 320 px e regras de negócio na interface
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-trace
+          path: test-results/
+
+  # ---------------------------------------------------------------------------
   # Invariantes de domínio contra PostgreSQL real.
   # Não usamos mock: RN-001 é uma exclusion constraint, RN-028 é RLS. Só um
   # banco de verdade prova que funcionam.

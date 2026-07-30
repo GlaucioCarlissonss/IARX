@@ -32,10 +32,13 @@ limitação situacional — e é assim que o investimento se paga.
 | Paleta de cores — contraste WCAG AA | **Verificado** | 108 pares medidos, 108 aprovados — `pnpm a11y:tokens` |
 | Paleta — distinção de séries sob daltonismo | **Verificado** | 80 pares medidos por ΔE2000 sob 3 tipos de dicromacia |
 | Gate de CI bloqueando regressão de cor | **Implementado** | `.github/workflows/ci.yml`, job `acessibilidade-tokens` |
+| Gate de CI sobre o DOM renderizado | **Implementado** | job `acessibilidade-dom`, com Chromium e axe |
 | Anel de foco visível sobre qualquer fundo | **Implementado** | Técnica de anel duplo em `dist/tokens.css` |
 | `prefers-reduced-motion` | **Implementado** | `dist/tokens.css` |
 | Critérios por componente | **Definido** (G.4) | Aguarda os componentes existirem para ser aferido |
-| Verificação automatizada de DOM (axe) | **Pendente** — Fase 0 | Depende do design system existir |
+| Verificação automatizada de DOM (axe) | **Implementado** | 20 testes em Chromium real: axe em 5 telas × 2 temas, teclado, reflow 320 px, zoom 200% |
+| Reflow 320 px sem rolagem lateral do corpo | **Verificado** | Teste dedicado — encontrou e corrigiu 105 px de transbordo |
+| Indicador de foco em todo elemento focável | **Verificado** | Teste dedicado — encontrou 8 controles sem indicador, por colisão de cascata |
 | Teste com tecnologia assistiva real | **Pendente** — Fase 1 | Plano em G.9 |
 | PDFs com marcação PDF/UA | **Pendente** — Fase 2 | Requisito em G.7 |
 | Declaração de acessibilidade | **Pendente** — Fase 3 | Modelo em G.10 |
@@ -82,6 +85,24 @@ O terceiro caso não era erro de cor, era **erro de modelagem**: um anel de foco
 pode contrastar simultaneamente com fundo branco e com botão azul-escuro. A solução é a técnica de
 anel duplo — anel externo escuro para o fundo da página, anel interno claro para a superfície do
 componente. Está implementada em `--foco-sombra`.
+
+### G.3.3 Defeitos que só o navegador encontrou
+
+O validador de tokens estava 188/188 quando o gate de DOM entrou em operação — e ainda assim ele
+encontrou cinco defeitos reais no primeiro uso. É a evidência de que as duas camadas não se
+substituem:
+
+| Defeito | Como se manifestava | Correção |
+| --- | --- | --- |
+| `html-has-lang` | Página servida dentro de envelope que não controlamos; leitor de tela pronunciaria português com fonemas de inglês | Idioma declarado por script (`pt-BR`) |
+| `button-name` (crítico) | Abaixo de 560 px o rótulo do menu era escondido com `display:none`, deixando o botão sem nome acessível — o glifo é `aria-hidden` | Rótulo movido para fora da tela, mas mantido no fluxo de acessibilidade |
+| `scrollable-region-focusable` | Tabelas com `overflow-x` não eram roláveis por teclado | `tabindex="0"` + `role="region"` aplicados **somente** quando o conteúdo de fato transborda |
+| Foco invisível em 8 controles | Componentes com `all: unset` (especificidade de classe) venciam a regra de foco escrita com `:where()` (especificidade 0) e zeravam o `box-shadow` | Regra reescrita com `:is()` e declarada por último |
+| Transbordo de 105 px em 320 px | `minmax(340px, 1fr)` não encolhe; itens de grid têm `min-width: auto`, então a faixa `1fr` crescia além da viewport | `minmax(min(340px, 100%), 1fr)` e `min-width: 0` nos itens |
+
+Houve também um erro **no próprio teste**, não no código: o indicador de foco em SVG se expressa no
+traço da forma, não em `box-shadow`. O teste genérico passou a excluir elementos SVG, e um teste
+dedicado verifica o traço do marcador do mapa.
 
 ---
 

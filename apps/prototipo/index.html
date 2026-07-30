@@ -1,0 +1,1261 @@
+<title>IARX — Protótipo operacional</title>
+
+<style>
+  /* Tokens gerados de packages/tokens/src/palette.json — v1.0.0
+     Conformidade: WCAG 2.2 AA, 188/188 verificações aprovadas. */
+  :root {
+    --bg: #ffffff;
+    --surface: #f4f6f9;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eaeef3;
+    --border: #c9d0da;
+    --border-strong: #6f7885;
+    --focus-ring: #14171c;
+    --focus-ring-inset: #ffffff;
+    --text-primary: #14171c;
+    --text-secondary: #535c6b;
+    --text-muted: #616a76;
+    --text-on-accent: #ffffff;
+    --primary: #0b4fa8;
+    --primary-hover: #093f88;
+    --primary-subtle-bg: #e8f0fb;
+    --primary-subtle-fg: #0a4794;
+    --disponivel: #0a6b41;
+    --disponivel-bg: #e4f4ec;
+    --disponivel-mark: #0d8150;
+    --em-uso: #0b4fa8;
+    --em-uso-bg: #e8f0fb;
+    --em-uso-mark: #1160c4;
+    --atencao: #79500a;
+    --atencao-bg: #fdf3dd;
+    --atencao-mark: #8a5c0b;
+    --critico: #a2201a;
+    --critico-bg: #fbeae8;
+    --critico-mark: #c62c24;
+    --inativo: #5b6472;
+    --inativo-bg: #eef0f3;
+    --inativo-mark: #68717f;
+    --serie-1: #0b4fa8;
+    --serie-2: #ca7805;
+    --serie-3: #6d4025;
+    --serie-4: #1a9c8f;
+    --serie-5: #9475f9;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --surface: #161a21;
+      --surface-raised: #1d222b;
+      --surface-sunken: #0a0d11;
+      --border: #333b47;
+      --border-strong: #6d7787;
+      --focus-ring: #e8ecf2;
+      --focus-ring-inset: #0e1116;
+      --text-primary: #e8ecf2;
+      --text-secondary: #a9b2c0;
+      --text-muted: #98a1af;
+      --text-on-accent: #08121f;
+      --primary: #7fb2ff;
+      --primary-hover: #a3c8ff;
+      --primary-subtle-bg: #152437;
+      --primary-subtle-fg: #9cc4ff;
+      --disponivel: #4cc98a;
+      --disponivel-bg: #10251c;
+      --disponivel-mark: #3fbd7d;
+      --em-uso: #7fb2ff;
+      --em-uso-bg: #152437;
+      --em-uso-mark: #6aa5ff;
+      --atencao: #e8b23d;
+      --atencao-bg: #2a2110;
+      --atencao-mark: #d9a52e;
+      --critico: #ff8f85;
+      --critico-bg: #2d1614;
+      --critico-mark: #f77e73;
+      --inativo: #9aa3b1;
+      --inativo-bg: #1a1e25;
+      --inativo-mark: #8b95a3;
+      --serie-1: #7fb2ff;
+      --serie-2: #915952;
+      --serie-3: #febbc0;
+      --serie-4: #66638f;
+      --serie-5: #9ba904;
+    }
+  }
+
+  :root[data-theme='light'] {
+    --bg: #ffffff;
+    --surface: #f4f6f9;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eaeef3;
+    --border: #c9d0da;
+    --border-strong: #6f7885;
+    --focus-ring: #14171c;
+    --focus-ring-inset: #ffffff;
+    --text-primary: #14171c;
+    --text-secondary: #535c6b;
+    --text-muted: #616a76;
+    --text-on-accent: #ffffff;
+    --primary: #0b4fa8;
+    --primary-hover: #093f88;
+    --primary-subtle-bg: #e8f0fb;
+    --primary-subtle-fg: #0a4794;
+    --disponivel: #0a6b41;
+    --disponivel-bg: #e4f4ec;
+    --disponivel-mark: #0d8150;
+    --em-uso: #0b4fa8;
+    --em-uso-bg: #e8f0fb;
+    --em-uso-mark: #1160c4;
+    --atencao: #79500a;
+    --atencao-bg: #fdf3dd;
+    --atencao-mark: #8a5c0b;
+    --critico: #a2201a;
+    --critico-bg: #fbeae8;
+    --critico-mark: #c62c24;
+    --inativo: #5b6472;
+    --inativo-bg: #eef0f3;
+    --inativo-mark: #68717f;
+    --serie-1: #0b4fa8;
+    --serie-2: #ca7805;
+    --serie-3: #6d4025;
+    --serie-4: #1a9c8f;
+    --serie-5: #9475f9;
+  }
+
+  :root[data-theme='dark'] {
+    --bg: #0e1116;
+    --surface: #161a21;
+    --surface-raised: #1d222b;
+    --surface-sunken: #0a0d11;
+    --border: #333b47;
+    --border-strong: #6d7787;
+    --focus-ring: #e8ecf2;
+    --focus-ring-inset: #0e1116;
+    --text-primary: #e8ecf2;
+    --text-secondary: #a9b2c0;
+    --text-muted: #98a1af;
+    --text-on-accent: #08121f;
+    --primary: #7fb2ff;
+    --primary-hover: #a3c8ff;
+    --primary-subtle-bg: #152437;
+    --primary-subtle-fg: #9cc4ff;
+    --disponivel: #4cc98a;
+    --disponivel-bg: #10251c;
+    --disponivel-mark: #3fbd7d;
+    --em-uso: #7fb2ff;
+    --em-uso-bg: #152437;
+    --em-uso-mark: #6aa5ff;
+    --atencao: #e8b23d;
+    --atencao-bg: #2a2110;
+    --atencao-mark: #d9a52e;
+    --critico: #ff8f85;
+    --critico-bg: #2d1614;
+    --critico-mark: #f77e73;
+    --inativo: #9aa3b1;
+    --inativo-bg: #1a1e25;
+    --inativo-mark: #8b95a3;
+    --serie-1: #7fb2ff;
+    --serie-2: #915952;
+    --serie-3: #febbc0;
+    --serie-4: #66638f;
+    --serie-5: #9ba904;
+  }
+
+  /* ---------------------------------------------------------------- base --- */
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --fonte-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* Monoespaçada para identificadores: patrimônio, nº de contrato, valores.
+       É como se lê etiqueta de pátio e coluna de fatura. */
+    --fonte-dado: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+
+    --e1: 4px; --e2: 8px; --e3: 12px; --e4: 16px; --e5: 24px; --e6: 32px; --e7: 48px;
+    --raio: 8px;
+    --alvo-toque: 44px;
+
+    /* Anel de foco duplo: visível sobre qualquer fundo, inclusive sobre o
+       botão primário. Ver G.3.2 — um anel de cor única media 1,00:1 ali. */
+    --foco: 0 0 0 2px var(--focus-ring-inset), 0 0 0 4px var(--focus-ring);
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--fonte-ui);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background: var(--surface);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.25; font-weight: 650; }
+  h1 { font-size: 21px; }
+  h2 { font-size: 17px; }
+  h3 { font-size: 15px; }
+  p { margin: 0; }
+
+  a { color: var(--primary); text-underline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      transition-duration: .01ms !important;
+    }
+  }
+
+  .dado { font-family: var(--fonte-dado); font-variant-numeric: tabular-nums; }
+  .num  { font-variant-numeric: tabular-nums; }
+
+  .pular {
+    position: absolute; left: var(--e3); top: -60px; z-index: 50;
+    background: var(--bg); color: var(--text-primary);
+    padding: var(--e2) var(--e4); border: 1px solid var(--border-strong);
+    border-radius: var(--raio); transition: top .12s;
+  }
+  .pular:focus { top: var(--e3); }
+
+  .oculto-visual {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+
+  /* --------------------------------------------------------------- layout --- */
+  .app { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+  /* Itens de grid e de flex têm min-width:auto por padrão, então a faixa 1fr
+     cresce para caber o conteúdo em vez de respeitar a viewport — era isso que
+     estourava 105 px em 320 px de largura. */
+  .app > *, .barra > *, .busca, .grade > *, .cartao { min-width: 0; }
+
+  .rail {
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    padding: var(--e4) var(--e3);
+    display: flex; flex-direction: column; gap: var(--e5);
+  }
+
+  .marca { display: flex; align-items: baseline; gap: var(--e2); padding: 0 var(--e2); }
+  .marca strong { font-size: 18px; letter-spacing: -.01em; }
+  .marca span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .09em; }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-grupo {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--text-muted); padding: var(--e4) var(--e2) var(--e1);
+  }
+  .nav button {
+    all: unset; cursor: pointer; display: flex; align-items: center; gap: var(--e3);
+    padding: var(--e2) var(--e2); border-radius: var(--e1);
+    color: var(--text-secondary); font-size: 14px; min-height: 36px;
+  }
+  .nav button:hover { background: var(--surface-sunken); color: var(--text-primary); }
+  .nav button[aria-current='page'] {
+    background: var(--primary-subtle-bg); color: var(--primary-subtle-fg); font-weight: 600;
+  }
+  .nav .glifo { width: 18px; text-align: center; opacity: .85; }
+
+  .barra {
+    grid-column: 2; position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: var(--e4);
+    padding: var(--e3) var(--e5);
+    background: var(--bg); border-bottom: 1px solid var(--border);
+  }
+
+  .conteudo { grid-column: 2; padding: var(--e5); max-width: 1320px; }
+
+  /* ------------------------------------------------------------ controles --- */
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: var(--e2);
+    padding: 0 var(--e4); min-height: 36px; border-radius: var(--e1);
+    font-size: 14px; font-weight: 600; border: 1px solid var(--border-strong);
+    color: var(--text-primary); background: var(--bg);
+  }
+  .btn:hover { background: var(--surface-sunken); }
+  .btn--primario {
+    background: var(--primary); color: var(--text-on-accent); border-color: var(--primary);
+  }
+  .btn--primario:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .btn--sutil { border-color: transparent; color: var(--text-secondary); }
+  .btn--sutil:hover { background: var(--surface-sunken); color: var(--text-primary); }
+
+  .campo { display: flex; flex-direction: column; gap: var(--e1); }
+  .campo label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .campo .dica { font-size: 12px; color: var(--text-muted); }
+  input, select {
+    font: inherit; font-size: 14px; color: var(--text-primary);
+    background: var(--bg); border: 1px solid var(--border-strong);
+    border-radius: var(--e1); padding: 0 var(--e3); min-height: 36px;
+  }
+
+  .busca { flex: 1; max-width: 420px; display: flex; align-items: center; gap: var(--e2);
+    border: 1px solid var(--border); border-radius: var(--e1);
+    background: var(--surface); padding: 0 var(--e3); min-height: 36px; color: var(--text-muted); }
+  .busca input { border: none; background: transparent; flex: 1; min-height: 34px; padding: 0; }
+  .busca kbd {
+    font-family: var(--fonte-dado); font-size: 11px; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: var(--e1); padding: 1px var(--e1);
+  }
+
+  /* --------------------------------------------------------------- estado --- */
+  /* Estado nunca depende só de cor: glifo + rótulo + cor (WCAG 1.4.1). */
+  .estado {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 600; white-space: nowrap;
+    padding: 2px var(--e2); border-radius: 999px;
+  }
+  .estado .glifo { font-size: 11px; line-height: 1; }
+  .estado--disponivel { color: var(--disponivel); background: var(--disponivel-bg); }
+  .estado--locado     { color: var(--em-uso);    background: var(--em-uso-bg); }
+  .estado--atencao    { color: var(--atencao);   background: var(--atencao-bg); }
+  .estado--critico    { color: var(--critico);   background: var(--critico-bg); }
+  .estado--inativo    { color: var(--inativo);   background: var(--inativo-bg); }
+
+  /* --------------------------------------------------------------- cartão --- */
+  .grade { display: grid; gap: var(--e4); }
+   /* min() é indispensável: minmax(340px, 1fr) não encolhe abaixo de 340px e
+     estoura o corpo da página em telas estreitas (WCAG 1.4.10). */
+  .grade--excecoes { grid-template-columns: repeat(auto-fit, minmax(min(216px, 100%), 1fr)); }
+  .grade--duas { grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); }
+
+  .cartao {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--raio); padding: var(--e4);
+  }
+  .cartao__cabeca {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--e3); margin-bottom: var(--e3);
+  }
+  .cartao__cabeca h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); }
+
+  /* Cartão de exceção: faixa de severidade à esquerda — a severidade se lê
+     pela forma, não só pela cor. */
+  .excecao {
+    all: unset; cursor: pointer; display: block; text-align: left;
+    background: var(--bg); border: 1px solid var(--border);
+    border-left: 3px solid var(--inativo-mark);
+    border-radius: var(--e1); padding: var(--e3) var(--e4);
+  }
+  .excecao:hover { background: var(--surface-sunken); }
+  .excecao[data-sev='critico'] { border-left-color: var(--critico-mark); }
+  .excecao[data-sev='atencao'] { border-left-color: var(--atencao-mark); }
+  .excecao__n { font-size: 27px; font-weight: 680; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .excecao__r { font-size: 13px; color: var(--text-secondary); }
+  .excecao__meta { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+
+  /* --------------------------------------------------------------- tabela --- */
+  .tabela-rolagem { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  caption { text-align: left; font-size: 12.5px; color: var(--text-muted); padding-bottom: var(--e2); }
+  th, td { text-align: left; padding: var(--e2) var(--e3); border-bottom: 1px solid var(--border); }
+  th {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-secondary); font-weight: 650; white-space: nowrap;
+  }
+  tbody tr:hover { background: var(--surface-sunken); }
+  td.numerico, th.numerico { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ---------------------------------------------------------------- abas --- */
+  .abas { display: flex; gap: var(--e1); border-bottom: 1px solid var(--border); margin-bottom: var(--e5); }
+  .abas button {
+    all: unset; cursor: pointer; padding: var(--e2) var(--e3); min-height: 38px;
+    font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent;
+  }
+  .abas button:hover { color: var(--text-primary); }
+  .abas button[aria-selected='true'] { color: var(--primary); border-bottom-color: var(--primary); font-weight: 650; }
+
+  /* -------------------------------------------------------------- avisos --- */
+  .aviso {
+    display: flex; gap: var(--e3); padding: var(--e4);
+    border: 1px solid var(--critico-mark); border-left-width: 3px;
+    border-radius: var(--e1); background: var(--critico-bg); color: var(--text-primary);
+  }
+  .aviso--ok { border-color: var(--disponivel-mark); background: var(--disponivel-bg); }
+  .aviso__t { font-weight: 650; margin-bottom: var(--e1); }
+  .aviso ul { margin: var(--e2) 0 0; padding-left: var(--e5); font-size: 14px; }
+  .aviso li { margin-bottom: var(--e1); }
+
+  /* ------------------------------------------------------------- medidor --- */
+  .barra-ocupacao { height: 8px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+  .barra-ocupacao > i { display: block; height: 100%; background: var(--primary); }
+
+  /* --------------------------------------------------------- memória fat --- */
+  .memoria { font-size: 14px; }
+  .memoria__linha {
+    display: flex; justify-content: space-between; gap: var(--e4);
+    padding: var(--e2) 0; border-bottom: 1px dashed var(--border);
+  }
+  .memoria__linha:last-child { border-bottom: none; }
+  .memoria__rot { color: var(--text-secondary); }
+  .memoria__val { font-family: var(--fonte-dado); font-variant-numeric: tabular-nums; }
+  .memoria__total { font-weight: 700; border-top: 2px solid var(--border-strong); padding-top: var(--e3); margin-top: var(--e2); }
+  details.fonte { margin-top: var(--e3); font-size: 13px; }
+  details.fonte summary { cursor: pointer; color: var(--primary); }
+  details.fonte div { margin-top: var(--e2); color: var(--text-secondary); }
+
+  /* ---------------------------------------------------------------- mapa --- */
+  .mapa-caixa { position: relative; border: 1px solid var(--border); border-radius: var(--e1); background: var(--surface-sunken); }
+  .mapa-svg { display: block; width: 100%; height: auto; }
+  .mapa-pino { cursor: pointer; }
+  /* Em SVG o indicador de foco se expressa no traço da forma, não em box-shadow:
+     o segundo traço claro garante contraste sobre marcador de qualquer cor. */
+  /* :focus além de :focus-visible — em SVG a heurística de :focus-visible do
+     navegador não cobre foco movido por script, e o indicador não pode depender
+     da rota pela qual o foco chegou. */
+  .mapa-pino:focus, .mapa-pino:focus-visible { outline: none; }
+  .mapa-pino:focus circle,
+  .mapa-pino:focus-visible circle {
+    stroke: var(--focus-ring);
+    stroke-width: 4;
+    paint-order: stroke;
+  }
+  .mapa-pino:focus .halo,
+  .mapa-pino:focus-visible .halo { stroke: var(--focus-ring-inset); stroke-width: 2; }
+
+  .legenda { display: flex; flex-wrap: wrap; gap: var(--e4); margin-top: var(--e3); font-size: 13px; color: var(--text-secondary); }
+  .legenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+  .rodape {
+    grid-column: 2; padding: var(--e5); border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: var(--e4);
+    justify-content: space-between;
+  }
+
+  .frescor { font-size: 12px; color: var(--text-muted); }
+
+  /* --------------------------------------------------------- responsivo --- */
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .rail {
+      grid-column: 1; border-right: none; border-bottom: 1px solid var(--border);
+      flex-direction: row; align-items: center; gap: var(--e4); overflow-x: auto;
+    }
+    .rail .nav { flex-direction: row; }
+    .rail .nav-grupo { display: none; }
+    .barra, .conteudo, .rodape { grid-column: 1; }
+    .barra { padding: var(--e3) var(--e4); flex-wrap: wrap; }
+    .conteudo { padding: var(--e4); }
+  }
+  /* ------------------------------------------------------------------ foco ---
+     Declarada por último e com :is() em vez de :where(): componentes que usam
+     `all: unset` (nav, cartões de exceção, abas) têm especificidade de classe e
+     zerariam o box-shadow de uma regra de especificidade 0. */
+  :is(a, button, input, select, [tabindex], .mapa-pino):focus-visible {
+    outline: none;
+    box-shadow: var(--foco);
+    border-radius: var(--e1);
+  }
+
+  @media (max-width: 560px) {
+    /* O rótulo sai da tela, mas permanece no fluxo de acessibilidade: com
+       display:none o botão ficaria sem nome, já que o glifo é aria-hidden. */
+    .nav button .rotulo {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip-path: inset(50%); white-space: nowrap;
+    }
+    .nav button { min-width: var(--alvo-toque); min-height: var(--alvo-toque); justify-content: center; }
+  }
+</style>
+
+<a class="pular" href="#principal">Pular para o conteúdo</a>
+
+<div class="app">
+  <div class="rail">
+    <div class="marca">
+      <strong>IARX</strong>
+      <span>Locação</span>
+    </div>
+
+    <nav class="nav" aria-label="Navegação principal">
+      <div class="nav-grupo" id="g-op">Operação</div>
+      <button type="button" data-tela="inicio" aria-current="page">
+        <span class="glifo" aria-hidden="true">◧</span><span class="rotulo">Início</span>
+      </button>
+      <button type="button" data-tela="frota">
+        <span class="glifo" aria-hidden="true">▤</span><span class="rotulo">Frota</span>
+      </button>
+      <button type="button" data-tela="alocar">
+        <span class="glifo" aria-hidden="true">⇄</span><span class="rotulo">Alocar</span>
+      </button>
+      <button type="button" data-tela="mapa">
+        <span class="glifo" aria-hidden="true">◎</span><span class="rotulo">Mapa</span>
+      </button>
+      <div class="nav-grupo">Financeiro</div>
+      <button type="button" data-tela="fatura">
+        <span class="glifo" aria-hidden="true">▦</span><span class="rotulo">Faturamento</span>
+      </button>
+    </nav>
+  </div>
+
+  <div class="barra">
+    <div class="busca">
+      <span aria-hidden="true">⌕</span>
+      <input type="search" id="busca" placeholder="Patrimônio, série, cliente, contrato…" aria-label="Busca global" />
+      <kbd>⌘K</kbd>
+    </div>
+    <div class="campo" style="flex-direction:row;align-items:center;gap:8px">
+      <label for="filial" style="font-size:13px">Filial</label>
+      <select id="filial">
+        <option>Todas as filiais</option>
+        <option selected>SP-01 — Base São Paulo</option>
+        <option>MG-02 — Base Betim</option>
+      </select>
+    </div>
+    <button class="btn btn--sutil" type="button" id="tema" aria-label="Alternar tema claro e escuro">
+      <span aria-hidden="true">◐</span> Tema
+    </button>
+  </div>
+
+  <main class="conteudo" id="principal">
+    <!-- ============================================================ INÍCIO -->
+    <section data-painel="inicio">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:8px">
+        <h1>O que exige ação hoje</h1>
+        <p class="frescor">Atualizado às 09:14</p>
+      </div>
+      <p style="color:var(--text-secondary);margin-bottom:24px;max-width:65ch">
+        A primeira dobra mostra desvio, não volume. Cada cartão abre a lista já filtrada.
+      </p>
+
+      <div class="grade grade--excecoes" style="margin-bottom:32px" id="excecoes"></div>
+
+      <div class="grade grade--duas">
+        <div class="cartao">
+          <div class="cartao__cabeca">
+            <h2>Entregas e retornos de hoje</h2>
+            <span class="frescor">4 movimentações</span>
+          </div>
+          <div class="tabela-rolagem">
+            <table>
+              <caption>Programação de movimentação da filial SP-01</caption>
+              <thead>
+                <tr><th scope="col">Hora</th><th scope="col">Local</th><th scope="col">Ativo</th><th scope="col">Tipo</th></tr>
+              </thead>
+              <tbody id="movimentacoes"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="cartao">
+          <div class="cartao__cabeca">
+            <h2>Fila de manutenção, por risco de SLA</h2>
+            <span class="frescor">SLA 95% no mês</span>
+          </div>
+          <div class="tabela-rolagem">
+            <table>
+              <caption>Ordens de serviço abertas, ordenadas pelo prazo restante</caption>
+              <thead>
+                <tr><th scope="col">OS</th><th scope="col">Ativo</th><th scope="col">Restante</th><th scope="col">Técnico</th></tr>
+              </thead>
+              <tbody id="fila-os"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="cartao">
+          <div class="cartao__cabeca"><h2>Ocupação da frota</h2><span class="frescor">Meta 80%</span></div>
+          <p style="font-size:34px;font-weight:680;letter-spacing:-.02em" class="num">78,2<span style="font-size:20px">%</span></p>
+          <div class="barra-ocupacao" role="img" aria-label="Ocupação da frota em 78,2 por cento, meta de 80 por cento">
+            <i style="width:78.2%"></i>
+          </div>
+          <p style="font-size:13px;color:var(--text-secondary);margin-top:12px">
+            132 de 169 ativos em contrato ativo. Alta de 2,4 p.p. sobre o mês anterior.
+          </p>
+        </div>
+
+        <div class="cartao">
+          <div class="cartao__cabeca"><h2>Fechamento de julho</h2><span class="frescor">D-2</span></div>
+          <p style="font-size:15px;margin-bottom:12px">
+            <span class="estado estado--atencao"><span class="glifo" aria-hidden="true">▲</span>4 pendências de medição</span>
+          </p>
+          <p style="font-size:13px;color:var(--text-secondary)">
+            Itens com cobrança por medição não fecham sem leitura do período. O fechamento fica
+            bloqueado até a tratativa — ou até uso explícito de estimativa, com alçada.
+          </p>
+          <p style="margin-top:16px"><button class="btn" type="button" data-ir="fatura">Abrir fechamento</button></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= FROTA -->
+    <section data-painel="frota" hidden>
+      <h1 style="margin-bottom:8px">Frota</h1>
+      <p style="color:var(--text-secondary);margin-bottom:24px;max-width:65ch">
+        Disponibilidade em tempo real. O estado do ativo é a projeção da última movimentação
+        válida — não um campo editável.
+      </p>
+
+      <div class="cartao">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:16px">
+          <div class="campo">
+            <label for="f-estado">Estado</label>
+            <select id="f-estado">
+              <option value="">Todos</option>
+              <option value="DISPONIVEL">Disponível</option>
+              <option value="LOCADO">Locado</option>
+              <option value="EM_MANUTENCAO">Em manutenção</option>
+              <option value="BLOQUEADO">Bloqueado</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="f-categoria">Categoria</label>
+            <select id="f-categoria">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="f-texto">Patrimônio ou série</label>
+            <input type="search" id="f-texto" placeholder="ex.: 10422" />
+          </div>
+          <p aria-live="polite" class="frescor" id="frota-contagem" style="margin-left:auto"></p>
+        </div>
+
+        <div class="tabela-rolagem">
+          <table>
+            <caption>Ativos da filial selecionada, com estado e alocação vigente</caption>
+            <thead>
+              <tr>
+                <th scope="col">Patrimônio</th>
+                <th scope="col">Modelo</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Contrato / local</th>
+                <th scope="col" class="numerico">Horímetro</th>
+                <th scope="col" class="numerico">Margem 12m</th>
+              </tr>
+            </thead>
+            <tbody id="frota-corpo"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ ALOCAR -->
+    <section data-painel="alocar" hidden>
+      <h1 style="margin-bottom:8px">Alocar equipamento a contrato</h1>
+      <p style="color:var(--text-secondary);margin-bottom:24px;max-width:65ch">
+        Esta tela demonstra a regra <strong>RN-001</strong>: um ativo não pode estar em dois
+        contratos com vigências sobrepostas. No sistema real a recusa vem de uma
+        <em>exclusion constraint</em> do PostgreSQL — nenhum caminho de escrita consegue
+        produzir o estado inválido. Aqui a mesma verificação de sobreposição roda no navegador.
+      </p>
+
+      <div class="grade grade--duas">
+        <div class="cartao">
+          <div class="cartao__cabeca"><h2>Nova alocação</h2></div>
+          <form id="form-alocar" style="display:flex;flex-direction:column;gap:16px" novalidate>
+            <div class="campo">
+              <label for="a-equip">Equipamento</label>
+              <select id="a-equip"></select>
+              <p class="dica" id="a-equip-dica">Somente ativos não baixados aparecem na lista.</p>
+            </div>
+            <div class="campo">
+              <label for="a-contrato">Contrato de destino</label>
+              <select id="a-contrato">
+                <option value="SP-2026-0201">SP-2026-0201 — Construtora Alfa</option>
+                <option value="SP-2026-0202">SP-2026-0202 — Mineradora Beta</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <div class="campo" style="flex:1;min-width:150px">
+                <label for="a-inicio">Início da vigência</label>
+                <input type="date" id="a-inicio" value="2026-09-01" />
+              </div>
+              <div class="campo" style="flex:1;min-width:150px">
+                <label for="a-fim">Fim da vigência</label>
+                <input type="date" id="a-fim" value="2027-06-30" />
+              </div>
+            </div>
+            <div>
+              <button class="btn btn--primario" type="submit">Alocar equipamento</button>
+              <button class="btn btn--sutil" type="button" id="a-limpar">Limpar</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="cartao">
+          <div class="cartao__cabeca"><h2>Resultado</h2></div>
+          <div id="a-resultado" role="status" aria-live="polite">
+            <p style="color:var(--text-secondary);font-size:14px">
+              Escolha um ativo e um período. Tente o patrimônio <span class="dado">10422</span> em
+              setembro de 2026 para ver a recusa com as alternativas de saída.
+            </p>
+          </div>
+
+          <div style="margin-top:24px">
+            <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary);margin-bottom:8px">
+              Alocações já registradas do ativo
+            </h3>
+            <div class="tabela-rolagem">
+              <table>
+                <caption>Vigências existentes, usadas na verificação de sobreposição</caption>
+                <thead>
+                  <tr><th scope="col">Contrato</th><th scope="col">Início</th><th scope="col">Fim</th><th scope="col">Situação</th></tr>
+                </thead>
+                <tbody id="a-vigencias"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== MAPA -->
+    <section data-painel="mapa" hidden>
+      <h1 style="margin-bottom:8px">Mapa operacional</h1>
+      <p style="color:var(--text-secondary);margin-bottom:16px;max-width:65ch">
+        Mapa vetorial é hostil a leitor de tela e a teclado. Por isso a visão em
+        <strong>lista</strong> não é um extra: é a implementação acessível, com os mesmos dados e
+        os mesmos filtros. O mapa é a visão complementar.
+      </p>
+
+      <div class="abas" role="tablist" aria-label="Forma de visualização">
+        <button role="tab" id="aba-mapa" aria-selected="true" aria-controls="p-mapa" type="button">Mapa</button>
+        <button role="tab" id="aba-lista" aria-selected="false" aria-controls="p-lista" type="button" tabindex="-1">Lista</button>
+      </div>
+
+      <div id="p-mapa" role="tabpanel" aria-labelledby="aba-mapa" tabindex="0">
+        <div class="mapa-caixa">
+          <!-- role="group", não "img": os marcadores são controles focáveis, e
+               role="img" declararia todo o conteúdo como uma imagem única,
+               tornando os filhos interativos uma violação (nested-interactive). -->
+          <svg class="mapa-svg" viewBox="0 0 800 380" role="group"
+               aria-label="Mapa esquemático de agrupamentos de ativos. Cada marcador é um controle navegável por teclado; a aba Lista traz os mesmos dados em tabela.">
+            <rect x="0" y="0" width="800" height="380" fill="var(--surface-sunken)"></rect>
+            <g stroke="var(--border)" stroke-width="1" fill="none">
+              <path d="M60 300 L180 250 L300 268 L420 210 L560 240 L720 190"></path>
+              <path d="M100 120 L240 90 L380 130 L520 100 L680 140"></path>
+              <path d="M240 90 L300 268"></path>
+              <path d="M520 100 L560 240"></path>
+            </g>
+            <g id="mapa-pinos"></g>
+          </svg>
+        </div>
+        <div class="legenda">
+          <span><span class="estado estado--disponivel"><span class="glifo" aria-hidden="true">●</span>Disponível</span></span>
+          <span><span class="estado estado--locado"><span class="glifo" aria-hidden="true">■</span>Locado</span></span>
+          <span><span class="estado estado--atencao"><span class="glifo" aria-hidden="true">▲</span>Atenção</span></span>
+          <span><span class="estado estado--critico"><span class="glifo" aria-hidden="true">⛔</span>Crítico</span></span>
+        </div>
+        <p class="frescor" style="margin-top:12px">
+          Os marcadores são navegáveis por teclado. O tamanho do círculo indica a quantidade de
+          ativos no agrupamento — e o número aparece dentro dele, não só no tamanho.
+        </p>
+      </div>
+
+      <div id="p-lista" role="tabpanel" aria-labelledby="aba-lista" tabindex="0" hidden>
+        <div class="cartao">
+          <div class="tabela-rolagem">
+            <table>
+              <caption>Mesmos dados do mapa, em forma tabular</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Local</th><th scope="col">Cliente</th>
+                  <th scope="col" class="numerico">Ativos</th>
+                  <th scope="col">Situação</th><th scope="col">Observação</th>
+                </tr>
+              </thead>
+              <tbody id="mapa-lista"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ FATURA -->
+    <section data-painel="fatura" hidden>
+      <h1 style="margin-bottom:8px">Fatura 1-004821 — memória de cálculo</h1>
+      <p style="color:var(--text-secondary);margin-bottom:24px;max-width:65ch">
+        Nenhum valor da fatura é digitado. Cada linha é derivada de contrato, movimentação e
+        leitura — e permite chegar até o fato de origem. É isso que sustenta a defesa de um valor
+        quando o cliente contesta.
+      </p>
+
+      <div class="grade grade--duas">
+        <div class="cartao">
+          <div class="cartao__cabeca">
+            <h2>Item 1 — Escavadeira 21 t · patrimônio <span class="dado">10422</span></h2>
+            <span class="estado estado--locado"><span class="glifo" aria-hidden="true">■</span>Franquia + excedente</span>
+          </div>
+
+          <div class="memoria">
+            <div class="memoria__linha">
+              <span class="memoria__rot">Ciclo de agosto/2026, dias faturáveis</span>
+              <span class="memoria__val">26 de 31</span>
+            </div>
+            <div class="memoria__linha">
+              <span class="memoria__rot">Fator proporcional</span>
+              <span class="memoria__val">0,838710</span>
+            </div>
+            <div class="memoria__linha">
+              <span class="memoria__rot">Parcela fixa · R$ 2.400,00 × fator</span>
+              <span class="memoria__val">R$ 2.012,90</span>
+            </div>
+            <div class="memoria__linha">
+              <span class="memoria__rot">Franquia contratada · 200 h × fator</span>
+              <span class="memoria__val">167,74 h</span>
+            </div>
+            <div class="memoria__linha">
+              <span class="memoria__rot">Consumo medido · 4.348 − 4.120</span>
+              <span class="memoria__val">228,00 h</span>
+            </div>
+            <div class="memoria__linha">
+              <span class="memoria__rot">Excedente · 60,26 h × R$ 9,50</span>
+              <span class="memoria__val">R$ 572,47</span>
+            </div>
+            <div class="memoria__linha memoria__total">
+              <span>Valor líquido do item</span>
+              <span class="memoria__val">R$ 2.585,37</span>
+            </div>
+          </div>
+
+          <details class="fonte">
+            <summary>De onde vem cada número</summary>
+            <div>
+              <p><strong>26 dias</strong> — entrega registrada em 06/08/2026 às 09:14, romaneio
+              <span class="dado">ROM-2026-00918</span>, com checklist de saída e assinatura do recebedor.
+              A contagem inclui o dia da entrega e o do fim do ciclo.</p>
+              <p style="margin-top:8px"><strong>4.120 h</strong> — leitura inicial, capturada em campo
+              com foto do horímetro. <strong>4.348 h</strong> — leitura final de 31/08, recebida por
+              telemetria. A leitura é monotônica: valor menor que o anterior é recusado.</p>
+              <p style="margin-top:8px"><strong>R$ 9,50/h</strong> — preço de excedente da cláusula 4.2
+              do contrato <span class="dado">SP-2026-0148</span>. Mínimo mensal de R$ 2.400,00 não foi
+              acionado, porque o valor calculado ficou acima.</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="cartao">
+          <div class="cartao__cabeca"><h2>Conferência por exceção</h2><span class="frescor">Julho/2026 · D-2</span></div>
+          <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px">
+            De 84 itens do ciclo, 79 seguiram o padrão e não pedem revisão. O painel lista apenas
+            os 5 que fugiram.
+          </p>
+          <div class="tabela-rolagem">
+            <table>
+              <caption>Itens sinalizados para conferência antes da emissão</caption>
+              <thead>
+                <tr><th scope="col">Item</th><th scope="col">Motivo do destaque</th><th scope="col" class="numerico">Valor</th></tr>
+              </thead>
+              <tbody id="excecoes-fatura"></tbody>
+            </table>
+          </div>
+          <p style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn--primario" type="button">Aprovar 79 itens em lote</button>
+            <button class="btn" type="button">Tratar exceções</button>
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="rodape">
+    <p>
+      Protótipo de interface da plataforma IARX. Dados fictícios, coerentes com os exemplos dos
+      anexos da proposta.
+    </p>
+    <p>
+      Cores vindas de <span class="dado">packages/tokens/src/palette.json</span> — 188/188
+      verificações de contraste e daltonismo aprovadas.
+    </p>
+  </footer>
+</div>
+
+<script>
+  'use strict'
+
+  /* Idioma do documento (WCAG 3.1.1). Esta página é servida dentro de um
+     envelope de documento que não controlamos, então declaramos o idioma aqui
+     — sem isso o leitor de tela pronuncia o português com fonemas de inglês. */
+  document.documentElement.lang = 'pt-BR'
+
+  /* ------------------------------------------------------------------ dados
+     Massa fictícia coerente com os exemplos dos anexos: o patrimônio 10422 e o
+     contrato SP-2026-0148 são os mesmos usados no Anexo E e nos testes de banco. */
+
+  const ESTADOS = {
+    DISPONIVEL:    { rotulo: 'Disponível',      classe: 'disponivel', glifo: '●' },
+    RESERVADO:     { rotulo: 'Reservado',       classe: 'locado',     glifo: '◐' },
+    LOCADO:        { rotulo: 'Locado',          classe: 'locado',     glifo: '■' },
+    EM_TRANSITO:   { rotulo: 'Em trânsito',     classe: 'atencao',    glifo: '▲' },
+    EM_INSPECAO:   { rotulo: 'Em inspeção',     classe: 'atencao',    glifo: '▲' },
+    EM_MANUTENCAO: { rotulo: 'Em manutenção',   classe: 'atencao',    glifo: '✚' },
+    BLOQUEADO:     { rotulo: 'Bloqueado',       classe: 'critico',    glifo: '⛔' },
+    BAIXADO:       { rotulo: 'Baixado',         classe: 'inativo',    glifo: '✕' },
+  }
+
+  const OCUPANTES = ['RESERVADO', 'EM_ENTREGA', 'ATIVO', 'SUSPENSO', 'EM_DEVOLUCAO']
+
+  const equipamentos = [
+    { pat: '10422', modelo: 'Escavadeira 21 t', categoria: 'Escavadeira', estado: 'LOCADO',
+      local: 'Obra Norte · Construtora Alfa', contrato: 'SP-2026-0148', horimetro: 4348, margem: 31.4,
+      vigencias: [
+        { contrato: 'SP-2026-0148', inicio: '2026-08-01', fim: '2026-12-31', status: 'ATIVO' },
+        { contrato: 'SP-2025-0987', inicio: '2025-03-01', fim: '2026-02-28', status: 'ENCERRADO' },
+      ] },
+    { pat: '10870', modelo: 'Escavadeira 21 t', categoria: 'Escavadeira', estado: 'DISPONIVEL',
+      local: 'SP-01 — Base São Paulo', contrato: null, horimetro: 2190, margem: 26.8, vigencias: [] },
+    { pat: '20114', modelo: 'Gerador 150 kVA', categoria: 'Gerador', estado: 'BLOQUEADO',
+      local: 'SP-01 — Base São Paulo', contrato: null, horimetro: 8712, margem: 9.2,
+      bloqueio: 'preventiva vencida há 12 dias', vigencias: [] },
+    { pat: '20115', modelo: 'Gerador 150 kVA', categoria: 'Gerador', estado: 'LOCADO',
+      local: 'CD Sul · Logística Ipê', contrato: 'SP-2026-0155', horimetro: 5230, margem: 34.1,
+      vigencias: [{ contrato: 'SP-2026-0155', inicio: '2026-05-01', fim: '2027-04-30', status: 'ATIVO' }] },
+    { pat: '30071', modelo: 'Plataforma articulada 16 m', categoria: 'Plataforma', estado: 'EM_MANUTENCAO',
+      local: 'Oficina SP-01', contrato: null, horimetro: 1502, margem: -4.6,
+      motivo: 'corretiva — vazamento hidráulico', vigencias: [] },
+    { pat: '30072', modelo: 'Plataforma articulada 16 m', categoria: 'Plataforma', estado: 'DISPONIVEL',
+      local: 'SP-01 — Base São Paulo', contrato: null, horimetro: 940, margem: 22.5, vigencias: [] },
+    { pat: '40233', modelo: 'Compressor 750 pcm', categoria: 'Compressor', estado: 'EM_INSPECAO',
+      local: 'SP-01 — Base São Paulo', contrato: null, horimetro: 3305, margem: 18.9,
+      motivo: 'divergência no checklist de retorno', vigencias: [] },
+    { pat: '40234', modelo: 'Compressor 750 pcm', categoria: 'Compressor', estado: 'LOCADO',
+      local: 'Obra Leste · Mineradora Beta', contrato: 'SP-2026-0162', horimetro: 6120, margem: 29.7,
+      vigencias: [{ contrato: 'SP-2026-0162', inicio: '2026-06-15', fim: '2026-11-30', status: 'ATIVO' }] },
+    { pat: '50019', modelo: 'Empilhadeira 2,5 t', categoria: 'Empilhadeira', estado: 'DISPONIVEL',
+      local: 'MG-02 — Base Betim', contrato: null, horimetro: 7788, margem: 12.3, vigencias: [] },
+  ]
+
+  const excecoes = [
+    { n: 3, rotulo: 'ativos bloqueados', meta: 'preventiva vencida além da tolerância', sev: 'critico', tela: 'frota' },
+    { n: 7, rotulo: 'OS em risco de SLA', meta: 'menos de 4 h de prazo restante', sev: 'critico', tela: null },
+    { n: 4, rotulo: 'pendências de medição', meta: 'bloqueiam o fechamento de julho', sev: 'critico', tela: 'fatura' },
+    { n: 5, rotulo: 'contratos vencem em 15 dias', meta: 'sem renovação registrada', sev: 'atencao', tela: null },
+    { n: 9, rotulo: 'peças abaixo do mínimo', meta: '2 travando OS em aberto', sev: 'atencao', tela: null },
+    { n: 6, rotulo: 'ativos parados há mais de 30 dias', meta: 'R$ 41,2 mil de receita não realizada', sev: 'atencao', tela: 'frota' },
+  ]
+
+  const movimentacoes = [
+    { hora: '08:30', local: 'Obra Norte · Construtora Alfa', ativo: '10870', tipo: 'Entrega', estado: 'RESERVADO' },
+    { hora: '10:00', local: 'CD Sul · Logística Ipê', ativo: '20115', tipo: 'Retorno', estado: 'EM_TRANSITO' },
+    { hora: '13:45', local: 'Obra Leste · Mineradora Beta', ativo: '30072', tipo: 'Entrega', estado: 'RESERVADO' },
+    { hora: '16:20', local: 'MG-02 — Base Betim', ativo: '50019', tipo: 'Transferência', estado: 'EM_TRANSITO' },
+  ]
+
+  const filaOS = [
+    { os: 'OS-1042', ativo: '30071', restante: '1 h 12', tecnico: 'A. Silva', sev: 'critico' },
+    { os: 'OS-1039', ativo: '20114', restante: '3 h 40', tecnico: 'não atribuída', sev: 'critico' },
+    { os: 'OS-1044', ativo: '40233', restante: '9 h 05', tecnico: 'R. Nunes', sev: 'atencao' },
+    { os: 'OS-1051', ativo: '10422', restante: '2 d 04', tecnico: 'M. Duarte', sev: 'disponivel' },
+  ]
+
+  const locais = [
+    { nome: 'Obra Norte', cliente: 'Construtora Alfa', ativos: 12, sev: 'locado', obs: 'contrato vigente', x: 300, y: 268 },
+    { nome: 'CD Sul', cliente: 'Logística Ipê', ativos: 7, sev: 'atencao', obs: 'retorno previsto hoje', x: 180, y: 250 },
+    { nome: 'Obra Leste', cliente: 'Mineradora Beta', ativos: 21, sev: 'critico', obs: 'cliente com fatura em atraso há 34 dias', x: 560, y: 240 },
+    { nome: 'Base São Paulo', cliente: 'Filial SP-01', ativos: 38, sev: 'disponivel', obs: 'pátio próprio', x: 240, y: 90 },
+    { nome: 'Base Betim', cliente: 'Filial MG-02', ativos: 19, sev: 'disponivel', obs: 'pátio próprio', x: 520, y: 100 },
+    { nome: 'Obra Rodoanel', cliente: 'Construtora Alfa', ativos: 9, sev: 'atencao', obs: 'contrato vence em 11 dias', x: 680, y: 140 },
+  ]
+
+  const excecoesFatura = [
+    { item: 'Item 14 · pat. 20115', motivo: 'consumo 62% acima do mês anterior', valor: 'R$ 8.940,10' },
+    { item: 'Item 31 · pat. 40234', motivo: 'medição estimada, aguarda acerto', valor: 'R$ 3.120,00' },
+    { item: 'Item 48 · pat. 10422', motivo: 'primeira competência, pro-rata parcial', valor: 'R$ 2.585,37' },
+    { item: 'Item 59 · pat. 30072', motivo: 'mínimo mensal acionado', valor: 'R$ 1.800,00' },
+    { item: 'Item 77 · pat. 50019', motivo: 'desconto novo de 8%, concedido ontem', valor: 'R$ 4.416,00' },
+  ]
+
+  /* -------------------------------------------------------------- utilitários */
+  const $ = (s, raiz) => (raiz || document).querySelector(s)
+  const $$ = (s, raiz) => Array.from((raiz || document).querySelectorAll(s))
+
+  function esc(t) {
+    return String(t).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  }
+
+  function chipEstado(chave, textoExtra) {
+    const e = ESTADOS[chave] || ESTADOS.DISPONIVEL
+    return '<span class="estado estado--' + e.classe + '">' +
+      '<span class="glifo" aria-hidden="true">' + e.glifo + '</span>' +
+      esc(e.rotulo) + (textoExtra ? ' · ' + esc(textoExtra) : '') + '</span>'
+  }
+
+  function chipSev(sev, rotulo) {
+    return '<span class="estado estado--' + sev + '">' +
+      '<span class="glifo" aria-hidden="true">' +
+      (sev === 'critico' ? '⛔' : sev === 'atencao' ? '▲' : sev === 'locado' ? '■' : '●') +
+      '</span>' + esc(rotulo) + '</span>'
+  }
+
+  const fmtData = (iso) => {
+    const [a, m, d] = iso.split('-')
+    return d + '/' + m + '/' + a
+  }
+
+  /* Regiões roláveis precisam de acesso por teclado (WCAG 2.1.1). Só recebem
+     tabindex quando de fato transbordam — do contrário viram paradas de Tab
+     inúteis. Reavaliado a cada redimensionamento. */
+  function ajustarRegioesRolaveis() {
+    $$('.tabela-rolagem').forEach((el) => {
+      const transborda = el.scrollWidth > el.clientWidth + 1
+      if (transborda) {
+        el.setAttribute('tabindex', '0')
+        el.setAttribute('role', 'region')
+        const legenda = el.querySelector('caption')
+        el.setAttribute('aria-label',
+          (legenda ? legenda.textContent.trim() : 'Tabela') + ' — role horizontalmente')
+      } else {
+        el.removeAttribute('tabindex')
+        el.removeAttribute('role')
+        el.removeAttribute('aria-label')
+      }
+    })
+  }
+
+  window.addEventListener('resize', ajustarRegioesRolaveis)
+
+  /* ------------------------------------------------------------- navegação */
+  function mostrar(tela) {
+    $$('[data-painel]').forEach((s) => { s.hidden = s.dataset.painel !== tela })
+    $$('.nav button').forEach((b) => {
+      if (b.dataset.tela === tela) b.setAttribute('aria-current', 'page')
+      else b.removeAttribute('aria-current')
+    })
+    const h = $('[data-painel="' + tela + '"] h1')
+    if (h) { h.setAttribute('tabindex', '-1'); h.focus() }
+    ajustarRegioesRolaveis()
+  }
+
+  $$('.nav button').forEach((b) => b.addEventListener('click', () => mostrar(b.dataset.tela)))
+  $$('[data-ir]').forEach((b) => b.addEventListener('click', () => mostrar(b.dataset.ir)))
+
+  /* ------------------------------------------------------------------ tema */
+  $('#tema').addEventListener('click', () => {
+    const raiz = document.documentElement
+    const atual = raiz.getAttribute('data-theme')
+    const escuroDoSistema = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const proximo = atual ? (atual === 'dark' ? 'light' : 'dark') : (escuroDoSistema ? 'light' : 'dark')
+    raiz.setAttribute('data-theme', proximo)
+  })
+
+  /* --------------------------------------------------------------- atalhos */
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'k') {
+      ev.preventDefault()
+      $('#busca').focus()
+    }
+  })
+
+  /* ---------------------------------------------------------------- início */
+  $('#excecoes').innerHTML = excecoes.map((e) =>
+    '<button class="excecao" type="button" data-sev="' + e.sev + '"' +
+    (e.tela ? ' data-ir="' + e.tela + '"' : '') + '>' +
+    '<span class="excecao__n">' + e.n + '</span> ' +
+    '<span class="excecao__r">' + esc(e.rotulo) + '</span>' +
+    '<span class="excecao__meta" style="display:block">' + esc(e.meta) + '</span>' +
+    '</button>').join('')
+
+  $$('#excecoes [data-ir]').forEach((b) => b.addEventListener('click', () => mostrar(b.dataset.ir)))
+
+  $('#movimentacoes').innerHTML = movimentacoes.map((m) =>
+    '<tr><td class="dado">' + esc(m.hora) + '</td><td>' + esc(m.local) + '</td>' +
+    '<td class="dado">' + esc(m.ativo) + '</td><td>' + esc(m.tipo) + '</td></tr>').join('')
+
+  $('#fila-os').innerHTML = filaOS.map((o) =>
+    '<tr><td class="dado">' + esc(o.os) + '</td><td class="dado">' + esc(o.ativo) + '</td>' +
+    '<td>' + chipSev(o.sev, o.restante) + '</td><td>' + esc(o.tecnico) + '</td></tr>').join('')
+
+  $('#excecoes-fatura').innerHTML = excecoesFatura.map((e) =>
+    '<tr><td class="dado">' + esc(e.item) + '</td><td>' + esc(e.motivo) + '</td>' +
+    '<td class="numerico dado">' + esc(e.valor) + '</td></tr>').join('')
+
+  /* ----------------------------------------------------------------- frota */
+  const categorias = Array.from(new Set(equipamentos.map((e) => e.categoria))).sort()
+  $('#f-categoria').insertAdjacentHTML('beforeend',
+    categorias.map((c) => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join(''))
+
+  function renderFrota() {
+    const estado = $('#f-estado').value
+    const cat = $('#f-categoria').value
+    const txt = $('#f-texto').value.trim().toLowerCase()
+
+    const linhas = equipamentos.filter((e) =>
+      (!estado || e.estado === estado) &&
+      (!cat || e.categoria === cat) &&
+      (!txt || e.pat.toLowerCase().includes(txt) || e.modelo.toLowerCase().includes(txt)))
+
+    $('#frota-contagem').textContent =
+      linhas.length + ' de ' + equipamentos.length + ' ativos'
+
+    if (!linhas.length) {
+      $('#frota-corpo').innerHTML =
+        '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text-secondary)">' +
+        'Nenhum ativo com esses filtros. <button class="btn btn--sutil" type="button" id="limpar-filtros">Limpar filtros</button>' +
+        '</td></tr>'
+      const b = $('#limpar-filtros')
+      if (b) b.addEventListener('click', () => {
+        $('#f-estado').value = ''; $('#f-categoria').value = ''; $('#f-texto').value = ''
+        renderFrota()
+      })
+      return
+    }
+
+    $('#frota-corpo').innerHTML = linhas.map((e) => {
+      const extra = e.bloqueio || e.motivo || null
+      const margemCor = e.margem < 0 ? 'var(--critico)' : 'inherit'
+      const sinal = e.margem < 0 ? '−' : ''
+      return '<tr>' +
+        '<th scope="row" class="dado" style="font-weight:600">' + esc(e.pat) + '</th>' +
+        '<td>' + esc(e.modelo) + '</td>' +
+        '<td>' + chipEstado(e.estado, extra) + '</td>' +
+        '<td>' + (e.contrato ? '<span class="dado">' + esc(e.contrato) + '</span><br>' : '') +
+          '<span style="color:var(--text-secondary);font-size:13px">' + esc(e.local) + '</span></td>' +
+        '<td class="numerico dado">' + e.horimetro.toLocaleString('pt-BR') + ' h</td>' +
+        '<td class="numerico dado" style="color:' + margemCor + '">' +
+          sinal + Math.abs(e.margem).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%</td>' +
+        '</tr>'
+    }).join('')
+  }
+
+  ;['#f-estado', '#f-categoria', '#f-texto'].forEach((s) =>
+    $(s).addEventListener('input', () => { renderFrota(); ajustarRegioesRolaveis() }))
+  renderFrota()
+
+  /* ---------------------------------------------------------------- alocar */
+  const alocaveis = equipamentos.filter((e) => e.estado !== 'BAIXADO')
+  $('#a-equip').innerHTML = alocaveis.map((e) =>
+    '<option value="' + esc(e.pat) + '">' + esc(e.pat) + ' — ' + esc(e.modelo) + '</option>').join('')
+
+  function renderVigencias() {
+    const eq = equipamentos.find((x) => x.pat === $('#a-equip').value)
+    const vs = (eq && eq.vigencias) || []
+    if (!vs.length) {
+      $('#a-vigencias').innerHTML =
+        '<tr><td colspan="4" style="padding:16px;color:var(--text-secondary)">' +
+        'Nenhuma alocação registrada. Qualquer período está livre.</td></tr>'
+      return
+    }
+    $('#a-vigencias').innerHTML = vs.map((v) => {
+      const ocupa = OCUPANTES.includes(v.status)
+      return '<tr>' +
+        '<td class="dado">' + esc(v.contrato) + '</td>' +
+        '<td class="dado">' + fmtData(v.inicio) + '</td>' +
+        '<td class="dado">' + fmtData(v.fim) + '</td>' +
+        '<td>' + chipSev(ocupa ? 'locado' : 'inativo', ocupa ? v.status + ' · ocupa' : v.status + ' · não ocupa') + '</td>' +
+        '</tr>'
+    }).join('')
+  }
+
+  $('#a-equip').addEventListener('change', renderVigencias)
+  renderVigencias()
+
+  /* Mesma verificação da exclusion constraint: sobreposição de intervalos
+     semiabertos [inicio, fim), restrita aos status que ocupam o ativo. */
+  function conflito(eq, inicio, fim) {
+    return (eq.vigencias || []).find((v) =>
+      OCUPANTES.includes(v.status) && v.inicio < fim && inicio < v.fim)
+  }
+
+  $('#form-alocar').addEventListener('submit', (ev) => {
+    ev.preventDefault()
+    const eq = equipamentos.find((x) => x.pat === $('#a-equip').value)
+    const contrato = $('#a-contrato').value
+    const inicio = $('#a-inicio').value
+    const fim = $('#a-fim').value
+    const alvo = $('#a-resultado')
+
+    if (!inicio || !fim || fim <= inicio) {
+      alvo.innerHTML = '<div class="aviso"><span aria-hidden="true">⛔</span><div>' +
+        '<p class="aviso__t">Período inválido</p>' +
+        '<p>O fim da vigência precisa ser posterior ao início. Ajuste as datas e tente de novo.</p>' +
+        '</div></div>'
+      return
+    }
+
+    if (eq.bloqueio) {
+      alvo.innerHTML = '<div class="aviso"><span aria-hidden="true">⛔</span><div>' +
+        '<p class="aviso__t">Não é possível alocar: ativo bloqueado</p>' +
+        '<p>Patrimônio <span class="dado">' + esc(eq.pat) + '</span> está bloqueado — ' +
+        esc(eq.bloqueio) + '.</p><ul>' +
+        '<li>Programar a preventiva e liberar o ativo</li>' +
+        '<li>Alocar outro ativo da categoria ' + esc(eq.categoria) + '</li>' +
+        '<li>Solicitar liberação excepcional ao gestor, com prazo e justificativa</li>' +
+        '</ul></div></div>'
+      return
+    }
+
+    const c = conflito(eq, inicio, fim)
+    if (c) {
+      alvo.innerHTML = '<div class="aviso"><span aria-hidden="true">⛔</span><div>' +
+        '<p class="aviso__t">Equipamento já alocado no período</p>' +
+        '<p>Patrimônio <span class="dado">' + esc(eq.pat) + '</span> está alocado ao contrato ' +
+        '<span class="dado">' + esc(c.contrato) + '</span> até ' + fmtData(c.fim) + '.</p><ul>' +
+        '<li>Alocar outro ativo da categoria ' + esc(eq.categoria) + '</li>' +
+        '<li>Reservar a partir de ' + fmtData(c.fim) + '</li>' +
+        '<li>Substituir o ativo no contrato atual</li>' +
+        '</ul>' +
+        '<p style="margin-top:12px;font-size:13px;color:var(--text-secondary)">' +
+        'No sistema real esta recusa vem do banco, com código ' +
+        '<span class="dado">EQUIPAMENTO_JA_ALOCADO</span> (SQLSTATE 23P01).</p>' +
+        '</div></div>'
+      return
+    }
+
+    eq.vigencias.push({ contrato: contrato, inicio: inicio, fim: fim, status: 'RESERVADO' })
+    renderVigencias()
+    renderFrota()
+
+    alvo.innerHTML = '<div class="aviso aviso--ok"><span aria-hidden="true">✓</span><div>' +
+      '<p class="aviso__t">Equipamento alocado</p>' +
+      '<p>Patrimônio <span class="dado">' + esc(eq.pat) + '</span> reservado para o contrato ' +
+      '<span class="dado">' + esc(contrato) + '</span>, de ' + fmtData(inicio) + ' a ' + fmtData(fim) + '.</p>' +
+      '<p style="margin-top:12px"><button class="btn" type="button" data-ir="frota">Programar entrega</button></p>' +
+      '</div></div>'
+    const b = $('#a-resultado [data-ir]')
+    if (b) b.addEventListener('click', () => mostrar('frota'))
+  })
+
+  $('#a-limpar').addEventListener('click', () => {
+    $('#a-resultado').innerHTML =
+      '<p style="color:var(--text-secondary);font-size:14px">Escolha um ativo e um período.</p>'
+  })
+
+  /* ------------------------------------------------------------------ mapa */
+  const CORES_SEV = { disponivel: 'var(--disponivel-mark)', locado: 'var(--em-uso-mark)',
+                      atencao: 'var(--atencao-mark)', critico: 'var(--critico-mark)' }
+
+  $('#mapa-pinos').innerHTML = locais.map((l, i) => {
+    const r = 14 + Math.sqrt(l.ativos) * 2.6
+    return '<g class="mapa-pino" tabindex="0" role="button" ' +
+      'aria-label="' + esc(l.nome + ', ' + l.cliente + ', ' + l.ativos + ' ativos. ' + l.obs) + '">' +
+      '<circle class="halo" cx="' + l.x + '" cy="' + l.y + '" r="' + (r + 3).toFixed(1) + '" ' +
+        'fill="none" stroke="transparent" stroke-width="2"></circle>' +
+      '<circle cx="' + l.x + '" cy="' + l.y + '" r="' + r.toFixed(1) + '" ' +
+        'fill="' + CORES_SEV[l.sev] + '" fill-opacity="0.9" stroke="var(--bg)" stroke-width="2"></circle>' +
+      '<text x="' + l.x + '" y="' + (l.y + 5) + '" text-anchor="middle" ' +
+        'font-size="13" font-weight="700" fill="var(--bg)">' + l.ativos + '</text>' +
+      '<text x="' + l.x + '" y="' + (l.y + r + 16) + '" text-anchor="middle" ' +
+        'font-size="12" fill="var(--text-secondary)">' + esc(l.nome) + '</text>' +
+      '</g>'
+  }).join('')
+
+  $('#mapa-lista').innerHTML = locais.map((l) =>
+    '<tr><th scope="row">' + esc(l.nome) + '</th><td>' + esc(l.cliente) + '</td>' +
+    '<td class="numerico dado">' + l.ativos + '</td>' +
+    '<td>' + chipSev(l.sev, l.sev === 'critico' ? 'Crítico' : l.sev === 'atencao' ? 'Atenção' :
+      l.sev === 'locado' ? 'Locado' : 'Disponível') + '</td>' +
+    '<td style="color:var(--text-secondary)">' + esc(l.obs) + '</td></tr>').join('')
+
+  /* Abas com padrão ARIA completo: setas navegam, foco segue a seleção. */
+  const abas = [$('#aba-mapa'), $('#aba-lista')]
+  function selecionarAba(idx) {
+    abas.forEach((a, i) => {
+      const sel = i === idx
+      a.setAttribute('aria-selected', String(sel))
+      a.tabIndex = sel ? 0 : -1
+      $('#' + a.getAttribute('aria-controls')).hidden = !sel
+    })
+    abas[idx].focus()
+  }
+  ajustarRegioesRolaveis()
+
+  abas.forEach((a, i) => {
+    a.addEventListener('click', () => selecionarAba(i))
+    a.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+        ev.preventDefault()
+        selecionarAba((i + (ev.key === 'ArrowRight' ? 1 : abas.length - 1)) % abas.length)
+      }
+    })
+  })
+</script>

@@ -85,12 +85,14 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 | --- | --- | --- |
 | `packages/db` | 8 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial | `pnpm db:test` — 20 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `pnpm a11y:tokens` — 188/188 verificações |
-| `.github/workflows/ci.yml` | Três jobs: acessibilidade, invariantes de banco, guardas do Supabase | Bloqueiam merge |
+| `apps/prototipo` | Protótipo navegável de 5 telas, gerado a partir dos tokens verificados | `npx playwright test` — 20 testes de axe, teclado, reflow e regras de negócio |
+| `.github/workflows/ci.yml` | Quatro jobs: tokens, DOM renderizado, invariantes de banco, guardas do Supabase | Bloqueiam merge |
 
 ```bash
 pnpm a11y:tokens      # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
 pnpm tokens:build     # gera packages/tokens/dist/tokens.css
 pnpm db:test          # recria o banco, aplica migrações e roda a suíte de invariantes
+npx playwright test   # axe + teclado + reflow 320px, em navegador real
 pnpm verificar        # tudo acima
 ```
 
