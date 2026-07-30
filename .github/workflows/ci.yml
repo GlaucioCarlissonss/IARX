@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Acessibilidade dos tokens — bloqueia o merge quando um par reprova.
+  # Ver docs/anexos/G-acessibilidade.md (G.3, G.8)
+  # ---------------------------------------------------------------------------
+  acessibilidade-tokens:
+    name: Acessibilidade — tokens de cor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Contraste WCAG 2.2 AA e distinção sob daltonismo
+        run: node packages/tokens/scripts/validate-contrast.mjs
+
+      - name: Gerar relatório de conformidade
+        if: always()
+        run: |
+          node packages/tokens/scripts/validate-contrast.mjs --json > relatorio-acessibilidade.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-acessibilidade
+          path: relatorio-acessibilidade.json
+
+      - name: CSS gerado está sincronizado com a paleta
+        run: |
+          node packages/tokens/scripts/build-css.mjs
+          if ! git diff --exit-code -- packages/tokens/dist/tokens.css; then
+            echo "::error::dist/tokens.css está fora de sincronia com palette.json. Rode 'pnpm tokens:build' e faça commit."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Invariantes de domínio contra PostgreSQL real.
+  # Não usamos mock: RN-001 é uma exclusion constraint, RN-028 é RLS. Só um
+  # banco de verdade prova que funcionam.
+  # ---------------------------------------------------------------------------
+  invariantes-banco:
+    name: Banco — invariantes de domínio
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Imagem com PostGIS: cobre também a migração 0008.
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: iarx_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cliente psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      - name: Migrações e suíte de invariantes
+        working-directory: packages/db
+        run: ./scripts/test.sh
+
+      - name: Extensões indispensáveis presentes
+        run: |
+          # btree_gist é o que torna RN-001 imponível no banco (ver H.8)
+          for ext in btree_gist pgcrypto postgis; do
+            if ! psql -tAc "select 1 from pg_extension where extname='$ext'" | grep -q 1; then
+              echo "::error::extensão $ext ausente — RN-001 e/ou o módulo MAP não podem ser garantidos"
+              exit 1
+            fi
+          done
+          echo "extensões verificadas"
+
+  # ---------------------------------------------------------------------------
+  # Guardas de segurança específicos da adoção do Supabase (H.2, H.8)
+  # ---------------------------------------------------------------------------
+  guardas-supabase:
+    name: Segurança — guardas do Supabase
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: service_role não pode aparecer em código de cliente
+        run: |
+          # A chave service_role ignora RLS por completo. Se ela vazar para um
+          # bundle de frontend, o isolamento entre tenants (RN-028) deixa de
+          # existir — e de forma silenciosa.
+          alvos="apps/web apps/pwa packages/ui"
+          existentes=""
+          for d in $alvos; do [ -d "$d" ] && existentes="$existentes $d"; done
+
+          if [ -z "$existentes" ]; then
+            echo "nenhum diretório de cliente ainda existe — guarda inativa nesta fase"
+            exit 0
+          fi
+
+          if grep -rInE 'service_role|SUPABASE_SERVICE_ROLE' $existentes; then
+            echo "::error::referência a service_role em código de cliente (ver H.2, regra 2)"
+            exit 1
+          fi
+          echo "nenhuma referência a service_role no código de cliente"
+
+      - name: Nenhuma política de escrita para anon/authenticated
+        run: |
+          # H.2, regra 1: o cliente nunca escreve direto via PostgREST, porque as
+          # invariantes de domínio não são expressáveis como política de linha.
+          if grep -rInE "create policy.*for (insert|update|delete|all).*to .*(anon|authenticated)" \
+               packages/db/supabase/migrations \
+             | grep -v 'iarx_app'; then
+            echo "::error::política de escrita concedida a anon/authenticated (ver H.2, regra 1)"
+            exit 1
+          fi
+          echo "nenhuma política de escrita para papéis de cliente"
+
+      - name: Toda tabela de negócio tem RLS habilitada
+        run: |
+          # Detecta tabela criada sem a chamada correspondente de
+          # app.habilitar_rls_tenant() — o risco é uma tabela nova ficar
+          # acessível por esquecimento.
+          cd packages/db/supabase/migrations
+          faltando=0
+          for tabela in $(grep -hoE 'create table if not exists public\.[a-z_]+' *.sql \
+                          | sed 's/.*public\.//' | sort -u); do
+            case "$tabela" in
+              tenant|audit_log) continue ;;  # políticas próprias, definidas em 0006
+            esac
+            if ! grep -qE "'$tabela'" 0006_rls.sql && ! grep -qE "habilitar_rls_tenant\('$tabela'" *.sql; then
+              echo "::error::tabela public.$tabela criada sem habilitar RLS (ver RN-028)"
+              faltando=$((faltando + 1))
+            fi
+          done
+          [ "$faltando" -eq 0 ] && echo "todas as tabelas de negócio têm RLS habilitada"
+          exit $faltando

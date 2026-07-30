@@ -65,6 +65,8 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [D — Catálogo de APIs](docs/anexos/D-catalogo-de-apis.md) | Convenções REST, endpoints por domínio, webhooks e erros |
 | [E — Motor de Faturamento](docs/anexos/E-motor-de-faturamento.md) | Modalidades de cobrança, pro-rata, franquia/excedente e reajuste |
 | [F — Glossário](docs/anexos/F-glossario.md) | Vocabulário único de domínio (ubiquitous language) |
+| [G — Acessibilidade](docs/anexos/G-acessibilidade.md) | Critérios por componente, paleta com contraste medido, gate de CI, plano de teste assistivo |
+| [H — Supabase](docs/anexos/H-supabase.md) | ADR da plataforma de dados: RLS, claims, pooling, propriedade do schema, riscos e portabilidade |
 
 ---
 
@@ -74,6 +76,32 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 - **Arquitetura / Engenharia:** seções 7, 11, 13 e anexos A, B, D.
 - **Operação / Negócio:** seções 4, 5, 6, 8 e anexos B, E.
 - **Design:** seções 3, 8, 9.
+
+## Código — fundação da Fase 0
+
+O repositório deixou de ser apenas documental. O que já existe e está verificado:
+
+| Pacote | Conteúdo | Verificação |
+| --- | --- | --- |
+| `packages/db` | 8 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial | `pnpm db:test` — 20 assertivas de invariante contra PostgreSQL real |
+| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `pnpm a11y:tokens` — 188/188 verificações |
+| `.github/workflows/ci.yml` | Três jobs: acessibilidade, invariantes de banco, guardas do Supabase | Bloqueiam merge |
+
+```bash
+pnpm a11y:tokens      # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
+pnpm tokens:build     # gera packages/tokens/dist/tokens.css
+pnpm db:test          # recria o banco, aplica migrações e roda a suíte de invariantes
+pnpm verificar        # tudo acima
+```
+
+**Invariantes já impostas pelo banco, não por código de aplicação:**
+
+| Regra | Mecanismo | Teste |
+| --- | --- | --- |
+| `RN-001` dupla alocação | `EXCLUDE USING gist` sobre `tstzrange` | `tests/01` — 7 casos |
+| `RN-028` isolamento entre tenants | RLS + `FORCE ROW LEVEL SECURITY` | `tests/02` — 5 casos, incluindo vazamento em conexão compartilhada |
+| `RN-018` auditoria imutável | Gatilho genérico + ausência de `UPDATE`/`DELETE` + cadeia de hash | `tests/02` e `tests/03` |
+| `RN-020` leitura monotônica | Gatilho com consulta ao histórico | `tests/03` — 2 casos |
 
 ## Convenções
 

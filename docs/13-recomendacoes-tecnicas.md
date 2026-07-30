@@ -5,14 +5,14 @@
 | Camada | Recomendação | Alternativa aceitável | Critério de escolha |
 | --- | --- | --- | --- |
 | Backend | Node.js LTS + TypeScript + NestJS | .NET 8 + ASP.NET Core; Java + Spring Boot | Base da equipe existente; a arquitetura é agnóstica |
-| Banco de dados | PostgreSQL 16+ com PostGIS | — (não negociável) | RLS, exclusion constraints, tipos de intervalo, GIS nativo, custo |
-| Acesso a dados | Prisma para CRUD/migrações + SQL nativo para analítico e espacial | Drizzle; EF Core; JPA | Produtividade sem perder controle onde importa |
+| Banco de dados | **Supabase** (PostgreSQL 16+ com PostGIS) | Outro Postgres gerenciado | RLS, exclusion constraints, tipos de intervalo, GIS nativo, custo; portabilidade preservada por decisão de projeto (H.9) |
+| Acesso a dados | Prisma para CRUD (**sem `migrate`**) + SQL versionado via Supabase CLI como dono do schema | Drizzle; EF Core; JPA | RLS, exclusion constraints, partições e triggers exigem SQL explícito (H.6.1) |
 | Cache/fila | Redis + BullMQ | RabbitMQ/SQS quando o volume justificar | Simplicidade operacional no início |
-| Storage | S3-compatível com URLs assinadas | Azure Blob / GCS | Portabilidade |
+| Storage | **Supabase Storage** com URLs assinadas | S3 / Azure Blob / GCS | Políticas ligadas ao mesmo RLS; antivírus por Edge Function (H.7) |
 | Frontend | Next.js + React + TypeScript + TanStack Query + Tailwind | Nuxt/Vue; Angular | Ecossistema, contratação, desempenho |
 | Mapas | MapLibre GL + PostGIS + provedor de *tiles* substituível | Leaflet; Google Maps SDK | Evitar dependência de fornecedor único |
 | Mobile | PWA (Fase 2) → React Native/Expo (Fase 5) | Flutter | Reuso de código e de tipos |
-| Identidade | Keycloak (ou provedor gerenciado OIDC) | Auth0 / Cognito | Não implementar autenticação artesanal |
+| Identidade | **Supabase Auth** | Keycloak / Auth0 / Cognito | Não implementar autenticação artesanal; adaptador isolado em `platform-iam` para permitir troca (H.9) |
 | Observabilidade | OpenTelemetry + Prometheus + Grafana + Sentry | Datadog / New Relic | Padrão aberto, custo controlado |
 | CI/CD | GitHub Actions (ou equivalente) + contêineres | GitLab CI | Integração com o repositório |
 | Infraestrutura | Contêineres gerenciados (ECS/Fargate, Cloud Run ou Kubernetes gerenciado) + IaC (Terraform) | — | Reprodutibilidade e autoescala |

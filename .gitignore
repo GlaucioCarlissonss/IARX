@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+*.log
+
+# Segredos — nunca versionados. A chave service_role do Supabase ignora RLS
+# (ver docs/anexos/H-supabase.md, H.2) e não pode sair do ambiente de CI.
+.env
+.env.*
+!.env.example
+
+# Supabase CLI
+supabase/.temp/
+supabase/.branches/
+
+.DS_Store

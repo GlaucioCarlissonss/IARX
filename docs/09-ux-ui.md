@@ -30,6 +30,9 @@
 
 A cor **nunca** é o único portador de informação (ver 9.7). Cada estado tem cor + rótulo + ícone.
 
+Os valores concretos vivem em `packages/tokens/src/palette.json` e são verificados no CI
+(Anexo G.3). Nenhum componente define cor literal.
+
 | Semântica | Uso | Aplicação |
 | --- | --- | --- |
 | Neutro | Estrutura, texto, bordas | Base da interface |
@@ -139,6 +142,11 @@ A cor **nunca** é o único portador de informação (ver 9.7). Cada estado tem 
 - Toda tela declara "atualizado às HH:MM" (`RN-030`).
 
 ## 9.7 Acessibilidade (meta: WCAG 2.2 AA)
+
+> **Fonte normativa:** [Anexo G — Acessibilidade](anexos/G-acessibilidade.md). Os critérios por
+> componente, a paleta com contraste **medido** (188/188 verificações aprovadas), o limite de 5
+> séries por cor em gráficos e o gate de CI que bloqueia regressão estão detalhados lá. A tabela
+> abaixo é o resumo dos princípios.
 
 | Requisito | Implementação |
 | --- | --- |

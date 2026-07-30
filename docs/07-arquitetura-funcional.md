@@ -64,9 +64,9 @@ provável: `RPT` → `MAP` → `INT` → `NTF`.
 | Runtime/linguagem | Node.js LTS + TypeScript estrito | Mesma linguagem no front e no back reduz custo de equipe e permite compartilhar tipos e validadores |
 | Framework | NestJS | Modularidade e injeção de dependência nativas, alinhadas ao desenho por módulos |
 | ORM/Query | Prisma (CRUD e migrações) + SQL nativo para consultas analíticas e espaciais | Produtividade sem perder controle nos pontos críticos |
-| Banco | PostgreSQL 16+ com PostGIS | Transações fortes, RLS, tipos de intervalo/exclusion constraints, GIS nativo |
+| Banco | **Supabase** (PostgreSQL 16+ com PostGIS) | Transações fortes, RLS como idioma central, exclusion constraints, GIS nativo — ver [Anexo H](anexos/H-supabase.md) |
 | Cache/locks/fila | Redis + BullMQ | Filas confiáveis, agendamento, *rate limit*, locks distribuídos |
-| Storage | S3-compatível com URLs assinadas | Anexos, PDFs, exportações, sem servir arquivo pela aplicação |
+| Storage | **Supabase Storage** (URLs assinadas) | Anexos, PDFs, exportações, sem servir arquivo pela aplicação; antivírus por Edge Function (H.7) |
 | Validação | Zod (compartilhado front/back) | Mesma regra de forma de dado nas duas pontas |
 | Observabilidade | OpenTelemetry + Prometheus + Grafana + Sentry | Rastreamento distribuído, métricas de negócio e erros correlacionados |
 | Testes | Vitest (unidade), Testcontainers (integração), Playwright (E2E) | Invariantes de domínio testadas contra banco real |
@@ -74,6 +74,12 @@ provável: `RPT` → `MAP` → `INT` → `NTF`.
 > **Alternativa equivalente:** .NET 8 + EF Core ou Java/Spring Boot, se a equipe existente tiver
 > essa base. A arquitetura funcional proposta é independente da linguagem; o que não é negociável é
 > PostgreSQL com RLS, modularidade explícita e workers assíncronos separados.
+
+> **Decisão de plataforma de dados:** o PostgreSQL é provisionado via **Supabase**, que fornece
+> também autenticação e storage. As implicações — incluindo a regra de que **nenhuma escrita passa
+> pelo PostgREST** e que a chave `service_role` (que ignora RLS) jamais é usada no runtime — estão
+> no [Anexo H](anexos/H-supabase.md). A propriedade do schema fica com o Supabase CLI (SQL
+> versionado); o Prisma opera em modo somente leitura de schema, sem `migrate` (H.6.1).
 
 ### 7.3.2 Organização do código
 
@@ -150,8 +156,9 @@ rastreamento em segundo plano.
 | Aspecto | Definição |
 | --- | --- |
 | Protocolo | OAuth 2.1 / OIDC com *Authorization Code + PKCE* |
-| Provedor | Servidor de identidade dedicado (Keycloak ou equivalente gerenciado), evitando autenticação artesanal |
-| Tokens | Access token JWT curto (15 min, com `tenant_id`, `sub`, `perfis`, `escopos`) + refresh token rotativo em cookie `httpOnly`+`Secure`+`SameSite=Strict` |
+| Provedor | **Supabase Auth** (GoTrue), evitando autenticação artesanal e a operação de um servidor de identidade próprio |
+| Tokens | Access token JWT curto (15 min, com `tenant_id`, `sub`, `perfis`, `escopos` injetados por *access token hook* — ver H.4.1) + refresh token rotativo em cookie `httpOnly`+`Secure`+`SameSite=Strict` |
+| Obsolescência de claim | Claim serve para filtrar (RLS) e ler; **alçada e permissão sensível são revalidadas no banco**, nunca confiadas ao token (H.4.2) |
 | MFA | TOTP obrigatório para perfis administrativo, financeiro e de alçada; opcional para os demais |
 | Sessões | Listagem e revogação de sessões ativas; expiração por inatividade parametrizável por tenant |
 | Login federado | SSO corporativo via OIDC/SAML por tenant (Fase 4) |
@@ -217,7 +224,7 @@ Convenções completas e endpoints no [Anexo D](anexos/D-catalogo-de-apis.md). R
 | Vetor | Estratégia |
 | --- | --- |
 | Aplicação | Contêineres *stateless* com autoescala horizontal por CPU/latência; sessão apenas no token |
-| Leitura | Réplica de leitura para mapa, dashboards e relatórios; *connection pooling* (PgBouncer) |
+| Leitura | Réplica de leitura para mapa, dashboards e relatórios; *connection pooling* por Supavisor em modo transação (cuidados em H.5.2) |
 | Escrita | Índices dirigidos aos filtros reais; particionamento por tempo em tabelas de alto volume (`leituras`, `movimentacoes`, `audit_log`, `notificacoes`) |
 | Trabalho pesado | Todo processo longo em fila (fechamento, exportação, importação, PDFs, geração de preventivas), com prioridade por tipo |
 | Cache | Cache de catálogo, parametrização e projeções de dashboard, invalidado por evento de domínio |

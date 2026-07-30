@@ -1,0 +1,10 @@
+{
+  "name": "@iarx/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Schema, RLS, invariantes e testes do banco de dados (Supabase/PostgreSQL)",
+  "scripts": {
+    "migrate": "./scripts/migrate.sh",
+    "test": "./scripts/test.sh"
+  }
+}

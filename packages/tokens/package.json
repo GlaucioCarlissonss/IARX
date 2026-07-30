@@ -1,0 +1,18 @@
+{
+  "name": "@iarx/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tokens de design da IARX, com contraste e distinção sob daltonismo verificados",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./palette.json": "./src/palette.json",
+    "./css": "./dist/tokens.css"
+  },
+  "scripts": {
+    "validate": "node scripts/validate-contrast.mjs",
+    "relatorio": "node scripts/validate-contrast.mjs --json",
+    "build": "node scripts/build-css.mjs"
+  }
+}

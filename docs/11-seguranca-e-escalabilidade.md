@@ -76,7 +76,8 @@ Ver 7.9 para a estrutura técnica. Complementos de segurança:
 | Aspecto | Definição |
 | --- | --- |
 | Estratégia padrão | Banco compartilhado, schema compartilhado, isolamento por `tenant_id` + RLS |
-| Contexto de sessão | `SET LOCAL app.tenant_id` por transação; nenhuma query executa sem contexto |
+| Contexto de sessão | `SET LOCAL app.tenant_id` por transação, resolvido por `app.tenant_atual()`; nenhuma query executa sem contexto. **`SET` de sessão é proibido**: com pooler em modo transação vazaria o tenant para a requisição seguinte (H.5.2) |
+| Verificação | Suíte obrigatória executa duas transações de tenants distintos **na mesma conexão** e prova que não há vazamento — `packages/db/tests/02_rn028_isolamento_tenant.sql` |
 | Hierarquia | `Tenant → Empresa → Filial/Base → Local de operação`, com escopos de permissão em qualquer nível |
 | Parametrização | Numeração, SLAs, regras de cobrança, planos preventivos, checklists, campos personalizados e políticas — todos por tenant |
 | Isolamento de recursos | Filas com prioridade e cota por tenant; *rate limit* por tenant; jobs longos não bloqueiam outros tenants |
@@ -91,7 +92,7 @@ Detalhamento técnico em 7.8. Consolidação por vetor:
 | Vetor | Situação inicial | Caminho de crescimento |
 | --- | --- | --- |
 | Aplicação | 2 instâncias da API + 2 workers | Autoescala horizontal por latência/CPU; separação de workers por tipo de carga |
-| Banco | Instância primária + 1 réplica de leitura | Réplicas adicionais, PgBouncer, particionamento temporal, banco dedicado para tenant de grande porte |
+| Banco | Instância Supabase + réplica de leitura (conforme plano) | Réplicas adicionais, pooling por Supavisor, particionamento temporal, banco dedicado para tenant de grande porte (H.8) |
 | Filas | Redis gerenciado com filas por domínio | Filas dedicadas por criticidade, *dead letter queue* com reprocessamento controlado |
 | Mapa | Consultas espaciais com índice GiST e agregação no banco | *Tiles* vetoriais pré-gerados e cache por *viewport* |
 | Analítico | Views materializadas atualizadas por evento | Exportação para *data warehouse* e camada de BI (Fase 5) |
@@ -106,7 +107,7 @@ Acima disso, aciona-se a revisão de particionamento e a extração de módulos.
 
 | Item | Definição |
 | --- | --- |
-| RPO | ≤ 5 minutos (WAL contínuo / *point-in-time recovery*) |
+| RPO | ≤ 5 minutos (WAL contínuo / *point-in-time recovery*). **Condicionado ao plano Supabase contratado**: PITR é recurso pago. Sem ele, o RPO real é o do backup diário e precisa ser aceito formalmente (H.8) |
 | RTO | ≤ 2 horas para restauração completa do serviço |
 | Backup completo | Diário, retenção 30 dias |
 | Backup incremental/WAL | Contínuo, retenção 7 dias para PITR |
