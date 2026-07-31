@@ -13,12 +13,23 @@
     "tokens:build": "pnpm --filter @iarx/tokens build",
     "db:migrate": "pnpm --filter @iarx/db migrate",
     "db:test": "pnpm --filter @iarx/db test",
-    "a11y:dom": "playwright test",
-    "prototipo:build": "node apps/prototipo/build.mjs",
-    "verificar": "pnpm a11y:tokens && pnpm a11y:dom && pnpm db:test"
+    "dev": "vite apps/web",
+    "build": "node packages/tokens/scripts/build-css.mjs && vite build apps/web",
+    "tipos": "tsc -p apps/web/tsconfig.json",
+    "a11y:dom": "playwright test apps/web",
+    "verificar": "pnpm tipos && pnpm a11y:tokens && pnpm build && pnpm a11y:dom && pnpm db:test"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.4",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.3",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

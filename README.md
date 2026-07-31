@@ -67,6 +67,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [F — Glossário](docs/anexos/F-glossario.md) | Vocabulário único de domínio (ubiquitous language) |
 | [G — Acessibilidade](docs/anexos/G-acessibilidade.md) | Critérios por componente, paleta com contraste medido, gate de CI, plano de teste assistivo |
 | [H — Supabase](docs/anexos/H-supabase.md) | ADR da plataforma de dados: RLS, claims, pooling, propriedade do schema, riscos e portabilidade |
+| [I — Refatoração do Front-End](docs/anexos/I-refatoracao-frontend.md) | Diagnóstico, arquitetura React, componentes, dashboards, navegação e base de teste do domínio |
 
 ---
 
@@ -83,18 +84,24 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
+| `apps/web` | Aplicação React + TypeScript: 8 telas, 12 primitivos, tabela genérica, gráficos próprios, RBAC e base de teste do domínio de locação de TI | `pnpm a11y:dom` — 36 testes de axe, teclado, permissões e domínio |
 | `packages/db` | 8 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial | `pnpm db:test` — 20 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `pnpm a11y:tokens` — 188/188 verificações |
-| `apps/prototipo` | Protótipo navegável de 5 telas, gerado a partir dos tokens verificados | `npx playwright test` — 20 testes de axe, teclado, reflow e regras de negócio |
 | `.github/workflows/ci.yml` | Quatro jobs: tokens, DOM renderizado, invariantes de banco, guardas do Supabase | Bloqueiam merge |
 
 ```bash
+pnpm dev              # servidor de desenvolvimento da aplicação
+pnpm build            # bundle de arquivo único em apps/web/dist/index.html
+pnpm tipos            # TypeScript estrito
 pnpm a11y:tokens      # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
-pnpm tokens:build     # gera packages/tokens/dist/tokens.css
+pnpm a11y:dom         # axe, teclado, reflow, permissões e domínio, em Chromium real
 pnpm db:test          # recria o banco, aplica migrações e roda a suíte de invariantes
-npx playwright test   # axe + teclado + reflow 320px, em navegador real
 pnpm verificar        # tudo acima
 ```
+
+**Domínio da base de demonstração:** locação de impressoras e computadores corporativos —
+multifuncionais, laser, térmicas, desktops, notebooks, thin clients e nobreaks, com cobrança por
+franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-frontend.md).
 
 **Invariantes já impostas pelo banco, não por código de aplicação:**
 

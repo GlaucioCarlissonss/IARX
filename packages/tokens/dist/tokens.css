@@ -1,0 +1,193 @@
+/* Gerado por packages/tokens/scripts/build-css.mjs — não editar à mão.
+ * Fonte da verdade: packages/tokens/src/palette.json
+ * Conformidade: WCAG 2.2 AA · tokens v1.0.0
+ * Verificação: pnpm a11y:tokens (bloqueia o merge em caso de reprovação)
+ */
+
+:root {
+    --cor-bg: #ffffff;
+    --cor-surface: #f4f6f9;
+    --cor-surface-raised: #ffffff;
+    --cor-surface-sunken: #eaeef3;
+    --cor-border: #c9d0da;
+    --cor-border-strong: #6f7885;
+    --cor-focus-ring: #14171c;
+    --cor-focus-ring-inset: #ffffff;
+    --cor-text-primary: #14171c;
+    --cor-text-secondary: #535c6b;
+    --cor-text-muted: #616a76;
+    --cor-text-on-accent: #ffffff;
+    --cor-primary: #0b4fa8;
+    --cor-primary-hover: #093f88;
+    --cor-primary-subtle-bg: #e8f0fb;
+    --cor-primary-subtle-fg: #0a4794;
+    --cor-disponivel: #0a6b41;
+    --cor-disponivel-bg: #e4f4ec;
+    --cor-disponivel-mark: #0d8150;
+    --cor-em-uso: #0b4fa8;
+    --cor-em-uso-bg: #e8f0fb;
+    --cor-em-uso-mark: #1160c4;
+    --cor-atencao: #79500a;
+    --cor-atencao-bg: #fdf3dd;
+    --cor-atencao-mark: #8a5c0b;
+    --cor-critico: #a2201a;
+    --cor-critico-bg: #fbeae8;
+    --cor-critico-mark: #c62c24;
+    --cor-inativo: #5b6472;
+    --cor-inativo-bg: #eef0f3;
+    --cor-inativo-mark: #68717f;
+    --cor-serie-1: #0b4fa8;
+    --cor-serie-2: #ca7805;
+    --cor-serie-3: #6d4025;
+    --cor-serie-4: #1a9c8f;
+    --cor-serie-5: #9475f9;
+
+  /* Indicador de foco em anel duplo: permanece visível sobre qualquer fundo,
+     inclusive sobre o botão primário (WCAG 2.4.11 / 2.4.13). */
+  --foco-espessura: 2px;
+  --foco-offset: 2px;
+  --foco-sombra:
+    0 0 0 var(--foco-offset) var(--cor-focus-ring-inset),
+    0 0 0 calc(var(--foco-offset) + var(--foco-espessura)) var(--cor-focus-ring);
+
+  /* Alvo mínimo de toque no PWA de campo (docs/09 §9.5). */
+  --alvo-toque-min: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+      --cor-bg: #0e1116;
+      --cor-surface: #161a21;
+      --cor-surface-raised: #1d222b;
+      --cor-surface-sunken: #0a0d11;
+      --cor-border: #333b47;
+      --cor-border-strong: #6d7787;
+      --cor-focus-ring: #e8ecf2;
+      --cor-focus-ring-inset: #0e1116;
+      --cor-text-primary: #e8ecf2;
+      --cor-text-secondary: #a9b2c0;
+      --cor-text-muted: #98a1af;
+      --cor-text-on-accent: #08121f;
+      --cor-primary: #7fb2ff;
+      --cor-primary-hover: #a3c8ff;
+      --cor-primary-subtle-bg: #152437;
+      --cor-primary-subtle-fg: #9cc4ff;
+      --cor-disponivel: #4cc98a;
+      --cor-disponivel-bg: #10251c;
+      --cor-disponivel-mark: #3fbd7d;
+      --cor-em-uso: #7fb2ff;
+      --cor-em-uso-bg: #152437;
+      --cor-em-uso-mark: #6aa5ff;
+      --cor-atencao: #e8b23d;
+      --cor-atencao-bg: #2a2110;
+      --cor-atencao-mark: #d9a52e;
+      --cor-critico: #ff8f85;
+      --cor-critico-bg: #2d1614;
+      --cor-critico-mark: #f77e73;
+      --cor-inativo: #9aa3b1;
+      --cor-inativo-bg: #1a1e25;
+      --cor-inativo-mark: #8b95a3;
+      --cor-serie-1: #7fb2ff;
+      --cor-serie-2: #915952;
+      --cor-serie-3: #febbc0;
+      --cor-serie-4: #66638f;
+      --cor-serie-5: #9ba904;
+  }
+}
+
+/* Sobreposição explícita pelo seletor de tema da aplicação. */
+:root[data-theme='light'] {
+    --cor-bg: #ffffff;
+    --cor-surface: #f4f6f9;
+    --cor-surface-raised: #ffffff;
+    --cor-surface-sunken: #eaeef3;
+    --cor-border: #c9d0da;
+    --cor-border-strong: #6f7885;
+    --cor-focus-ring: #14171c;
+    --cor-focus-ring-inset: #ffffff;
+    --cor-text-primary: #14171c;
+    --cor-text-secondary: #535c6b;
+    --cor-text-muted: #616a76;
+    --cor-text-on-accent: #ffffff;
+    --cor-primary: #0b4fa8;
+    --cor-primary-hover: #093f88;
+    --cor-primary-subtle-bg: #e8f0fb;
+    --cor-primary-subtle-fg: #0a4794;
+    --cor-disponivel: #0a6b41;
+    --cor-disponivel-bg: #e4f4ec;
+    --cor-disponivel-mark: #0d8150;
+    --cor-em-uso: #0b4fa8;
+    --cor-em-uso-bg: #e8f0fb;
+    --cor-em-uso-mark: #1160c4;
+    --cor-atencao: #79500a;
+    --cor-atencao-bg: #fdf3dd;
+    --cor-atencao-mark: #8a5c0b;
+    --cor-critico: #a2201a;
+    --cor-critico-bg: #fbeae8;
+    --cor-critico-mark: #c62c24;
+    --cor-inativo: #5b6472;
+    --cor-inativo-bg: #eef0f3;
+    --cor-inativo-mark: #68717f;
+    --cor-serie-1: #0b4fa8;
+    --cor-serie-2: #ca7805;
+    --cor-serie-3: #6d4025;
+    --cor-serie-4: #1a9c8f;
+    --cor-serie-5: #9475f9;
+}
+
+:root[data-theme='dark'] {
+    --cor-bg: #0e1116;
+    --cor-surface: #161a21;
+    --cor-surface-raised: #1d222b;
+    --cor-surface-sunken: #0a0d11;
+    --cor-border: #333b47;
+    --cor-border-strong: #6d7787;
+    --cor-focus-ring: #e8ecf2;
+    --cor-focus-ring-inset: #0e1116;
+    --cor-text-primary: #e8ecf2;
+    --cor-text-secondary: #a9b2c0;
+    --cor-text-muted: #98a1af;
+    --cor-text-on-accent: #08121f;
+    --cor-primary: #7fb2ff;
+    --cor-primary-hover: #a3c8ff;
+    --cor-primary-subtle-bg: #152437;
+    --cor-primary-subtle-fg: #9cc4ff;
+    --cor-disponivel: #4cc98a;
+    --cor-disponivel-bg: #10251c;
+    --cor-disponivel-mark: #3fbd7d;
+    --cor-em-uso: #7fb2ff;
+    --cor-em-uso-bg: #152437;
+    --cor-em-uso-mark: #6aa5ff;
+    --cor-atencao: #e8b23d;
+    --cor-atencao-bg: #2a2110;
+    --cor-atencao-mark: #d9a52e;
+    --cor-critico: #ff8f85;
+    --cor-critico-bg: #2d1614;
+    --cor-critico-mark: #f77e73;
+    --cor-inativo: #9aa3b1;
+    --cor-inativo-bg: #1a1e25;
+    --cor-inativo-mark: #8b95a3;
+    --cor-serie-1: #7fb2ff;
+    --cor-serie-2: #915952;
+    --cor-serie-3: #febbc0;
+    --cor-serie-4: #66638f;
+    --cor-serie-5: #9ba904;
+}
+
+/* Foco visível sempre, e nunca removido sem substituto equivalente. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--foco-sombra);
+}
+
+/* WCAG 2.3.3 — respeita quem pediu menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

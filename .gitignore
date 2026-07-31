@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# O CSS de tokens é versionado: o gate de CI compara o gerado com o commitado.
+!packages/tokens/dist/
+!packages/tokens/dist/tokens.css
 build/
 .next/
 coverage/

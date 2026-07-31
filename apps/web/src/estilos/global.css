@@ -1,0 +1,1155 @@
+/**
+ * Folha global da aplicação.
+ *
+ * Organizada em camadas explícitas para que a cascata não se contradiga:
+ *   1. tokens        — importados de @iarx/tokens, verificados no CI
+ *   2. reset e base  — elementos nus
+ *   3. utilitários   — classes de propósito único
+ *   4. componentes   — blocos com nome de domínio
+ *
+ * Nenhuma cor literal aparece daqui para baixo: tudo vem de custom property.
+ * Quem precisar de uma cor nova acrescenta um token e passa pelo validador.
+ */
+
+@import '../../../../packages/tokens/dist/tokens.css';
+
+/* ========================================================================== */
+/* 1. Complemento de tokens — escalas próprias da aplicação                   */
+/* ========================================================================== */
+
+:root {
+  --fonte-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Monoespaçada para identificadores: patrimônio, série, nº de contrato,
+     valores. É como se lê etiqueta de ativo e coluna de fatura. */
+  --fonte-dado: ui-monospace, 'SF Mono', SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --e1: 4px;
+  --e2: 8px;
+  --e3: 12px;
+  --e4: 16px;
+  --e5: 24px;
+  --e6: 32px;
+  --e7: 48px;
+
+  --raio-1: 6px;
+  --raio-2: 10px;
+  --raio-3: 14px;
+
+  --t-11: 11px;
+  --t-12: 12px;
+  --t-13: 13px;
+  --t-14: 14px;
+  --t-15: 15px;
+  --t-17: 17px;
+  --t-21: 21px;
+  --t-27: 27px;
+  --t-34: 34px;
+
+  --largura-rail: 244px;
+  --altura-barra: 60px;
+  --alvo-toque: 44px;
+
+  --transicao: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* ========================================================================== */
+/* 2. Reset e base                                                            */
+/* ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light dark;
+  /* A barra superior é fixa: sem esta folga, todo alvo rolado até a viewport
+     para debaixo dela — âncoras ficam escondidas e cliques são interceptados.
+     scroll-padding-top é a propriedade que o próprio navegador respeita ao
+     rolar; scroll-margin nos filhos não cobre rolagem programática. */
+  scroll-padding-top: calc(var(--altura-barra) + var(--e4));
+}
+
+body {
+  margin: 0;
+  font-family: var(--fonte-ui);
+  font-size: var(--t-15);
+  line-height: 1.5;
+  color: var(--cor-text-primary);
+  background: var(--cor-surface);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: 1.25;
+  font-weight: 650;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--t-21);
+  letter-spacing: -0.01em;
+}
+h2 {
+  font-size: var(--t-17);
+}
+h3 {
+  font-size: var(--t-15);
+}
+
+p,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: var(--cor-primary);
+  text-underline-offset: 2px;
+}
+
+button {
+  font: inherit;
+}
+
+svg {
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ========================================================================== */
+/* 3. Utilitários                                                             */
+/* ========================================================================== */
+
+.dado {
+  font-family: var(--fonte-dado);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.pilha {
+  display: flex;
+  flex-direction: column;
+}
+.linha {
+  display: flex;
+  align-items: center;
+}
+.g1 { gap: var(--e1); }
+.g2 { gap: var(--e2); }
+.g3 { gap: var(--e3); }
+.g4 { gap: var(--e4); }
+.g5 { gap: var(--e5); }
+.entre { justify-content: space-between; }
+.fim { justify-content: flex-end; }
+.envolver { flex-wrap: wrap; }
+.crescer { flex: 1; min-width: 0; }
+.base { align-items: baseline; }
+
+.texto-secundario { color: var(--cor-text-secondary); }
+.texto-atenuado { color: var(--cor-text-muted); font-size: var(--t-12); }
+.rotulo-secao {
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--cor-text-muted);
+  font-weight: 650;
+}
+.medida-leitura { max-width: 68ch; }
+
+.pular-conteudo {
+  position: absolute;
+  left: var(--e3);
+  top: -64px;
+  z-index: 60;
+  background: var(--cor-bg);
+  color: var(--cor-text-primary);
+  padding: var(--e2) var(--e4);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  transition: top var(--transicao);
+}
+.pular-conteudo:focus {
+  top: var(--e3);
+}
+
+/* ========================================================================== */
+/* 4. Estrutura da aplicação                                                  */
+/* ========================================================================== */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--largura-rail) 1fr;
+  min-height: 100vh;
+}
+/* min-width: 0 é obrigatório: itens de grid e de flex têm min-width auto e a
+   faixa 1fr cresceria além da viewport. */
+.app > *,
+.barra > *,
+.grade > *,
+.cartao {
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------- rail --- */
+.rail {
+  grid-row: 1 / -1;
+  background: var(--cor-bg);
+  border-right: 1px solid var(--cor-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e5);
+  padding: var(--e4) var(--e3);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: 0 var(--e2);
+}
+.marca__sigla {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--raio-1);
+  background: var(--cor-primary);
+  color: var(--cor-text-on-accent);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: var(--t-13);
+  letter-spacing: -0.02em;
+  flex: none;
+}
+.marca__nome {
+  font-size: var(--t-15);
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+.marca__desc {
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav__grupo {
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--cor-text-muted);
+  font-weight: 650;
+  padding: var(--e4) var(--e2) var(--e1);
+}
+.nav__item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 36px;
+  padding: 0 var(--e2);
+  border-radius: var(--raio-1);
+  color: var(--cor-text-secondary);
+  font-size: var(--t-14);
+  transition: background var(--transicao), color var(--transicao);
+}
+.nav__item:hover {
+  background: var(--cor-surface-sunken);
+  color: var(--cor-text-primary);
+}
+.nav__item[aria-current='page'] {
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+  font-weight: 620;
+}
+.nav__glifo {
+  flex: none;
+  width: 18px;
+  display: grid;
+  place-items: center;
+  opacity: 0.9;
+}
+.nav__contador {
+  margin-left: auto;
+  font-family: var(--fonte-dado);
+  font-size: var(--t-11);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--cor-critico-bg);
+  color: var(--cor-critico);
+}
+
+/* ------------------------------------------------------------------ barra --- */
+.barra {
+  grid-column: 2;
+  /* Deliberadamente NÃO fixa: cabeçalho sobreposto esconde destino de âncora,
+     cobre conteúdo ao rolar e intercepta cliques — problemas reais para teclado
+     e leitor de tela. O rail mantém a navegação sempre visível, e ⌘K abre a
+     busca de qualquer ponto da página, então nada se perde. */
+  display: flex;
+  align-items: center;
+  gap: var(--e4);
+  min-height: var(--altura-barra);
+  padding: var(--e2) var(--e5);
+  background: var(--cor-bg);
+  border-bottom: 1px solid var(--cor-border);
+}
+
+.busca {
+  flex: 1;
+  max-width: 440px;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 36px;
+  padding: 0 var(--e3);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  background: var(--cor-surface);
+  color: var(--cor-text-muted);
+  cursor: text;
+  text-align: left;
+}
+.busca:hover {
+  border-color: var(--cor-border-strong);
+}
+.busca__texto {
+  flex: 1;
+  font-size: var(--t-14);
+}
+kbd {
+  font-family: var(--fonte-dado);
+  font-size: var(--t-11);
+  padding: 1px 5px;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  color: var(--cor-text-muted);
+  background: var(--cor-bg);
+}
+
+.conteudo {
+  grid-column: 2;
+  padding: var(--e5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e5);
+}
+
+/* A barra é fixa no topo: sem esta folga, qualquer elemento que receba foco ou
+   seja rolado até a viewport para embaixo dela — o clique é interceptado e o
+   destino de âncora fica escondido. Vale para todo alvo dentro do conteúdo. */
+.conteudo,
+.conteudo *,
+#principal {
+  scroll-margin-top: calc(var(--altura-barra) + var(--e4));
+}
+
+.pagina__cabeca {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--e4);
+  flex-wrap: wrap;
+}
+
+.migalhas {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  margin-bottom: var(--e1);
+}
+.migalhas a {
+  color: var(--cor-text-muted);
+  text-decoration: none;
+}
+.migalhas a:hover {
+  color: var(--cor-text-primary);
+  text-decoration: underline;
+}
+
+/* ========================================================================== */
+/* 5. Componentes                                                             */
+/* ========================================================================== */
+
+/* ------------------------------------------------------------------ botão --- */
+.btn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e2);
+  min-height: 36px;
+  padding: 0 var(--e4);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  background: var(--cor-bg);
+  color: var(--cor-text-primary);
+  font-size: var(--t-14);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background var(--transicao), border-color var(--transicao);
+}
+.btn:hover:not(:disabled) {
+  background: var(--cor-surface-sunken);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.btn--primario {
+  background: var(--cor-primary);
+  border-color: var(--cor-primary);
+  color: var(--cor-text-on-accent);
+}
+.btn--primario:hover:not(:disabled) {
+  background: var(--cor-primary-hover);
+  border-color: var(--cor-primary-hover);
+}
+.btn--sutil {
+  border-color: transparent;
+  color: var(--cor-text-secondary);
+}
+.btn--sutil:hover:not(:disabled) {
+  background: var(--cor-surface-sunken);
+  color: var(--cor-text-primary);
+}
+.btn--perigo {
+  border-color: var(--cor-critico-mark);
+  color: var(--cor-critico);
+}
+.btn--pequeno {
+  min-height: 30px;
+  padding: 0 var(--e3);
+  font-size: var(--t-13);
+}
+.btn--icone {
+  padding: 0;
+  width: 36px;
+}
+
+/* ------------------------------------------------------------------ campo --- */
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+}
+.campo__rotulo {
+  font-size: var(--t-13);
+  font-weight: 620;
+  color: var(--cor-text-secondary);
+}
+.campo__dica {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+}
+.campo__erro {
+  font-size: var(--t-12);
+  color: var(--cor-critico);
+  font-weight: 600;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: var(--t-14);
+  min-height: 36px;
+  padding: 0 var(--e3);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  background: var(--cor-bg);
+  color: var(--cor-text-primary);
+}
+input[aria-invalid='true'],
+select[aria-invalid='true'] {
+  border-color: var(--cor-critico-mark);
+  border-width: 2px;
+}
+input::placeholder {
+  color: var(--cor-text-muted);
+}
+
+/* ----------------------------------------------------------------- cartão --- */
+.cartao {
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  padding: var(--e4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e3);
+}
+.cartao--compacto {
+  padding: var(--e3) var(--e4);
+}
+.cartao__cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e3);
+}
+.cartao__titulo {
+  font-size: var(--t-12);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--cor-text-secondary);
+  font-weight: 680;
+}
+
+.grade {
+  display: grid;
+  gap: var(--e4);
+}
+/* min() é obrigatório: minmax(Xpx, 1fr) não encolhe abaixo de X e estoura o
+   corpo da página em telas estreitas (WCAG 1.4.10). */
+.grade--metricas {
+  grid-template-columns: repeat(auto-fit, minmax(min(196px, 100%), 1fr));
+}
+.grade--excecoes {
+  grid-template-columns: repeat(auto-fit, minmax(min(212px, 100%), 1fr));
+}
+.grade--2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+}
+.grade--3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+}
+
+/* ---------------------------------------------------------------- métrica --- */
+.metrica {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e1);
+}
+.metrica__rotulo {
+  font-size: var(--t-12);
+  color: var(--cor-text-secondary);
+  font-weight: 600;
+}
+.metrica__valor {
+  font-size: var(--t-27);
+  font-weight: 690;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.metrica__unidade {
+  font-size: var(--t-15);
+  font-weight: 600;
+  color: var(--cor-text-secondary);
+}
+.metrica__variacao {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e1);
+  font-size: var(--t-12);
+  font-weight: 650;
+}
+.metrica__variacao--positiva { color: var(--cor-disponivel); }
+.metrica__variacao--negativa { color: var(--cor-critico); }
+.metrica__variacao--neutra { color: var(--cor-text-muted); }
+.metrica__contexto {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+}
+
+/* ----------------------------------------------------------------- estado --- */
+/* Estado nunca depende só de cor: glifo + rótulo + cor (WCAG 1.4.1). */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-12);
+  font-weight: 650;
+  white-space: nowrap;
+  padding: 2px var(--e2);
+  border-radius: 999px;
+}
+.chip__glifo {
+  font-size: 10px;
+  line-height: 1;
+}
+.chip--disponivel { color: var(--cor-disponivel); background: var(--cor-disponivel-bg); }
+.chip--uso        { color: var(--cor-em-uso);     background: var(--cor-em-uso-bg); }
+.chip--atencao    { color: var(--cor-atencao);    background: var(--cor-atencao-bg); }
+.chip--critico    { color: var(--cor-critico);    background: var(--cor-critico-bg); }
+.chip--inativo    { color: var(--cor-inativo);    background: var(--cor-inativo-bg); }
+
+/* ---------------------------------------------------------------- exceção --- */
+.excecao {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--e3) var(--e4);
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border);
+  border-left: 3px solid var(--cor-inativo-mark);
+  border-radius: var(--raio-1);
+  transition: background var(--transicao);
+}
+.excecao:hover {
+  background: var(--cor-surface-sunken);
+}
+.excecao[data-sev='critico'] { border-left-color: var(--cor-critico-mark); }
+.excecao[data-sev='atencao'] { border-left-color: var(--cor-atencao-mark); }
+.excecao[data-sev='ok']      { border-left-color: var(--cor-disponivel-mark); }
+.excecao__numero {
+  font-size: var(--t-27);
+  font-weight: 690;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.excecao__rotulo {
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+  font-weight: 600;
+}
+.excecao__meta {
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+}
+
+/* ----------------------------------------------------------------- tabela --- */
+.tabela-caixa {
+  overflow-x: auto;
+  border-radius: var(--raio-1);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-14);
+}
+caption {
+  text-align: left;
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  padding-bottom: var(--e2);
+}
+th,
+td {
+  text-align: left;
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--cor-border);
+  vertical-align: middle;
+}
+thead th {
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cor-text-secondary);
+  font-weight: 680;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  background: var(--cor-bg);
+  z-index: 1;
+}
+tbody tr:hover {
+  background: var(--cor-surface-sunken);
+}
+tbody tr:last-child td,
+tbody tr:last-child th {
+  border-bottom: none;
+}
+td.numerico,
+th.numerico {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ordenar {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e1);
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.ordenar:hover {
+  color: var(--cor-text-primary);
+}
+.ordenar__seta {
+  font-size: 9px;
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------- filtros --- */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e3);
+  align-items: flex-end;
+}
+.fichas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e2);
+}
+.ficha {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-12);
+  font-weight: 600;
+  padding: 3px var(--e2) 3px var(--e3);
+  border: 1px solid var(--cor-border);
+  border-radius: 999px;
+  color: var(--cor-text-secondary);
+  background: var(--cor-surface);
+}
+.ficha:hover {
+  border-color: var(--cor-border-strong);
+  color: var(--cor-text-primary);
+}
+.ficha__x {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+/* -------------------------------------------------------------- skeleton --- */
+.skeleton {
+  background: linear-gradient(90deg, var(--cor-surface-sunken) 25%, var(--cor-surface) 50%, var(--cor-surface-sunken) 75%);
+  background-size: 200% 100%;
+  animation: brilho 1.3s ease-in-out infinite;
+  border-radius: var(--raio-1);
+}
+@keyframes brilho {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ------------------------------------------------------------ estado vazio --- */
+.vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e7) var(--e5);
+  text-align: center;
+  color: var(--cor-text-secondary);
+}
+.vazio__glifo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--cor-surface-sunken);
+  color: var(--cor-text-muted);
+  font-size: 20px;
+}
+.vazio__titulo {
+  font-weight: 650;
+  color: var(--cor-text-primary);
+}
+.vazio__texto {
+  font-size: var(--t-13);
+  max-width: 46ch;
+}
+
+/* ------------------------------------------------------------------ aviso --- */
+.aviso {
+  display: flex;
+  gap: var(--e3);
+  padding: var(--e4);
+  border: 1px solid var(--cor-border);
+  border-left-width: 3px;
+  border-radius: var(--raio-1);
+  background: var(--cor-surface);
+}
+.aviso--critico { border-color: var(--cor-critico-mark); background: var(--cor-critico-bg); }
+.aviso--atencao { border-color: var(--cor-atencao-mark); background: var(--cor-atencao-bg); }
+.aviso--ok      { border-color: var(--cor-disponivel-mark); background: var(--cor-disponivel-bg); }
+.aviso__titulo {
+  font-weight: 660;
+  margin-bottom: 2px;
+}
+.aviso__corpo {
+  font-size: var(--t-14);
+}
+.aviso ul {
+  margin-top: var(--e2);
+  padding-left: var(--e4);
+  list-style: disc;
+}
+.aviso li {
+  margin-bottom: 2px;
+}
+
+/* ------------------------------------------------------------------- abas --- */
+.abas {
+  display: flex;
+  gap: var(--e1);
+  border-bottom: 1px solid var(--cor-border);
+  overflow-x: auto;
+}
+.abas__item {
+  all: unset;
+  cursor: pointer;
+  padding: var(--e2) var(--e3);
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--t-14);
+  color: var(--cor-text-secondary);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.abas__item:hover {
+  color: var(--cor-text-primary);
+}
+.abas__item[aria-selected='true'] {
+  color: var(--cor-primary);
+  border-bottom-color: var(--cor-primary);
+  font-weight: 660;
+}
+
+/* ---------------------------------------------------------------- gráfico --- */
+.grafico {
+  width: 100%;
+  height: auto;
+}
+.legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e4);
+  font-size: var(--t-12);
+  color: var(--cor-text-secondary);
+}
+.legenda__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legenda__marca {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.barra-medida {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--cor-surface-sunken);
+  overflow: hidden;
+}
+.barra-medida > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* -------------------------------------------------------------- paginação --- */
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e3);
+  flex-wrap: wrap;
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+}
+
+/* ------------------------------------------------------------------ toast --- */
+.toasts {
+  position: fixed;
+  right: var(--e4);
+  bottom: var(--e4);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  max-width: min(400px, calc(100vw - 32px));
+}
+.toast {
+  display: flex;
+  gap: var(--e3);
+  align-items: flex-start;
+  padding: var(--e3) var(--e4);
+  border: 1px solid var(--cor-border-strong);
+  border-left-width: 3px;
+  border-radius: var(--raio-1);
+  background: var(--cor-surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  animation: entrar 160ms ease-out;
+}
+.toast--ok      { border-left-color: var(--cor-disponivel-mark); }
+.toast--erro    { border-left-color: var(--cor-critico-mark); }
+.toast--atencao { border-left-color: var(--cor-atencao-mark); }
+.toast__titulo {
+  font-weight: 650;
+  font-size: var(--t-14);
+}
+.toast__texto {
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+}
+@keyframes entrar {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* -------------------------------------------------------- paleta de comandos --- */
+.paleta-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 38%);
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.paleta {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-3);
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 28%);
+}
+.paleta__campo {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  padding: var(--e3) var(--e4);
+  border-bottom: 1px solid var(--cor-border);
+}
+.paleta__campo input {
+  border: none;
+  background: transparent;
+  flex: 1;
+  font-size: var(--t-15);
+  min-height: 32px;
+  padding: 0;
+}
+.paleta__campo input:focus-visible {
+  box-shadow: none;
+}
+.paleta__lista {
+  overflow-y: auto;
+  padding: var(--e2);
+}
+.paleta__grupo {
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cor-text-muted);
+  font-weight: 650;
+  padding: var(--e3) var(--e2) var(--e1);
+}
+.paleta__item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  width: 100%;
+  padding: var(--e2) var(--e3);
+  border-radius: var(--raio-1);
+  font-size: var(--t-14);
+  color: var(--cor-text-primary);
+}
+.paleta__item[data-ativo='true'] {
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+}
+.paleta__item small {
+  margin-left: auto;
+  color: var(--cor-text-muted);
+  font-size: var(--t-12);
+}
+
+/* ------------------------------------------------------------------ mapa --- */
+.mapa-caixa {
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  background: var(--cor-surface-sunken);
+}
+.mapa-pino {
+  cursor: pointer;
+}
+/* Em SVG o indicador de foco se expressa no traço da forma, não em box-shadow.
+   :focus além de :focus-visible porque a heurística do navegador não cobre foco
+   movido por script. */
+.mapa-pino:focus,
+.mapa-pino:focus-visible {
+  outline: none;
+}
+.mapa-pino:focus circle.aro,
+.mapa-pino:focus-visible circle.aro {
+  stroke: var(--cor-focus-ring);
+  stroke-width: 4;
+}
+
+/* ---------------------------------------------------------------- rodapé --- */
+.rodape {
+  grid-column: 2;
+  padding: var(--e5);
+  border-top: 1px solid var(--cor-border);
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e4);
+  justify-content: space-between;
+}
+
+/* ========================================================================== */
+/* 6. Responsividade                                                          */
+/* ========================================================================== */
+
+@media (max-width: 1024px) {
+  :root {
+    --largura-rail: 68px;
+  }
+  .marca__texto,
+  .nav__item .nav__rotulo,
+  .nav__grupo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .nav__item {
+    justify-content: center;
+    min-height: 40px;
+  }
+  .nav__contador {
+    position: absolute;
+    margin: 0;
+    transform: translate(14px, -12px);
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    grid-row: auto;
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--e3);
+    border-right: none;
+    border-bottom: 1px solid var(--cor-border);
+    overflow-x: auto;
+    padding: var(--e2) var(--e3);
+  }
+  .rail .nav {
+    flex-direction: row;
+    gap: var(--e1);
+  }
+  .nav__item {
+    min-width: var(--alvo-toque);
+    min-height: var(--alvo-toque);
+  }
+  .barra,
+  .conteudo,
+  .rodape {
+    grid-column: 1;
+  }
+  .barra {
+    padding: var(--e2) var(--e4);
+    flex-wrap: wrap;
+  }
+  .conteudo {
+    padding: var(--e4);
+    gap: var(--e4);
+  }
+  .metrica__valor {
+    font-size: var(--t-21);
+  }
+  thead th {
+    position: static;
+  }
+}
+
+/* ========================================================================== */
+/* 7. Foco — última camada, deliberadamente                                   */
+/*                                                                            */
+/* Declarada no fim e com :is() em vez de :where(): vários componentes usam    */
+/* `all: unset`, que tem especificidade de classe e zeraria o box-shadow de    */
+/* uma regra anterior ou de especificidade zero. Já perdemos o indicador de    */
+/* 8 controles por isso uma vez — ver docs/anexos/G-acessibilidade.md (G.3.3). */
+/* ========================================================================== */
+
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible,
+.nav__item:focus-visible,
+.btn:focus-visible,
+.excecao:focus-visible,
+.abas__item:focus-visible,
+.ficha:focus-visible,
+.ordenar:focus-visible,
+.paleta__item:focus-visible,
+.busca:focus-visible,
+.pular-conteudo:focus {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--cor-focus-ring-inset),
+    0 0 0 4px var(--cor-focus-ring);
+  border-radius: var(--raio-1);
+}

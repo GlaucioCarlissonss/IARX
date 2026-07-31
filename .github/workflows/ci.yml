@@ -62,16 +62,16 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
 
-      - name: Protótipo sincronizado com a paleta
-        run: |
-          node apps/prototipo/build.mjs
-          if ! git diff --exit-code -- apps/prototipo/index.html; then
-            echo "::error::index.html fora de sincronia com template.html/palette.json. Rode 'node apps/prototipo/build.mjs'."
-            exit 1
-          fi
+      - name: Tipos da aplicação
+        run: npx tsc -p apps/web/tsconfig.json
 
-      - name: axe, teclado, reflow 320 px e regras de negócio na interface
-        run: npx playwright test
+      - name: Construir a aplicação
+        run: |
+          node packages/tokens/scripts/build-css.mjs
+          npx vite build apps/web
+
+      - name: axe, teclado, reflow, permissões e regras de domínio
+        run: npx playwright test apps/web
 
       - uses: actions/upload-artifact@v4
         if: failure()
