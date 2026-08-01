@@ -19,3 +19,8 @@ supabase/.temp/
 supabase/.branches/
 
 .DS_Store
+
+# Saída de compilação da API e dos contratos
+apps/api/dist/
+apps/api/dist-test/
+packages/contracts/dist/

@@ -1,0 +1,15 @@
+/**
+ * @iarx/contracts — a forma do contrato de API existe uma vez só.
+ *
+ * API e clientes importam daqui. O ganho não é economizar digitação: é que uma
+ * mudança de formato vira erro de compilação nos dois lados no mesmo commit, em
+ * vez de erro de runtime em produção semanas depois.
+ *
+ * O pacote não tem dependência de runtime além do Zod, de propósito — ele não
+ * pode arrastar Nest para dentro do bundle do navegador.
+ */
+export * from './primitivos.js'
+export * from './erros.js'
+export * from './permissoes.js'
+export * from './equipamento.js'
+export * from './contrato.js'

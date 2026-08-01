@@ -68,6 +68,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [G — Acessibilidade](docs/anexos/G-acessibilidade.md) | Critérios por componente, paleta com contraste medido, gate de CI, plano de teste assistivo |
 | [H — Supabase](docs/anexos/H-supabase.md) | ADR da plataforma de dados: RLS, claims, pooling, propriedade do schema, riscos e portabilidade |
 | [I — Refatoração do Front-End](docs/anexos/I-refatoracao-frontend.md) | Diagnóstico, arquitetura React, componentes, dashboards, navegação e base de teste do domínio |
+| [J — Implementação da API](docs/anexos/J-api-implementacao.md) | Contexto de tenant por transação, autorização negada por padrão, tradução de SQLSTATE, idempotência e o que os testes provam |
 
 ---
 
@@ -84,20 +85,27 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 8 telas, 12 primitivos, tabela genérica, gráficos próprios, RBAC e base de teste do domínio de locação de TI | `pnpm a11y:dom` — 36 testes de axe, teclado, permissões e domínio |
-| `packages/db` | 8 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial | `pnpm db:test` — 20 assertivas de invariante contra PostgreSQL real |
-| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `pnpm a11y:tokens` — 188/188 verificações |
-| `.github/workflows/ci.yml` | Quatro jobs: tokens, DOM renderizado, invariantes de banco, guardas do Supabase | Bloqueiam merge |
+| `apps/web` | Aplicação React + TypeScript: 8 telas, 12 primitivos, tabela genérica, gráficos próprios, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 36 testes de axe, teclado, permissões e domínio |
+| `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência e concorrência otimista | `npm run api:test` — 32 assertivas contra PostgreSQL real |
+| `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões e entidades | Compilado no CI; consumido pelos dois lados |
+| `packages/db` | 9 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência | `npm run db:test` — 20 assertivas de invariante contra PostgreSQL real |
+| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 188/188 verificações |
+| `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança | Bloqueiam merge |
 
 ```bash
-pnpm dev              # servidor de desenvolvimento da aplicação
-pnpm build            # bundle de arquivo único em apps/web/dist/index.html
-pnpm tipos            # TypeScript estrito
-pnpm a11y:tokens      # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
-pnpm a11y:dom         # axe, teclado, reflow, permissões e domínio, em Chromium real
-pnpm db:test          # recria o banco, aplica migrações e roda a suíte de invariantes
-pnpm verificar        # tudo acima
+npm run dev           # servidor de desenvolvimento da aplicação
+npm run build         # bundle de arquivo único em apps/web/dist/index.html
+npm run tipos         # TypeScript estrito nos três pacotes
+npm run a11y:tokens   # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
+npm run a11y:dom      # axe, teclado, reflow, permissões e domínio, em Chromium real
+npm run db:test       # recria o banco, aplica migrações e roda a suíte de invariantes
+npm run api:test      # sobe o banco, semeia massa e roda a integração da API
+npm run verificar     # tudo acima
 ```
+
+A API roda como o papel `iarx_app`, **sujeito a RLS** — inclusive nos testes. Conectar como
+superusuário faria as políticas serem ignoradas e o teste de isolamento passaria sem provar nada.
+Ver [Anexo J](docs/anexos/J-api-implementacao.md).
 
 **Domínio da base de demonstração:** locação de impressoras e computadores corporativos —
 multifuncionais, laser, térmicas, desktops, notebooks, thin clients e nobreaks, com cobrança por
@@ -111,6 +119,12 @@ franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-fronte
 | `RN-028` isolamento entre tenants | RLS + `FORCE ROW LEVEL SECURITY` | `tests/02` — 5 casos, incluindo vazamento em conexão compartilhada |
 | `RN-018` auditoria imutável | Gatilho genérico + ausência de `UPDATE`/`DELETE` + cadeia de hash | `tests/02` e `tests/03` |
 | `RN-020` leitura monotônica | Gatilho com consulta ao histórico | `tests/03` — 2 casos |
+| `RN-029` idempotência | Índice único `(tenant_id, chave)` serializando reenvios | `apps/api/test` — 5 casos, incluindo replay e chave divergente |
+
+**E o que a API acrescenta sobre isso:** traduz a recusa do banco em `problem+json` com o contrato
+conflitante, a data de liberação e os ativos equivalentes livres — de modo que a mensagem de erro
+resolva o problema em vez de apenas relatá-lo. Duas requisições concorrentes pelo mesmo ativo
+produzem exatamente um `201` e um `409`, provado por teste.
 
 ## Convenções
 

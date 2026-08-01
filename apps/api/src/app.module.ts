@@ -1,0 +1,50 @@
+import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common'
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core'
+import { BancoService } from './banco/banco.service.js'
+import { AutenticacaoGuard } from './comum/autenticacao.guard.js'
+import { ContextoMiddleware } from './comum/contexto.middleware.js'
+import { EnvelopeInterceptor } from './comum/envelope.interceptor.js'
+import { IdempotenciaInterceptor } from './comum/idempotencia.interceptor.js'
+import { PermissaoGuard } from './comum/permissao.guard.js'
+import { ProblemaFilter } from './comum/problema.filter.js'
+import { ContratosController } from './modulos/contratos/contratos.controller.js'
+import { ContratosRepositorio } from './modulos/contratos/contratos.repositorio.js'
+import { ContratosService } from './modulos/contratos/contratos.service.js'
+import { EquipamentosController } from './modulos/equipamentos/equipamentos.controller.js'
+import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
+import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
+import { SaudeController } from './modulos/saude/saude.controller.js'
+
+/**
+ * Composição da aplicação.
+ *
+ * Guardas e interceptors são globais, não por controlador. A razão é a mesma
+ * que rege o resto do projeto: o que protege precisa valer por omissão. Guarda
+ * aplicada controlador a controlador esquece o controlador novo, e o esquecimento
+ * é silencioso — a rota simplesmente funciona sem autenticação.
+ *
+ * A ordem de registro dos interceptors importa. `Idempotencia` vem antes de
+ * `Envelope`, então na volta ele enxerga a resposta **já envelopada** — é
+ * exatamente esse corpo que precisa ser guardado para o replay devolver byte
+ * por byte o que a primeira chamada devolveu.
+ */
+@Module({
+  controllers: [SaudeController, EquipamentosController, ContratosController],
+  providers: [
+    BancoService,
+    EquipamentosRepositorio,
+    EquipamentosService,
+    ContratosRepositorio,
+    ContratosService,
+    { provide: APP_FILTER, useClass: ProblemaFilter },
+    { provide: APP_GUARD, useClass: AutenticacaoGuard },
+    { provide: APP_GUARD, useClass: PermissaoGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotenciaInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: EnvelopeInterceptor },
+  ],
+})
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ContextoMiddleware).forRoutes('*splat')
+  }
+}

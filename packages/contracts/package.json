@@ -1,0 +1,25 @@
+{
+  "name": "@iarx/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Esquemas Zod compartilhados entre API e clientes — a forma do contrato existe uma vez só",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./catalogo-permissoes": {
+      "types": "./dist/catalogo-permissoes.d.ts",
+      "default": "./dist/catalogo-permissoes.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
+  }
+}

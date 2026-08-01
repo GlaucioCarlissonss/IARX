@@ -133,6 +133,60 @@ jobs:
           echo "extensões verificadas"
 
   # ---------------------------------------------------------------------------
+  # API de domínio contra PostgreSQL real.
+  #
+  # Mesma razão do job acima: RN-001 é exclusion constraint e RN-028 é RLS. Aqui
+  # o que se prova é o outro lado — que a API roda como `iarx_app` (sujeito a
+  # RLS), que traduz a recusa do banco em problem+json acionável e que a
+  # idempotência sobrevive a reenvio.
+  # ---------------------------------------------------------------------------
+  api-integracao:
+    name: API — integração e invariantes
+
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar cliente psql
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      - run: npm install --no-audit --no-fund
+
+      - name: Tipos dos contratos e da API
+        run: |
+          npx tsc -p packages/contracts/tsconfig.json
+          npx tsc -p apps/api/tsconfig.json
+
+      - name: Migrações, massa e suíte de integração
+        run: apps/api/scripts/testar.sh
+
+  # ---------------------------------------------------------------------------
   # Guardas de segurança específicos da adoção do Supabase (H.2, H.8)
   # ---------------------------------------------------------------------------
   guardas-supabase:
@@ -160,6 +214,34 @@ jobs:
             exit 1
           fi
           echo "nenhuma referência a service_role no código de cliente"
+
+      - name: Toda rota HTTP declara autorização
+        run: node apps/api/scripts/verificar-rotas.mjs
+
+      - name: Contexto de tenant só por SET LOCAL / set_config local
+        run: |
+          # Com pooler em modo transação, um SET de sessão vaza o tenant para a
+          # requisição seguinte de outro usuário na mesma conexão (H.5.2). A
+          # terceira posição de set_config precisa ser `true` (is_local).
+          if grep -rInE "set_config\(\s*'app\.[a-z_]+'\s*,[^)]*,\s*false\s*\)" apps/api/src; then
+            echo "::error::set_config de app.* com is_local=false — vazaria o tenant entre requisições"
+            exit 1
+          fi
+          if grep -rInE "\"set +app\.|'set +app\.|\`set +app\." apps/api/src; then
+            echo "::error::SET de sessão para app.* encontrado; use set_config(..., true)"
+            exit 1
+          fi
+          echo "contexto de tenant sempre local à transação"
+
+      - name: API não referencia service_role
+        run: |
+          # A API roda como iarx_app, papel SUJEITO a RLS. Usar service_role no
+          # runtime anularia RN-028 silenciosamente (H.2, regra 1).
+          if grep -rInE 'service_role|SUPABASE_SERVICE_ROLE' apps/api/src apps/api/scripts; then
+            echo "::error::referência a service_role no runtime da API"
+            exit 1
+          fi
+          echo "API não referencia service_role"
 
       - name: Nenhuma política de escrita para anon/authenticated
         run: |
