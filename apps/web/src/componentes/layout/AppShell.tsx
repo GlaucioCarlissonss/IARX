@@ -164,9 +164,14 @@ export function AppShell() {
             <span className="so-leitor">Abrir busca global. Atalho: Control ou Command mais K.</span>
           </button>
 
-          <div className="linha g3 envolver" style={{ marginLeft: 'auto' }}>
-            <label className="linha g2" style={{ fontSize: 'var(--t-13)', gap: 6 }}>
-              <span className="texto-secundario">Filial</span>
+          {/* Os rótulos somem abaixo de 1180px, mas só visualmente: o
+              `aria-label` de cada select mantém o nome acessível, e o valor
+              exibido ("Todas as filiais", "Administrador") já diz do que se
+              trata. Manter o texto forçaria a barra a três linhas em notebook,
+              empurrando o conteúdo para baixo da dobra. */}
+          <div className="barra__controles">
+            <label className="barra__campo">
+              <span className="barra__campo__rotulo">Filial</span>
               <select
                 value={filialId}
                 onChange={(e) => definirFilial(e.target.value)}
@@ -183,8 +188,8 @@ export function AppShell() {
 
             {/* Troca de perfil: existe para demonstrar o efeito das permissões
                 na navegação e nas ações. Em produção viria do login. */}
-            <label className="linha g2" style={{ fontSize: 'var(--t-13)', gap: 6 }}>
-              <span className="texto-secundario">Perfil</span>
+            <label className="barra__campo">
+              <span className="barra__campo__rotulo">Perfil</span>
               <select value={perfil.id} onChange={(e) => trocarPerfil(e.target.value)} aria-label="Perfil de acesso">
                 {perfis.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -194,7 +199,7 @@ export function AppShell() {
               </select>
             </label>
 
-            <label className="linha g2" style={{ fontSize: 'var(--t-13)', gap: 6 }}>
+            <label className="barra__campo">
               <span className="so-leitor">Tema da interface</span>
               <select
                 value={tema}

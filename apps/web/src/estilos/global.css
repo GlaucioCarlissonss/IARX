@@ -48,6 +48,11 @@
   --largura-rail: 244px;
   --altura-barra: 60px;
   --alvo-toque: 44px;
+  /* Medida máxima da coluna de conteúdo. Acima disto a leitura piora em vez de
+     melhorar: a linha fica longa demais para o olho voltar ao início certo, e
+     um cartão de KPI no canto direito de uma tela de 27" exige mover a cabeça
+     para ler o número que está sendo comparado. O espaço extra vira margem. */
+  --largura-max-conteudo: 1440px;
 
   --transicao: 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -215,6 +220,15 @@ svg {
 .app {
   display: grid;
   grid-template-columns: var(--largura-rail) 1fr;
+  /* Linhas EXPLÍCITAS, e é isso que faz o layout funcionar.
+     `grid-row: 1 / -1` no rail resolve a linha -1 contra o grid explícito; sem
+     `grid-template-rows`, o grid explícito não tem linha nenhuma, -1 vira a
+     mesma linha que 1 e o rail fica preso à primeira faixa em vez de atravessar
+     todas. Como o rail tem `height: 100vh`, ele esticava a faixa 1 para uma
+     viewport inteira: a barra ficava com 900px de altura em 1440×900, o
+     conteúdo começava abaixo da dobra e o usuário via uma tela em branco.
+     `1fr` na faixa do meio também mantém o rodapé no fim em páginas curtas. */
+  grid-template-rows: auto 1fr auto;
   min-height: 100vh;
 }
 /* min-width: 0 é obrigatório: itens de grid e de flex têm min-width auto e a
@@ -228,7 +242,12 @@ svg {
 
 /* ------------------------------------------------------------------- rail --- */
 .rail {
+  grid-column: 1;
   grid-row: 1 / -1;
+  /* Sem `align-self: start` o rail é esticado até a altura de todas as faixas,
+     e `position: sticky` deixa de ter efeito — um elemento tão alto quanto o
+     contêiner nunca precisa grudar. */
+  align-self: start;
   background: var(--cor-bg);
   border-right: 1px solid var(--cor-border);
   display: flex;
@@ -239,6 +258,7 @@ svg {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .marca {
@@ -324,19 +344,66 @@ svg {
 }
 
 /* ------------------------------------------------------------------ barra --- */
-.barra {
+/* Alinhamento da coluna de conteúdo.
+   Barra, conteúdo e rodapé compartilham a mesma medida e a mesma margem. O
+   recuo é padding, não `max-width` com `margin: auto`, para que a borda da
+   barra e a do rodapé continuem atravessando a largura toda — cortá-las no meio
+   da tela criaria uma segunda borda vertical que não delimita nada.
+   `max()` faz a margem lateral crescer só depois que a medida é atingida; em
+   telas menores sobra o recuo normal. */
+.barra,
+.conteudo,
+.rodape {
   grid-column: 2;
+  padding-inline: max(var(--e5), calc((100% - var(--largura-max-conteudo)) / 2));
+}
+
+.barra {
+  grid-row: 1;
   /* Deliberadamente NÃO fixa: cabeçalho sobreposto esconde destino de âncora,
      cobre conteúdo ao rolar e intercepta cliques — problemas reais para teclado
      e leitor de tela. O rail mantém a navegação sempre visível, e ⌘K abre a
      busca de qualquer ponto da página, então nada se perde. */
   display: flex;
   align-items: center;
-  gap: var(--e4);
+  flex-wrap: wrap;
+  gap: var(--e3) var(--e4);
   min-height: var(--altura-barra);
-  padding: var(--e2) var(--e5);
+  padding-block: var(--e2);
   background: var(--cor-bg);
   border-bottom: 1px solid var(--cor-border);
+}
+
+/* Controles de escopo. `margin-left: auto` os empurra para a direita da medida
+   de conteúdo — não para a borda da tela, porque a barra respeita a mesma
+   largura máxima do conteúdo. Sem isso, num monitor largo o seletor de filial
+   fica a mais de mil pixels da busca. */
+.barra__controles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--e2) var(--e3);
+  margin-left: auto;
+}
+
+.barra__campo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--t-13);
+}
+.barra__campo__rotulo {
+  color: var(--cor-text-secondary);
+  white-space: nowrap;
+}
+/* Sem teto, o `select` se dimensiona pela opção mais longa — "SP-01 — Base São
+   Paulo" sozinha empurrava a barra para uma segunda linha em telas de
+   notebook. O rótulo acessível não depende do texto visível. */
+.barra__campo select {
+  min-width: 0;
+  max-width: 190px;
+  text-overflow: ellipsis;
 }
 
 .busca {
@@ -359,7 +426,15 @@ svg {
 }
 .busca__texto {
   flex: 1;
+  min-width: 0;
   font-size: var(--t-14);
+  /* A dica lista os campos buscáveis e é comprida de propósito. Truncar em vez
+     de quebrar mantém o campo com a altura de uma linha: quebrado, ele
+     empurrava a barra inteira para 2 linhas no celular. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 kbd {
   font-family: var(--fonte-dado);
@@ -372,8 +447,8 @@ kbd {
 }
 
 .conteudo {
-  grid-column: 2;
-  padding: var(--e5);
+  grid-row: 2;
+  padding-block: var(--e5);
   display: flex;
   flex-direction: column;
   gap: var(--e5);
@@ -546,19 +621,51 @@ input::placeholder {
   display: grid;
   gap: var(--e4);
 }
-/* min() é obrigatório: minmax(Xpx, 1fr) não encolhe abaixo de X e estoura o
-   corpo da página em telas estreitas (WCAG 1.4.10). */
+/* Duas coisas acontecem em cada uma destas faixas, e as duas são necessárias.
+ *
+ * `min(…, 100%)` impede que a faixa deixe de encolher abaixo do próprio mínimo
+ * e estoure o corpo da página em telas estreitas (WCAG 1.4.10).
+ *
+ * `max(mínimo, (100% - folga) / N)` é o teto de colunas que o `auto-fit` não
+ * oferece sozinho. Sem ele, `.grade--2` produzia 4 colunas em um monitor largo,
+ * apesar do nome — e o cartão com tabela ficava tão estreito que "Ponte Nova"
+ * quebrava em duas linhas na coluna Cliente. A `folga` é o total de gaps entre
+ * as N colunas.
+ */
 .grade--metricas {
-  grid-template-columns: repeat(auto-fit, minmax(min(196px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(196px, (100% - 3 * var(--e4)) / 4)), 1fr));
 }
+/* Exceções do dia: seis cartões, quantidade fixa e conhecida.
+ *
+ * Aqui o arranjo é declarado em vez de deixado para `auto-fit`, porque com
+ * quantidade fixa o preenchimento automático produz sobras feias — 5 + 1 em
+ * 1440px, com um cartão órfão na segunda linha. Um arranjo que sempre divide
+ * exatamente (6, 3+3, 2+2+2, 1×6) mantém a varredura da primeira dobra legível
+ * em qualquer largura. `minmax(0, 1fr)` no lugar de `1fr` porque a faixa
+ * implícita tem mínimo `auto` e não encolheria abaixo do conteúdo. */
 .grade--excecoes {
-  grid-template-columns: repeat(auto-fit, minmax(min(212px, 100%), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (min-width: 1500px) {
+  .grade--excecoes {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .grade--excecoes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .grade--excecoes {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .grade--2 {
-  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(360px, (100% - var(--e4)) / 2)), 1fr));
 }
 .grade--3 {
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(280px, (100% - 2 * var(--e4)) / 3)), 1fr));
 }
 
 /* ---------------------------------------------------------------- métrica --- */
@@ -1041,8 +1148,8 @@ th.numerico {
 
 /* ---------------------------------------------------------------- rodapé --- */
 .rodape {
-  grid-column: 2;
-  padding: var(--e5);
+  grid-row: 3;
+  padding-block: var(--e5);
   border-top: 1px solid var(--cor-border);
   font-size: var(--t-12);
   color: var(--cor-text-muted);
@@ -1055,6 +1162,20 @@ th.numerico {
 /* ========================================================================== */
 /* 6. Responsividade                                                          */
 /* ========================================================================== */
+
+/* Abaixo desta largura os três rótulos da barra custam mais do que informam:
+   somados, forçam uma segunda linha e empurram o conteúdo para baixo. O valor
+   selecionado permanece visível e o nome acessível vem do aria-label. */
+@media (max-width: 1180px) {
+  .barra__campo__rotulo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 
 @media (max-width: 1024px) {
   :root {
@@ -1079,27 +1200,52 @@ th.numerico {
     margin: 0;
     transform: translate(14px, -12px);
   }
+  /* Busca e seletores mais estreitos para caberem em uma linha só: a barra em
+     duas linhas rouba altura justamente onde ela é escassa. */
+  .busca {
+    max-width: 300px;
+  }
+  .barra__campo select {
+    max-width: 148px;
+  }
 }
 
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
+    /* Empilhado: rail, barra, conteúdo, rodapé. Quatro faixas, e o conteúdo
+       continua sendo a que absorve a sobra. */
+    grid-template-rows: auto auto 1fr auto;
   }
   .rail {
-    grid-row: auto;
     grid-column: 1;
+    grid-row: 1;
+    align-self: stretch;
     position: sticky;
     top: 0;
+    /* O rail vira uma barra horizontal de ícones; 100vh de altura aqui cobriria
+       a tela inteira. */
     height: auto;
+    z-index: 2;
     flex-direction: row;
     align-items: center;
     gap: var(--e3);
     border-right: none;
     border-bottom: 1px solid var(--cor-border);
     overflow-x: auto;
+    overflow-y: hidden;
     padding: var(--e2) var(--e3);
   }
   .rail .nav {
+    flex-direction: row;
+    gap: var(--e1);
+  }
+  /* Cada grupo da navegação é uma pilha vertical no rail lateral. Na faixa
+     horizontal do celular a pilha precisa virar linha também — sem isto os
+     três grupos continuam empilhando seus itens e a faixa fica com 199px de
+     altura, mais de um quarto da tela antes de qualquer conteúdo. */
+  .rail .nav > * {
+    display: flex;
     flex-direction: row;
     gap: var(--e1);
   }
@@ -1107,17 +1253,54 @@ th.numerico {
     min-width: var(--alvo-toque);
     min-height: var(--alvo-toque);
   }
+  /* A faixa horizontal rola em X, e rolagem em X força a rolagem em Y a deixar
+     de ser `visible` — o distintivo de pendências deslocado para fora do item
+     seria cortado pela borda superior. Menos deslocamento o mantém dentro. */
+  .nav__contador {
+    transform: translate(12px, -6px);
+  }
+  .barra {
+    grid-row: 2;
+  }
+  .conteudo {
+    grid-row: 3;
+  }
+  .rodape {
+    grid-row: 4;
+  }
   .barra,
   .conteudo,
   .rodape {
     grid-column: 1;
+    padding-inline: var(--e4);
   }
   .barra {
-    padding: var(--e2) var(--e4);
+    /* Empilha busca e controles em vez de deixá-los brigarem por largura numa
+       linha só. */
     flex-wrap: wrap;
+    padding-block: var(--e3);
+  }
+  .busca {
+    max-width: none;
+    flex-basis: 100%;
+  }
+  .barra__controles {
+    margin-left: 0;
+    width: 100%;
+    gap: var(--e2);
+  }
+  /* Os três controles dividem a linha em partes iguais em vez de cada um
+     reivindicar a largura da própria opção mais longa e quebrarem em três
+     linhas — eram 205px de barra antes do conteúdo começar. */
+  .barra__campo {
+    flex: 1 1 0;
+  }
+  .barra__campo select {
+    width: 100%;
+    max-width: none;
   }
   .conteudo {
-    padding: var(--e4);
+    padding-block: var(--e4);
     gap: var(--e4);
   }
   .metrica__valor {

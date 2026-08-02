@@ -72,6 +72,58 @@ test('reflow em 320 px sem rolagem lateral do corpo', async ({ page }) => {
   }
 })
 
+/**
+ * Estas duas verificações existem por causa de um defeito real e caro.
+ *
+ * `.rail` declarava `grid-row: 1 / -1` sem que `.app` tivesse
+ * `grid-template-rows`. A linha -1 resolve contra o grid EXPLÍCITO; sem faixas
+ * explícitas ela coincide com a linha 1, o rail ficava preso à primeira faixa
+ * e — por ter `height: 100vh` — esticava essa faixa até uma viewport inteira.
+ * Resultado: a barra com 900px de altura em 1440×900 e o conteúdo começando
+ * abaixo da dobra, com a tela em branco.
+ *
+ * Nada disso é violação de WCAG, nenhuma consulta de axe reprova, e o layout
+ * "funciona" no sentido de que rola. Só uma medida de posição pega.
+ */
+test('o conteúdo começa logo abaixo da barra, em qualquer largura', async ({ page }) => {
+  for (const [largura, altura] of [
+    [1993, 700],
+    [1440, 900],
+    [1280, 800],
+    [1024, 768],
+    [900, 700],
+  ]) {
+    await abrir(page, { largura, altura })
+    const m = await page.evaluate(() => {
+      const r = (s) => document.querySelector(s).getBoundingClientRect()
+      return { barra: Math.round(r('.barra').height), topo: Math.round(r('.conteudo').y) }
+    })
+    expect(m.barra, `barra alta demais em ${largura}px — controles quebrando em várias linhas`)
+      .toBeLessThanOrEqual(80)
+    expect(m.topo, `conteúdo começa em y=${m.topo} em ${largura}×${altura}: há um vão antes dele`)
+      .toBeLessThanOrEqual(80)
+  }
+})
+
+test('barra, conteúdo e rodapé compartilham a mesma margem esquerda', async ({ page }) => {
+  // Se as três não usarem a mesma medida, a busca fica alinhada com uma borda e
+  // o título da página com outra — desalinhamento que se lê como descuido antes
+  // de se ler como erro.
+  for (const [largura, altura] of [
+    [2560, 1440],
+    [1440, 900],
+    [1024, 768],
+    [390, 844],
+  ]) {
+    await abrir(page, { largura, altura })
+    const xs = await page.evaluate(() => {
+      const x = (s) => Math.round(document.querySelector(s).getBoundingClientRect().x)
+      return { busca: x('.busca'), titulo: x('h1'), rodape: x('.rodape p'), cartao: x('.excecao') }
+    })
+    expect(new Set(Object.values(xs)).size, `bordas divergentes em ${largura}px: ${JSON.stringify(xs)}`).toBe(1)
+  }
+})
+
 test('axe em 320 px e em 200% de zoom', async ({ page }) => {
   await abrir(page, { largura: 320, altura: 720 })
   let v = await violacoes(page)
