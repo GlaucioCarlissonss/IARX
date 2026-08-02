@@ -622,3 +622,166 @@ test('botão de envio trava durante o processamento', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Cadastrando…' })).toBeDisabled()
   await expect(page.getByRole('dialog')).toBeHidden()
 })
+
+/* ==================================================================== */
+/* Anexos                                                               */
+/* ==================================================================== */
+
+/**
+ * Aceitar qualquer tipo de arquivo é uma decisão de produto que só é
+ * defensável se o download for sempre forçado — um `.html` anexado precisa
+ * baixar, nunca abrir no contexto da aplicação. Estes testes verificam a
+ * permissividade e a proteção que a torna segura.
+ */
+
+/** Anexa um arquivo pelo input real, sem depender de arrastar-e-soltar. */
+async function escolherArquivos(page, arquivos) {
+  await page.locator('#campo-arquivos').setInputFiles(arquivos)
+}
+
+/**
+ * Abre o diálogo de anexos numa linha que já tenha documentos.
+ *
+ * A tabela é ordenada por receita, não pela ordem da massa, então a primeira
+ * linha não é necessariamente uma das que receberam anexos de demonstração.
+ * O distintivo de contagem no botão é o indicador confiável — e usá-lo também
+ * verifica que ele reflete a realidade.
+ */
+async function abrirAnexosComDocumentos(page, hash) {
+  await abrir(page, { hash })
+  const comAnexos = page.locator('button', { has: page.locator('.distintivo') }).first()
+  await expect(comAnexos).toBeVisible()
+  await comAnexos.click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+}
+
+test('anexos: aceita qualquer tipo, inclusive extensão desconhecida', async ({ page }) => {
+  await abrir(page, { hash: '#/contratos' })
+  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+
+  await escolherArquivos(page, [
+    { name: 'aditivo-01.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 teste') },
+    { name: 'planta-andar.dwg', buffer: Buffer.from('DWG binario') },
+    { name: 'COMPROVANTE', buffer: Buffer.from('sem extensao') },
+    { name: 'assinatura.p7s', mimeType: 'application/pkcs7-signature', buffer: Buffer.from('pkcs7') },
+  ])
+
+  // Nenhum é rejeitado por tipo — nem o CAD, nem o arquivo sem extensão, nem a
+  // assinatura digital. E nenhum é marcado com problema.
+  await expect(page.locator('.lista-arquivos .arquivo')).toHaveCount(4)
+  await expect(page.locator('.arquivo[data-problema]')).toHaveCount(0)
+  await expect(dialogo.getByText('planta-andar.dwg').first()).toBeVisible()
+  await expect(dialogo.getByText('COMPROVANTE').first()).toBeVisible()
+
+  await dialogo.getByRole('button', { name: /^Anexar 4 arquivos/ }).click()
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(/4 arquivos anexados/)
+
+  // O diálogo segue aberto — anexar documento é atividade em lote.
+  await expect(dialogo).toBeVisible()
+  await expect(dialogo.getByRole('table')).toContainText('planta-andar.dwg')
+})
+
+test('anexos: nome duplicado é recusado apontando o campo', async ({ page }) => {
+  await abrirAnexosComDocumentos(page, '#/clientes')
+
+  // A massa já traz documentos nos clientes com distintivo.
+  const existente = await page.getByRole('dialog').getByRole('rowheader').first().innerText()
+  await escolherArquivos(page, [
+    { name: existente.split('\n')[0].trim(), mimeType: 'application/pdf', buffer: Buffer.from('outro') },
+  ])
+
+  // O aviso aparece antes mesmo do envio, na própria lista de selecionados.
+  await expect(page.locator('.arquivo[data-problema]')).toBeVisible()
+  await expect(page.getByText(/já anexado nesta ficha/)).toBeVisible()
+
+  await page.getByRole('dialog').getByRole('button', { name: /^Anexar arquivo/ }).click()
+  await expect(page.getByRole('alert')).toContainText(/Já existe um anexo/)
+})
+
+test('anexos: arquivo vazio é recusado', async ({ page }) => {
+  await abrir(page, { hash: '#/contratos' })
+  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await escolherArquivos(page, [{ name: 'exportacao-falhou.xlsx', mimeType: '', buffer: Buffer.from('') }])
+
+  await page.getByRole('dialog').getByRole('button', { name: /^Anexar arquivo/ }).click()
+  await expect(page.getByRole('alert')).toContainText(/está vazio/)
+})
+
+test('anexos: remoção exige motivo', async ({ page }) => {
+  await abrirAnexosComDocumentos(page, '#/clientes')
+  const dialogo = page.getByRole('dialog')
+
+  const antes = await dialogo.getByRole('row').count()
+  await dialogo.getByRole('button', { name: /^Remover/ }).first().click()
+
+  const confirmacao = page.getByRole('alertdialog')
+  await expect(confirmacao).toBeVisible()
+  await confirmacao.getByRole('button', { name: 'Remover definitivamente' }).click()
+  await expect(confirmacao).toContainText(/motivo/i)
+
+  await page.locator('#campo-motivoRemocao').fill('Documento vencido, substituído por versão nova')
+  await confirmacao.getByRole('button', { name: 'Remover definitivamente' }).click()
+
+  await expect(page.getByRole('alertdialog')).toBeHidden()
+  await expect(dialogo.getByRole('row')).toHaveCount(antes - 1)
+})
+
+test('anexos: download é forçado, nunca navegação para o arquivo', async ({ page }) => {
+  await abrir(page, { hash: '#/contratos' })
+  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+
+  // Um .html é o caso que importa: se abrisse no contexto da aplicação,
+  // executaria script com acesso à sessão.
+  await escolherArquivos(page, [
+    { name: 'relatorio.html', mimeType: 'text/html', buffer: Buffer.from('<script>alert(1)</script>') },
+  ])
+  await page.getByRole('dialog').getByRole('button', { name: /^Anexar arquivo/ }).click()
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(/anexado/)
+
+  const linha = page.getByRole('row').filter({ hasText: 'relatorio.html' })
+  const baixar = linha.getByRole('button', { name: /^Baixar/ })
+
+  const paginasAntes = page.context().pages().length
+  const download = page.waitForEvent('download')
+  await baixar.click()
+  const arquivo = await download
+
+  expect(arquivo.suggestedFilename()).toBe('relatorio.html')
+  // Nenhuma aba nova: o conteúdo não foi renderizado em lugar nenhum.
+  expect(page.context().pages().length).toBe(paginasAntes)
+})
+
+test('anexos: documento da massa não finge ter conteúdo', async ({ page }) => {
+  await abrirAnexosComDocumentos(page, '#/clientes')
+
+  // Baixar um arquivo vazio é pior que a indisponibilidade declarada.
+  const baixar = page.getByRole('dialog').getByRole('button', { name: /^Baixar/ }).first()
+  await expect(baixar).toBeDisabled()
+  await expect(baixar).toHaveAttribute('title', /demonstração/i)
+})
+
+test('anexos: o input de arquivo é alcançável e acionável por teclado', async ({ page }) => {
+  await abrir(page, { hash: '#/contratos' })
+  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+
+  // Arrastar-e-soltar não pode ser o único caminho. A área de soltar fica fora
+  // da árvore de acessibilidade justamente por não ser operável por teclado.
+  const entrada = page.locator('#campo-arquivos')
+  await expect(entrada).toBeEnabled()
+  await entrada.focus()
+  await expect(entrada).toBeFocused()
+  await expect(page.locator('.soltar')).toHaveAttribute('aria-hidden', 'true')
+})
+
+test('axe no diálogo de anexos, com arquivos selecionados', async ({ page }) => {
+  await abrir(page, { hash: '#/contratos' })
+  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await escolherArquivos(page, [
+    { name: 'termo.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') },
+    { name: 'foto-instalacao.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('JPG') },
+  ])
+  const v = await violacoes(page)
+  expect(v, `diálogo de anexos:\n  ${descrever(v)}`).toEqual([])
+})

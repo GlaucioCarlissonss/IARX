@@ -13,12 +13,14 @@ import { useSessao } from '../lib/contexto'
 import { FormCliente } from '../componentes/formularios/FormCliente'
 import { FormCredito } from '../componentes/formularios/FormCredito'
 import { FormContrato } from '../componentes/formularios/FormContrato'
+import { FormAnexos } from '../componentes/formularios/FormAnexos'
 import type { Cliente } from '../dados/tipos'
 
 type Aberto =
   | { tipo: 'novo' }
   | { tipo: 'credito'; cliente: Cliente; emAberto: number }
   | { tipo: 'contrato'; clienteId: string }
+  | { tipo: 'anexos'; cliente: Cliente }
   | null
 
 const CREDITO = {
@@ -65,6 +67,10 @@ export function Clientes() {
     for (const l of linhas) mapa.set(l.cliente.segmento, (mapa.get(l.cliente.segmento) ?? 0) + l.mrr)
     return [...mapa.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
   }, [linhas])
+
+  const base = api.baseSincrona()
+  const contarAnexos = (clienteId: string) =>
+    base.anexos.filter((a) => a.entidade === 'CLIENTE' && a.entidadeId === clienteId).length
 
   const colunas: Coluna<LinhaCliente>[] = [
     {
@@ -154,6 +160,11 @@ export function Clientes() {
       titulo: 'Ações',
       celula: (l) => (
         <div className="linha g2 envolver">
+          <Botao pequeno onClick={() => setAberto({ tipo: 'anexos', cliente: l.cliente })}>
+            Anexos
+            {contarAnexos(l.cliente.id) > 0 && <span className="distintivo">{contarAnexos(l.cliente.id)}</span>}
+            <span className="so-leitor"> de {l.cliente.nomeFantasia}</span>
+          </Botao>
           {pode('cliente:criar') && (
             <Botao pequeno onClick={() => setAberto({ tipo: 'credito', cliente: l.cliente, emAberto: l.aberto })}>
               Crédito<span className="so-leitor"> de {l.cliente.nomeFantasia}</span>
@@ -294,6 +305,14 @@ export function Clientes() {
       {aberto?.tipo === 'novo' && <FormCliente aoFechar={() => setAberto(null)} />}
       {aberto?.tipo === 'credito' && (
         <FormCredito cliente={aberto.cliente} emAberto={aberto.emAberto} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'anexos' && (
+        <FormAnexos
+          entidade="CLIENTE"
+          entidadeId={aberto.cliente.id}
+          titulo={aberto.cliente.nomeFantasia}
+          aoFechar={() => setAberto(null)}
+        />
       )}
       {aberto?.tipo === 'contrato' && (
         <FormContrato clienteId={aberto.clienteId} aoFechar={() => setAberto(null)} />

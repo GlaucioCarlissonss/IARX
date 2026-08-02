@@ -110,6 +110,8 @@ export const api = {
   pecas: () => responder(() => [...BASE.pecas]),
   faturas: () => responder(() => [...BASE.faturas]),
   tecnicos: () => responder(() => [...BASE.tecnicos]),
+  anexos: (entidade: 'CONTRATO' | 'CLIENTE', entidadeId: string) =>
+    responder(() => cmd.anexosDe(BASE, entidade, entidadeId)),
   catalogo: () =>
     responder(() => ({
       modelos: BASE.modelos,
@@ -146,4 +148,8 @@ export const api = {
 
   resolverMedicao: (equipamentoId: string, competencia: string, d: cmd.DadosMedicao) =>
     executar(() => cmd.resolverMedicao(BASE, equipamentoId, competencia, d)),
+
+  anexarArquivos: (entidade: 'CONTRATO' | 'CLIENTE', entidadeId: string, itens: cmd.DadosAnexo[]) =>
+    executar(() => cmd.anexarArquivos(BASE, entidade, entidadeId, itens)),
+  removerAnexo: (anexoId: string, motivo: string) => executar(() => cmd.removerAnexo(BASE, anexoId, motivo)),
 }

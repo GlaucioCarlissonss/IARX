@@ -5,6 +5,7 @@ import { useToast } from '../../lib/contexto'
 import { Botao, Chip } from '../ui/primitivos'
 import { Dialogo } from '../ui/Dialogo'
 import { AreaTexto, Combo, GrupoOpcoes, LinhaCampos, ResumoErros } from '../ui/formulario'
+import { CampoArquivos } from '../ui/CampoArquivos'
 import { Entrada, Selecao } from '../ui/primitivos'
 import { HOJE } from '../../dados/gerar'
 import type { Contrato } from '../../dados/tipos'
@@ -38,6 +39,7 @@ interface Valores extends Record<string, unknown> {
   diaVencimento: number
   responsavel: string
   observacao: string
+  arquivos: File[]
 }
 
 const ROTULOS = {
@@ -84,6 +86,7 @@ export function FormContrato({ clienteId, aoFechar, aoCriar }: Props) {
       diaVencimento: 10,
       responsavel: '',
       observacao: '',
+      arquivos: [],
     },
     validar: (v) => ({
       clienteId: v.clienteId ? undefined : 'Escolha o cliente do contrato.',
@@ -111,11 +114,26 @@ export function FormContrato({ clienteId, aoFechar, aoCriar }: Props) {
         responsavel: v.responsavel,
         observacao: v.observacao,
       }),
-    aoConcluir: (c) => {
+    aoConcluir: async (c) => {
+      // Os anexos são gravados depois da criação, porque só então existe a
+      // entidade a que eles pertencem. Falhar aqui não desfaz o contrato: o
+      // aviso diz o que ficou pendente e os arquivos podem ser reenviados pela
+      // ficha, em vez de perder o cadastro inteiro por um arquivo grande.
+      let avisoAnexos = ''
+      if (form.valores.arquivos.length > 0) {
+        const r = await api.anexarArquivos(
+          'CONTRATO',
+          c.id,
+          form.valores.arquivos.map((arquivo) => ({ arquivo, categoria: 'CONTRATO_ASSINADO' as const })),
+        )
+        avisoAnexos = r.ok
+          ? ` · ${r.valor.length} anexo(s)`
+          : ` · anexos não enviados: ${r.erro.mensagem}`
+      }
       avisar({
         tom: 'ok',
         titulo: `Contrato ${c.numero} criado`,
-        texto: 'Em rascunho. Aloque os equipamentos e submeta para aprovação.',
+        texto: `Em rascunho. Aloque os equipamentos e submeta para aprovação.${avisoAnexos}`,
       })
       aoCriar?.(c)
       aoFechar()
@@ -250,6 +268,15 @@ export function FormContrato({ clienteId, aoFechar, aoCriar }: Props) {
           limite={400}
           value={form.valores.observacao}
           onChange={(e) => form.definir('observacao', e.target.value)}
+        />
+
+        <CampoArquivos
+          nome="arquivos"
+          rotulo="Documentos do contrato (opcional)"
+          dica="Contrato assinado, proposta, aditivos. Podem ser enviados depois pela ficha."
+          arquivos={form.valores.arquivos}
+          aoMudar={(a) => form.definir('arquivos', a)}
+          disabled={form.enviando}
         />
 
         <p className="texto-secundario">

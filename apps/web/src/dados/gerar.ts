@@ -8,6 +8,7 @@ import {
   modeloPorId,
 } from './catalogo'
 import type {
+  Anexo,
   BaseDados,
   Cliente,
   Contrato,
@@ -780,6 +781,48 @@ export function gerarBase(semente = 20260730): BaseDados {
     })
   }
 
+  /* ---------------------------------------------------------------- anexos */
+  // Documentos de demonstração: só metadados, sem conteúdo. O botão de baixar
+  // fica desabilitado com o motivo, em vez de entregar um arquivo vazio.
+  const anexos: Anexo[] = []
+  let seqAnexo = 1
+  const anexo = (
+    entidade: Anexo['entidade'],
+    entidadeId: string,
+    nome: string,
+    tipoMime: string,
+    categoria: Anexo['categoria'],
+    kb: number,
+  ) => {
+    anexos.push({
+      id: `anx-${String(seqAnexo++).padStart(4, '0')}`,
+      entidade,
+      entidadeId,
+      nome,
+      tipoMime,
+      tamanhoBytes: kb * 1024,
+      categoria,
+      enviadoEm: somarMeses(HOJE, 0).toISOString().slice(0, 10),
+      enviadoPor: 'Operação IARX',
+    })
+  }
+
+  for (const c of contratos.slice(0, 8)) {
+    anexo('CONTRATO', c.id, `${c.numero}-assinado.pdf`, 'application/pdf', 'CONTRATO_ASSINADO', 480 + (c.itens.length % 7) * 90)
+    anexo('CONTRATO', c.id, `${c.numero}-proposta.pdf`, 'application/pdf', 'PROPOSTA', 210)
+    if (c.itens.length > 3) {
+      anexo('CONTRATO', c.id, `${c.numero}-termo-entrega.pdf`, 'application/pdf', 'TERMO_ENTREGA', 130)
+    }
+  }
+
+  for (const cl of clientes.slice(0, 10)) {
+    anexo('CLIENTE', cl.id, 'cartao-cnpj.pdf', 'application/pdf', 'CARTAO_CNPJ', 96)
+    anexo('CLIENTE', cl.id, 'contrato-social.pdf', 'application/pdf', 'CONTRATO_SOCIAL', 1240)
+    if (cl.situacaoCredito !== 'LIBERADO') {
+      anexo('CLIENTE', cl.id, 'certidao-negativa.pdf', 'application/pdf', 'CERTIDAO', 88)
+    }
+  }
+
   /* ----------------------------------------------------------- indicadores */
   const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
@@ -793,6 +836,7 @@ export function gerarBase(semente = 20260730): BaseDados {
     clientes,
     locais,
     contratos,
+    anexos,
     equipamentos,
     tecnicos,
     ordens,

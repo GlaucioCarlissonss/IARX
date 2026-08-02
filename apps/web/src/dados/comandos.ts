@@ -1,6 +1,17 @@
 import { HOJE } from './gerar'
 import { categoriaPorCodigo, modeloPorId } from './catalogo'
-import type { BaseDados, Contrato, ContratoItem, Equipamento, ModalidadeCobranca, OrdemServico, Peca } from './tipos'
+import type {
+  Anexo,
+  BaseDados,
+  CategoriaAnexo,
+  Contrato,
+  ContratoItem,
+  EntidadeAnexo,
+  Equipamento,
+  ModalidadeCobranca,
+  OrdemServico,
+  Peca,
+} from './tipos'
 
 /**
  * Comandos de escrita.
@@ -856,4 +867,170 @@ export function resolverMedicao(
 
 export function competenciaAtual(): string {
   return competenciaDe(HOJE.toISOString())
+}
+
+/* ================================================================ anexos === */
+
+/**
+ * Limite por arquivo.
+ *
+ * Não é restrição de formato — qualquer tipo é aceito. É limite de tamanho, e
+ * existe por uma razão de arquitetura: acima disto o caminho certo deixa de ser
+ * "enviar pelo formulário" e passa a ser upload direto para o armazenamento por
+ * URL assinada, sem trafegar pela API. Aceitar 300 MB aqui só produziria uma
+ * aba travada e um envio que falha no fim.
+ */
+export const LIMITE_ARQUIVO_BYTES = 10 * 1024 * 1024
+export const LIMITE_TOTAL_BYTES = 50 * 1024 * 1024
+
+export interface DadosAnexo {
+  arquivo: File
+  categoria: CategoriaAnexo
+  descricao?: string
+}
+
+export function anexosDe(base: BaseDados, entidade: EntidadeAnexo, entidadeId: string): Anexo[] {
+  return base.anexos
+    .filter((a) => a.entidade === entidade && a.entidadeId === entidadeId)
+    .sort((a, b) => b.enviadoEm.localeCompare(a.enviadoEm) || a.nome.localeCompare(b.nome))
+}
+
+/**
+ * Anexa arquivos a um contrato ou cliente.
+ *
+ * **Qualquer tipo é aceito** — PDF, imagem, planilha, .p7s de assinatura
+ * digital, .dwg de planta, arquivo sem extensão reconhecida. Restringir por
+ * extensão é uma falsa proteção: renomear contorna, e o custo real é o
+ * operador que não consegue anexar o comprovante que o cliente mandou.
+ *
+ * A segurança vem de outro lugar, e é o que torna a permissividade defensável:
+ * o conteúdo nunca é executado nem renderizado como HTML, e o download é
+ * sempre forçado com o atributo `download` — nunca navegação para o arquivo.
+ * Um `.html` anexado baixa; não abre no contexto da aplicação.
+ *
+ * Valida tudo antes de gravar qualquer coisa: um lote parcialmente aceito
+ * deixa o operador sem saber o que subiu e o que não subiu.
+ */
+export function anexarArquivos(
+  base: BaseDados,
+  entidade: EntidadeAnexo,
+  entidadeId: string,
+  itens: DadosAnexo[],
+  enviadoPor = 'Operação IARX',
+): Resultado<Anexo[]> {
+  if (itens.length === 0) {
+    return falha('PAYLOAD_INVALIDO', 'Escolha ao menos um arquivo.', { campo: 'arquivos' })
+  }
+
+  const existentes = anexosDe(base, entidade, entidadeId)
+  const jaUsados = new Set(existentes.map((a) => a.nome.toLowerCase()))
+  let totalAtual = existentes.reduce((s, a) => s + a.tamanhoBytes, 0)
+
+  for (const item of itens) {
+    const { arquivo } = item
+
+    if (arquivo.size === 0) {
+      // Quase sempre é exportação que falhou. Aceitar produz um anexo que
+      // ninguém consegue abrir e que só é descoberto quando é preciso.
+      return falha('PAYLOAD_INVALIDO', `“${arquivo.name}” está vazio (0 bytes).`, {
+        campo: 'arquivos',
+        acoes: ['Gerar o arquivo novamente e reenviar'],
+      })
+    }
+    if (arquivo.size > LIMITE_ARQUIVO_BYTES) {
+      return falha(
+        'PAYLOAD_INVALIDO',
+        `“${arquivo.name}” tem ${formatarBytes(arquivo.size)}; o limite por arquivo é ${formatarBytes(LIMITE_ARQUIVO_BYTES)}.`,
+        { campo: 'arquivos', acoes: ['Compactar o arquivo', 'Dividir em partes menores'] },
+      )
+    }
+    if (jaUsados.has(arquivo.name.toLowerCase())) {
+      return falha('RECURSO_DUPLICADO', `Já existe um anexo chamado “${arquivo.name}”.`, {
+        campo: 'arquivos',
+        acoes: ['Renomear o arquivo', 'Remover o anexo anterior antes de enviar a nova versão'],
+      })
+    }
+    totalAtual += arquivo.size
+    if (totalAtual > LIMITE_TOTAL_BYTES) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `O total de anexos passaria de ${formatarBytes(LIMITE_TOTAL_BYTES)}.`,
+        { campo: 'arquivos', acoes: ['Remover anexos obsoletos'] },
+      )
+    }
+    jaUsados.add(arquivo.name.toLowerCase())
+  }
+
+  const criados: Anexo[] = itens.map((item) => ({
+    id: novoId('anx'),
+    entidade,
+    entidadeId,
+    nome: item.arquivo.name,
+    // Navegador não reconhece toda extensão; guardar vazio é mais honesto que
+    // inventar um tipo que o arquivo pode não ter.
+    tipoMime: item.arquivo.type || '',
+    tamanhoBytes: item.arquivo.size,
+    categoria: item.categoria,
+    descricao: item.descricao?.trim() || undefined,
+    enviadoEm: HOJE.toISOString().slice(0, 10),
+    enviadoPor,
+    conteudo: item.arquivo,
+  }))
+
+  base.anexos.push(...criados)
+  return sucesso(criados)
+}
+
+/**
+ * Remove um anexo.
+ *
+ * Motivo obrigatório: apagar documento de contrato é ação com consequência
+ * jurídica, e a trilha precisa registrar quem removeu e por quê. Em produção
+ * isto é soft delete; aqui a lista em memória é a única cópia.
+ */
+export function removerAnexo(base: BaseDados, anexoId: string, motivo: string): Resultado<Anexo> {
+  const i = base.anexos.findIndex((a) => a.id === anexoId)
+  if (i < 0) return falha('NAO_ENCONTRADO', 'Anexo não encontrado.')
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo da remoção — a exclusão é auditada.', { campo: 'motivo' })
+  }
+  const [removido] = base.anexos.splice(i, 1)
+  return sucesso(removido!)
+}
+
+export function formatarBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`
+  return `${(kb / 1024).toFixed(1)} MB`
+}
+
+/** Rótulos das categorias, por entidade — cada uma tem seu conjunto útil. */
+export const CATEGORIAS_ANEXO: Record<EntidadeAnexo, { valor: CategoriaAnexo; texto: string }[]> = {
+  CONTRATO: [
+    { valor: 'CONTRATO_ASSINADO', texto: 'Contrato assinado' },
+    { valor: 'PROPOSTA', texto: 'Proposta comercial' },
+    { valor: 'ADITIVO', texto: 'Aditivo' },
+    { valor: 'TERMO_ENTREGA', texto: 'Termo de entrega' },
+    { valor: 'OUTRO', texto: 'Outro documento' },
+  ],
+  CLIENTE: [
+    { valor: 'CARTAO_CNPJ', texto: 'Cartão CNPJ' },
+    { valor: 'CONTRATO_SOCIAL', texto: 'Contrato social' },
+    { valor: 'CERTIDAO', texto: 'Certidão' },
+    { valor: 'PROCURACAO', texto: 'Procuração' },
+    { valor: 'OUTRO', texto: 'Outro documento' },
+  ],
+}
+
+export const ROTULO_CATEGORIA: Record<CategoriaAnexo, string> = {
+  CONTRATO_ASSINADO: 'Contrato assinado',
+  PROPOSTA: 'Proposta comercial',
+  ADITIVO: 'Aditivo',
+  TERMO_ENTREGA: 'Termo de entrega',
+  CARTAO_CNPJ: 'Cartão CNPJ',
+  CONTRATO_SOCIAL: 'Contrato social',
+  CERTIDAO: 'Certidão',
+  PROCURACAO: 'Procuração',
+  OUTRO: 'Outro documento',
 }

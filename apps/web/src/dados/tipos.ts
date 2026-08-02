@@ -276,6 +276,50 @@ export interface Fatura {
   itens: FaturaItem[]
 }
 
+/* --------------------------------------------------------------- anexos --- */
+
+export type EntidadeAnexo = 'CONTRATO' | 'CLIENTE'
+
+/**
+ * Classificação do documento.
+ *
+ * Existe para o anexo ser encontrável depois. Uma lista de doze arquivos com
+ * nomes como "digitalizado_03.pdf" é indistinguível de nenhuma lista: quem
+ * procura o contrato assinado abre um por um.
+ */
+export type CategoriaAnexo =
+  | 'CONTRATO_ASSINADO'
+  | 'PROPOSTA'
+  | 'ADITIVO'
+  | 'TERMO_ENTREGA'
+  | 'CARTAO_CNPJ'
+  | 'CONTRATO_SOCIAL'
+  | 'CERTIDAO'
+  | 'PROCURACAO'
+  | 'OUTRO'
+
+export interface Anexo {
+  id: string
+  entidade: EntidadeAnexo
+  entidadeId: string
+  nome: string
+  /** Tipo informado pelo navegador. Vazio quando ele não reconhece a extensão. */
+  tipoMime: string
+  tamanhoBytes: number
+  categoria: CategoriaAnexo
+  descricao?: string
+  enviadoEm: string
+  enviadoPor: string
+  /**
+   * Conteúdo do arquivo, mantido em memória nesta demonstração.
+   *
+   * Ausente nos anexos da massa gerada, que só têm metadados: fingir um
+   * conteúdo que não existe faria o botão de baixar entregar um arquivo vazio,
+   * e um arquivo vazio é pior que a ausência declarada dele.
+   */
+  conteudo?: Blob
+}
+
 export interface SerieMensal {
   competencia: string
   valor: number
@@ -328,6 +372,7 @@ export interface BaseDados {
   clientes: Cliente[]
   locais: LocalOperacao[]
   contratos: Contrato[]
+  anexos: Anexo[]
   equipamentos: Equipamento[]
   tecnicos: Tecnico[]
   ordens: OrdemServico[]

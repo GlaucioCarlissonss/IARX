@@ -13,11 +13,13 @@ import type { Contrato, ContratoStatus } from '../dados/tipos'
 import { FormContrato } from '../componentes/formularios/FormContrato'
 import { FormAlocarEquipamento } from '../componentes/formularios/FormAlocarEquipamento'
 import { FormTransicaoContrato } from '../componentes/formularios/FormTransicaoContrato'
+import { FormAnexos } from '../componentes/formularios/FormAnexos'
 
 type Aberto =
   | { tipo: 'novo' }
   | { tipo: 'alocar'; contrato: Contrato }
   | { tipo: 'transicao'; contrato: Contrato; destino: ContratoStatus }
+  | { tipo: 'anexos'; contrato: Contrato }
   | null
 
 /**
@@ -103,6 +105,11 @@ export function Contratos() {
     .filter((l) => ['ATIVO', 'EM_RENOVACAO', 'VENCIDO_EM_CAMPO'].includes(l.contrato.status))
     .reduce((a, l) => a + l.mrr, 0)
 
+  // Contagem de anexos na própria linha: sem ela, descobrir se o contrato tem
+  // documento exige abrir o diálogo de cada um.
+  const contarAnexos = (contratoId: string) =>
+    base.anexos.filter((a) => a.entidade === 'CONTRATO' && a.entidadeId === contratoId).length
+
   const colunas: Coluna<LinhaContrato>[] = [
     {
       chave: 'numero',
@@ -183,6 +190,13 @@ export function Contratos() {
                 Alocar<span className="so-leitor"> equipamento no contrato {l.contrato.numero}</span>
               </Botao>
             )}
+            <Botao pequeno onClick={() => setAberto({ tipo: 'anexos', contrato: l.contrato })}>
+              Anexos
+              {contarAnexos(l.contrato.id) > 0 && (
+                <span className="distintivo">{contarAnexos(l.contrato.id)}</span>
+              )}
+              <span className="so-leitor"> do contrato {l.contrato.numero}</span>
+            </Botao>
             {proximo && pode('contrato:aprovar') && (
               <Botao
                 pequeno
@@ -310,6 +324,14 @@ export function Contratos() {
       {aberto?.tipo === 'novo' && <FormContrato aoFechar={() => setAberto(null)} />}
       {aberto?.tipo === 'alocar' && (
         <FormAlocarEquipamento contrato={aberto.contrato} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'anexos' && (
+        <FormAnexos
+          entidade="CONTRATO"
+          entidadeId={aberto.contrato.id}
+          titulo={aberto.contrato.numero}
+          aoFechar={() => setAberto(null)}
+        />
       )}
       {aberto?.tipo === 'transicao' && (
         <FormTransicaoContrato

@@ -5,6 +5,7 @@ import { useToast } from '../../lib/contexto'
 import { Botao, Entrada, Selecao } from '../ui/primitivos'
 import { Dialogo } from '../ui/Dialogo'
 import { LinhaCampos, ResumoErros } from '../ui/formulario'
+import { CampoArquivos } from '../ui/CampoArquivos'
 import type { Cliente } from '../../dados/tipos'
 
 /**
@@ -33,6 +34,7 @@ interface Valores extends Record<string, unknown> {
   contatoNome: string
   contatoEmail: string
   contatoTelefone: string
+  arquivos: File[]
 }
 
 const ROTULOS = {
@@ -73,6 +75,7 @@ export function FormCliente({ aoFechar, aoCriar }: Props) {
       contatoNome: '',
       contatoEmail: '',
       contatoTelefone: '',
+      arquivos: [],
     },
     validar: (v) => {
       const numeros = v.cnpj.replace(/\D/g, '')
@@ -96,8 +99,23 @@ export function FormCliente({ aoFechar, aoCriar }: Props) {
       }
     },
     aoEnviar: (v) => api.criarCliente(v),
-    aoConcluir: (c) => {
-      avisar({ tom: 'ok', titulo: `${c.nomeFantasia} cadastrado`, texto: `${c.cnpj} · crédito liberado` })
+    aoConcluir: async (c) => {
+      // Anexos gravados após a criação: só então existe a ficha a que eles
+      // pertencem. Uma falha aqui é reportada, mas não descarta o cadastro.
+      let avisoAnexos = ''
+      if (form.valores.arquivos.length > 0) {
+        const r = await api.anexarArquivos(
+          'CLIENTE',
+          c.id,
+          form.valores.arquivos.map((arquivo) => ({ arquivo, categoria: 'CARTAO_CNPJ' as const })),
+        )
+        avisoAnexos = r.ok ? ` · ${r.valor.length} anexo(s)` : ` · anexos não enviados: ${r.erro.mensagem}`
+      }
+      avisar({
+        tom: 'ok',
+        titulo: `${c.nomeFantasia} cadastrado`,
+        texto: `${c.cnpj} · crédito liberado${avisoAnexos}`,
+      })
       aoCriar?.(c)
       aoFechar()
     },
@@ -208,6 +226,15 @@ export function FormCliente({ aoFechar, aoCriar }: Props) {
             </LinhaCampos>
           </div>
         </fieldset>
+
+        <CampoArquivos
+          nome="arquivos"
+          rotulo="Documentos do cliente (opcional)"
+          dica="Cartão CNPJ, contrato social, certidões. Podem ser enviados depois pela ficha."
+          arquivos={form.valores.arquivos}
+          aoMudar={(a) => form.definir('arquivos', a)}
+          disabled={form.enviando}
+        />
       </form>
     </Dialogo>
   )

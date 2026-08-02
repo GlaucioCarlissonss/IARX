@@ -25,6 +25,7 @@ valem para os próximos.
 | Estoque | Movimentar | Saldo não fica negativo; ajuste respeita o reservado |
 | Estoque | Política de reposição | Ponto de pedido ≥ mínimo |
 | Faturamento | Tratar medição | Estimativa exige justificativa e fica marcada |
+| Contratos e Clientes | Anexar documentos | Qualquer tipo; limite por arquivo e por ficha; remoção com motivo |
 
 ---
 
@@ -204,12 +205,71 @@ por um ancestral que não seja seu bloco contêiner.
 
 ---
 
+## K.5b Anexos de documentos
+
+Contratos e clientes recebem arquivos por um diálogo próprio, alcançável pelo
+botão **Anexos** na linha da tabela — com a contagem no distintivo, para saber
+se há documento sem precisar abrir. Os formulários de cadastro também aceitam
+arquivos, gravados logo após a criação da entidade.
+
+### Qualquer tipo, e por que isso é seguro
+
+Não há `accept` no input nem lista de extensões permitidas. Filtrar por extensão
+é falsa proteção — renomear contorna — e o custo real é o operador que não
+consegue anexar o `.p7s` da assinatura digital, o `.dwg` da planta do andar ou o
+arquivo sem extensão que o cliente mandou.
+
+A proteção está em outro lugar, e é ela que torna a permissividade defensável:
+
+- o conteúdo **nunca é executado nem renderizado** pela aplicação;
+- o download é **sempre forçado** com o atributo `download`, nunca navegação
+  para o arquivo. Um `.html` anexado baixa; não abre no contexto da sessão.
+
+Há um teste dedicado a isso: anexa um `.html` com `<script>`, baixa, e verifica
+que nenhuma aba nova foi aberta.
+
+### O que é validado
+
+| Regra | Motivo |
+| --- | --- |
+| 10 MB por arquivo | Acima disso o caminho certo deixa de ser o formulário e passa a ser upload direto por URL assinada |
+| 50 MB por ficha | Evita a ficha que vira repositório de arquivos |
+| Arquivo de 0 byte | Quase sempre é exportação que falhou; aceito, vira anexo que ninguém abre |
+| Nome duplicado na ficha | Duas versões com o mesmo nome tornam impossível saber qual vale |
+| Lote todo ou nada | Aceitar parcialmente deixa o operador sem saber o que subiu |
+
+A duplicidade é acusada **antes do envio**, na própria lista de selecionados —
+o arquivo aparece marcado com "já anexado nesta ficha", com borda espessa além
+da cor.
+
+### Acessibilidade do upload
+
+Arrastar-e-soltar **nunca é o único caminho**. O `<input type="file">` é um
+controle real, focável e acionável por teclado, estilizado mas não escondido; a
+área de soltar é acréscimo para mouse e fica `aria-hidden`, porque para quem usa
+leitor de tela ela só acrescentaria ruído — o input já está anunciado logo
+acima, com rótulo, dica e limite.
+
+A seleção muda uma lista abaixo do foco, então uma região viva anuncia a
+contagem e o total.
+
+### Documentos de demonstração
+
+A massa gerada traz anexos com **apenas metadados**, sem conteúdo. O botão de
+baixar fica desabilitado com o motivo à mostra, em vez de entregar um arquivo
+vazio — um arquivo vazio é pior que a ausência declarada dele.
+
+---
+
 ## K.6 O que falta
 
 | Item | Observação |
 | --- | --- |
 | Substituição de ativo em contrato | Encerrar o item anterior e abrir o novo na mesma transação |
 | Renovação com reajuste | Depende do motor de reajuste do Anexo E |
-| Anexos e assinatura eletrônica | Upload por URL assinada |
+| Upload por URL assinada | Hoje o arquivo trafega pelo formulário; acima de 10 MB o caminho é o cliente enviar direto ao armazenamento |
+| Assinatura eletrônica | Envio do contrato para assinatura e retorno do documento assinado |
+| Versionamento de anexo | Substituir mantendo o histórico, em vez de remover e reenviar |
+| Antivírus no recebimento | Varredura antes de disponibilizar para download |
 | Formulários consumindo `apps/api` | A troca é no corpo dos métodos de `api`; os formulários não mudam |
 | Rascunho automático | Formulário longo perdido por fechar sem querer |
