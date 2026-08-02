@@ -5,12 +5,24 @@ import { linhasChamados } from '../dados/consultas'
 import type { LinhaChamado } from '../dados/consultas'
 import { HOJE } from '../dados/gerar'
 import { useConsulta } from '../lib/useConsulta'
-import { useToast } from '../lib/contexto'
 import { useSessao } from '../lib/contexto'
 import { duracaoHoras, moeda, percentual, prazoRestante } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { FormAbrirChamado } from '../componentes/formularios/FormAbrirChamado'
+import { FormAtribuirTecnico } from '../componentes/formularios/FormAtribuirTecnico'
+import { FormConcluirChamado } from '../componentes/formularios/FormConcluirChamado'
+import type { OrdemServico } from '../dados/tipos'
+
+/** Diálogo aberto na tela. Um por vez, por construção. */
+type Aberto =
+  | { tipo: 'abrir' }
+  | { tipo: 'atribuir'; ordem: OrdemServico }
+  | { tipo: 'concluir'; ordem: OrdemServico }
+  | null
+
+const ENCERRADOS = ['CONCLUIDA', 'VALIDADA', 'CANCELADA']
 
 const STATUS_ROTULO: Record<string, { rotulo: string; sev: 'disponivel' | 'uso' | 'atencao' | 'critico' | 'inativo' }> = {
   ABERTA: { rotulo: 'Aberta', sev: 'atencao' },
@@ -33,11 +45,11 @@ const STATUS_ROTULO: Record<string, { rotulo: string; sev: 'disponivel' | 'uso' 
 export function Chamados() {
   const [params] = useSearchParams()
   const { pode } = useSessao()
-  const { avisar } = useToast()
   const { situacao, dado } = useConsulta(() => api.ordens(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [prioridade, setPrioridade] = useState('')
   const [status, setStatus] = useState('')
+  const [aberto, setAberto] = useState<Aberto>(null)
 
   const linhas = useMemo(() => (dado ? linhasChamados() : []), [dado])
 
@@ -125,6 +137,35 @@ export function Chamados() {
           </span>
         ),
     },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      celula: (l) => {
+        const encerrado = ENCERRADOS.includes(l.ordem.status)
+        if (encerrado) return <span className="texto-atenuado">encerrado</span>
+        return (
+          <div className="linha g2 envolver">
+            {pode('os:triar') && (
+              <Botao pequeno onClick={() => setAberto({ tipo: 'atribuir', ordem: l.ordem })}>
+                {l.tecnicoNome ? 'Trocar' : 'Atribuir'}
+                <span className="so-leitor"> técnico do chamado {l.ordem.numero}</span>
+              </Botao>
+            )}
+            {pode('os:executar') && (
+              <Botao
+                pequeno
+                variante="primario"
+                disabled={!l.ordem.tecnicoId}
+                motivoDesabilitado="Atribua um técnico antes de concluir"
+                onClick={() => setAberto({ tipo: 'concluir', ordem: l.ordem })}
+              >
+                Concluir<span className="so-leitor"> chamado {l.ordem.numero}</span>
+              </Botao>
+            )}
+          </div>
+        )
+      },
+    },
   ]
 
   return (
@@ -136,7 +177,11 @@ export function Chamados() {
             Fila ordenada por risco de prazo. O SLA conta em calendário útil e desconta pausas justificadas.
           </p>
         </div>
-        {pode('os:criar') && <Botao variante="primario" glifo="＋" onClick={() => avisar({ tom: 'ok', titulo: 'Abertura de chamado', texto: 'O formulário de abertura entra na próxima onda de implementação.' })}>Abrir chamado</Botao>}
+        {pode('os:criar') && (
+          <Botao variante="primario" glifo="＋" onClick={() => setAberto({ tipo: 'abrir' })}>
+            Abrir chamado
+          </Botao>
+        )}
       </div>
 
       <div className="grade grade--metricas">
@@ -232,6 +277,14 @@ export function Chamados() {
           />
         )}
       </Cartao>
+
+      {aberto?.tipo === 'abrir' && <FormAbrirChamado aoFechar={() => setAberto(null)} />}
+      {aberto?.tipo === 'atribuir' && (
+        <FormAtribuirTecnico ordem={aberto.ordem} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'concluir' && (
+        <FormConcluirChamado ordem={aberto.ordem} aoFechar={() => setAberto(null)} />
+      )}
     </>
   )
 }

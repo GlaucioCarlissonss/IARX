@@ -69,6 +69,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [H — Supabase](docs/anexos/H-supabase.md) | ADR da plataforma de dados: RLS, claims, pooling, propriedade do schema, riscos e portabilidade |
 | [I — Refatoração do Front-End](docs/anexos/I-refatoracao-frontend.md) | Diagnóstico, arquitetura React, componentes, dashboards, navegação e base de teste do domínio |
 | [J — Implementação da API](docs/anexos/J-api-implementacao.md) | Contexto de tenant por transação, autorização negada por padrão, tradução de SQLSTATE, idempotência e o que os testes provam |
+| [K — Formulários](docs/anexos/K-formularios.md) | Os onze formulários de escrita, camada de comandos, diálogo acessível, combobox e os defeitos que os testes encontraram |
 
 ---
 
@@ -85,7 +86,7 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 8 telas, 12 primitivos, tabela genérica, gráficos próprios, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 36 testes de axe, teclado, permissões e domínio |
+| `apps/web` | Aplicação React + TypeScript: 8 telas, 11 formulários de escrita, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 48 testes de axe, teclado, formulários, permissões e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência e concorrência otimista | `npm run api:test` — 32 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões e entidades | Compilado no CI; consumido pelos dois lados |
 | `packages/db` | 9 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência | `npm run db:test` — 20 assertivas de invariante contra PostgreSQL real |

@@ -1,4 +1,6 @@
-import { gerarBase, HOJE } from './gerar'
+import { gerarBase, HOJE, recalcularIndicadores } from './gerar'
+import * as cmd from './comandos'
+import type { Resultado } from './comandos'
 import type { BaseDados } from './tipos'
 
 /**
@@ -47,19 +49,67 @@ async function responder<T>(fn: () => T): Promise<T> {
   return fn()
 }
 
+/* -------------------------------------------------------------- assinatura */
+
+/**
+ * Notificação de mudança.
+ *
+ * Depois de uma escrita, toda tela aberta precisa refletir o novo estado — o
+ * painel conta chamados abertos, a lista mostra o item recém-criado. Sem isto
+ * a interface passaria a mentir logo após a ação, que é exatamente quando o
+ * usuário está olhando para ela.
+ *
+ * É o mesmo papel que a invalidação de cache do TanStack Query cumpre; quando
+ * a API real entrar, esta função sai e `useConsulta` passa a invalidar a chave.
+ */
+const ouvintes = new Set<() => void>()
+
+export function assinarMudancas(fn: () => void): () => void {
+  ouvintes.add(fn)
+  return () => ouvintes.delete(fn)
+}
+
+function notificar() {
+  BASE.indicadores = recalcularIndicadores(BASE)
+  for (const fn of ouvintes) fn()
+}
+
+/**
+ * Executa um comando com a mesma latência das leituras e notifica as telas.
+ *
+ * A latência não é enfeite: sem ela o botão nunca fica em "salvando", o estado
+ * de envio nunca é exercitado e o formulário chega à API real sem nunca ter
+ * mostrado progresso. Só notifica em caso de sucesso — recusa não muda nada.
+ */
+async function executar<T>(fn: () => Resultado<T>): Promise<Resultado<T>> {
+  await esperar()
+  const r = fn()
+  if (r.ok) notificar()
+  return r
+}
+
 export const api = {
   hoje: () => HOJE,
   /** Acesso sincrônico, para consultas derivadas que não vão à rede. */
   baseSincrona: () => BASE,
 
-  indicadores: () => responder(() => BASE.indicadores),
-  clientes: () => responder(() => BASE.clientes),
-  contratos: () => responder(() => BASE.contratos),
-  equipamentos: () => responder(() => BASE.equipamentos),
-  ordens: () => responder(() => BASE.ordens),
-  pecas: () => responder(() => BASE.pecas),
-  faturas: () => responder(() => BASE.faturas),
-  tecnicos: () => responder(() => BASE.tecnicos),
+  /*
+   * Cada leitura devolve uma coleção NOVA, não a referência interna.
+   *
+   * Não é zelo com imutabilidade: é o que faz a recarga após uma escrita
+   * funcionar. Devolvendo o mesmo array, `useMemo([dado])` nas telas vê a mesma
+   * identidade e não recalcula — a lista continuaria exibindo o estado anterior
+   * à ação, mesmo tendo sido "recarregada". Um cliente HTTP real entrega
+   * objetos novos a cada resposta, então copiar aqui também é mais fiel.
+   */
+  indicadores: () => responder(() => ({ ...BASE.indicadores })),
+  clientes: () => responder(() => [...BASE.clientes]),
+  contratos: () => responder(() => [...BASE.contratos]),
+  equipamentos: () => responder(() => [...BASE.equipamentos]),
+  ordens: () => responder(() => [...BASE.ordens]),
+  pecas: () => responder(() => [...BASE.pecas]),
+  faturas: () => responder(() => [...BASE.faturas]),
+  tecnicos: () => responder(() => [...BASE.tecnicos]),
   catalogo: () =>
     responder(() => ({
       modelos: BASE.modelos,
@@ -68,4 +118,32 @@ export const api = {
       regioes: BASE.regioes,
       filiais: BASE.filiais,
     })),
+
+  /* --------------------------------------------------------------- escrita */
+
+  abrirChamado: (d: cmd.DadosAbrirChamado) => executar(() => cmd.abrirChamado(BASE, d)),
+  atribuirTecnico: (ordemId: string, tecnicoId: string) => executar(() => cmd.atribuirTecnico(BASE, ordemId, tecnicoId)),
+  concluirChamado: (ordemId: string, d: cmd.DadosConcluirChamado) =>
+    executar(() => cmd.concluirChamado(BASE, ordemId, d)),
+
+  criarCliente: (d: cmd.DadosCliente) => executar(() => cmd.criarCliente(BASE, d)),
+  definirCredito: (clienteId: string, situacao: 'LIBERADO' | 'OBSERVACAO' | 'BLOQUEADO', motivo: string) =>
+    executar(() => cmd.definirCredito(BASE, clienteId, situacao, motivo)),
+
+  criarContrato: (d: cmd.DadosContrato) => executar(() => cmd.criarContrato(BASE, d)),
+  mudarStatusContrato: (contratoId: string, destino: Parameters<typeof cmd.mudarStatusContrato>[2]) =>
+    executar(() => cmd.mudarStatusContrato(BASE, contratoId, destino)),
+  alocarEquipamento: (contratoId: string, d: cmd.DadosAlocacao) =>
+    executar(() => cmd.alocarEquipamento(BASE, contratoId, d)),
+
+  criarEquipamento: (d: cmd.DadosEquipamento) => executar(() => cmd.criarEquipamento(BASE, d)),
+  bloquearEquipamento: (id: string, motivo: string) => executar(() => cmd.bloquearEquipamento(BASE, id, motivo)),
+  desbloquearEquipamento: (id: string) => executar(() => cmd.desbloquearEquipamento(BASE, id)),
+  registrarLeitura: (id: string, d: cmd.DadosLeitura) => executar(() => cmd.registrarLeitura(BASE, id, d)),
+
+  movimentarEstoque: (pecaId: string, d: cmd.DadosMovimento) => executar(() => cmd.movimentarEstoque(BASE, pecaId, d)),
+  definirPolitica: (pecaId: string, d: cmd.DadosPolitica) => executar(() => cmd.definirPolitica(BASE, pecaId, d)),
+
+  resolverMedicao: (equipamentoId: string, competencia: string, d: cmd.DadosMedicao) =>
+    executar(() => cmd.resolverMedicao(BASE, equipamentoId, competencia, d)),
 }

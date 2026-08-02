@@ -58,6 +58,12 @@ interface CampoBaseProps {
   rotulo: string
   dica?: string
   erro?: string
+  /**
+   * Nome do campo no formulário. Quando informado, o id do controle passa a ser
+   * `campo-<nome>` em vez de gerado — é o que permite ao resumo de erros
+   * apontar para ele com uma âncora e levar o foco ao input errado.
+   */
+  nome?: string
   children: (props: { id: string; descricaoId?: string; invalido: boolean }) => ReactNode
 }
 
@@ -66,8 +72,9 @@ interface CampoBaseProps {
  * Erro é vinculado por aria-describedby e marcado com aria-invalid — o leitor
  * de tela recebe os dois, sem a tela precisar cuidar disso.
  */
-export function Campo({ rotulo, dica, erro, children }: CampoBaseProps) {
-  const id = useId()
+export function Campo({ rotulo, dica, erro, nome, children }: CampoBaseProps) {
+  const gerado = useId()
+  const id = nome ? `campo-${nome}` : gerado
   const dicaId = dica ? `${id}-dica` : undefined
   const erroId = erro ? `${id}-erro` : undefined
   const descricaoId = [erroId, dicaId].filter(Boolean).join(' ') || undefined
@@ -96,11 +103,12 @@ interface EntradaProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'>
   rotulo: string
   dica?: string
   erro?: string
+  nome?: string
 }
 
-export function Entrada({ rotulo, dica, erro, ...resto }: EntradaProps) {
+export function Entrada({ rotulo, dica, erro, nome, ...resto }: EntradaProps) {
   return (
-    <Campo rotulo={rotulo} dica={dica} erro={erro}>
+    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome}>
       {({ id, descricaoId, invalido }) => (
         <input id={id} aria-describedby={descricaoId} aria-invalid={invalido || undefined} {...resto} />
       )}
@@ -112,12 +120,13 @@ interface SelecaoProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id
   rotulo: string
   dica?: string
   erro?: string
+  nome?: string
   opcoes: { valor: string; texto: string }[]
 }
 
-export function Selecao({ rotulo, dica, erro, opcoes, ...resto }: SelecaoProps) {
+export function Selecao({ rotulo, dica, erro, nome, opcoes, ...resto }: SelecaoProps) {
   return (
-    <Campo rotulo={rotulo} dica={dica} erro={erro}>
+    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome}>
       {({ id, descricaoId, invalido }) => (
         <select id={id} aria-describedby={descricaoId} aria-invalid={invalido || undefined} {...resto}>
           {opcoes.map((o) => (

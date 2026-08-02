@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
 import { api } from '../dados/api'
-import { excecoesFechamento, linhasFaturas } from '../dados/consultas'
+import { excecoesFechamento, linhasFaturas, pendenciasDeMedicao } from '../dados/consultas'
 import type { LinhaFatura } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { competenciaLonga, data, inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
-import type { FaturaStatus } from '../dados/tipos'
+import type { Equipamento, FaturaStatus } from '../dados/tipos'
+import { FormMedicao } from '../componentes/formularios/FormMedicao'
 
 const STATUS: Record<FaturaStatus, { rotulo: string; sev: 'disponivel' | 'uso' | 'atencao' | 'critico' | 'inativo' }> = {
   PREVISTA: { rotulo: 'Prevista', sev: 'inativo' },
@@ -35,9 +36,11 @@ export function Faturamento() {
   const [texto, setTexto] = useState('')
   const [recorte, setRecorte] = useState('')
   const [detalhe, setDetalhe] = useState<LinhaFatura | null>(null)
+  const [medicao, setMedicao] = useState<{ equipamento: Equipamento; competencia: string } | null>(null)
 
   const linhas = useMemo(() => (dado ? linhasFaturas() : []), [dado])
   const excecoes = useMemo(() => (dado ? excecoesFechamento() : []), [dado])
+  const pendencias = useMemo(() => (dado ? pendenciasDeMedicao() : []), [dado])
   const indicadores = api.baseSincrona().indicadores
   const compAtual = indicadores.serieReceita[indicadores.serieReceita.length - 1].competencia
 
@@ -149,21 +152,68 @@ export function Faturamento() {
         )}
       </div>
 
-      {indicadores.pendenciasMedicao > 0 && (
-        <Aviso
-          tom="critico"
-          titulo={`${indicadores.pendenciasMedicao} pendências de medição bloqueiam o fechamento de ${competenciaLonga(compAtual)}`}
-          saidas={[
-            'Solicitar leitura do contador ao técnico responsável',
-            'Registrar a leitura manualmente com foto do painel',
-            'Usar estimativa por média histórica — exige alçada e gera acerto no ciclo seguinte',
-          ]}
+      {pendencias.length > 0 && (
+        <Cartao
+          comoRegiao
+          titulo={`${pendencias.length} pendências de medição bloqueiam o fechamento de ${competenciaLonga(compAtual)}`}
         >
-          <p>
-            Itens com cobrança por franquia e excedente não fecham sem leitura do período. O restante do ciclo pode
-            seguir normalmente.
+          <p className="medida-leitura">
+            Itens com cobrança por franquia e excedente não fecham sem leitura do período. Cada pendência é tratada
+            individualmente — em lote, a estimativa vira o caminho fácil e a coleta de leitura acaba.
           </p>
-        </Aviso>
+          <Rolagem rotulo="Tabela de dados">
+            <table>
+              <caption className="so-leitor">
+                Equipamentos locados sem leitura de contador na competência em fechamento
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Patrimônio</th>
+                  <th scope="col">Cliente</th>
+                  <th scope="col" className="numerico">
+                    Sem leitura há
+                  </th>
+                  <th scope="col" className="numerico">
+                    Média histórica
+                  </th>
+                  <th scope="col">Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendencias.map((p) => (
+                  <tr key={p.equipamento.id}>
+                    <th scope="row" className="dado">
+                      {p.equipamento.patrimonio}
+                    </th>
+                    <td>{p.clienteNome}</td>
+                    <td className="numerico">
+                      <Chip severidade={p.mesesSemLeitura > 1 ? 'critico' : 'atencao'}>
+                        {p.mesesSemLeitura} {p.mesesSemLeitura === 1 ? 'mês' : 'meses'}
+                      </Chip>
+                    </td>
+                    <td className="numerico dado">{inteiro(p.mediaMono)} pág</td>
+                    <td>
+                      {pode('prefatura:aprovar') ? (
+                        <Botao
+                          pequeno
+                          variante="primario"
+                          onClick={() =>
+                            setMedicao({ equipamento: p.equipamento, competencia: p.competencia })
+                          }
+                        >
+                          Tratar
+                          <span className="so-leitor"> medição do patrimônio {p.equipamento.patrimonio}</span>
+                        </Botao>
+                      ) : (
+                        <span className="texto-atenuado">sem permissão</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Rolagem>
+        </Cartao>
       )}
 
       <div className="grade grade--metricas">
@@ -340,6 +390,14 @@ export function Faturamento() {
           />
         )}
       </Cartao>
+
+      {medicao && (
+        <FormMedicao
+          equipamento={medicao.equipamento}
+          competencia={medicao.competencia}
+          aoFechar={() => setMedicao(null)}
+        />
+      )}
     </>
   )
 }

@@ -10,7 +10,19 @@ import { inteiro, percentual } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
-import type { EquipamentoStatus } from '../dados/tipos'
+import type { Equipamento, EquipamentoStatus } from '../dados/tipos'
+import { FormEquipamento } from '../componentes/formularios/FormEquipamento'
+import { FormBloqueio } from '../componentes/formularios/FormBloqueio'
+import { FormLeitura } from '../componentes/formularios/FormLeitura'
+import { FormAbrirChamado } from '../componentes/formularios/FormAbrirChamado'
+import { categoriaPorCodigo } from '../dados/catalogo'
+
+type Aberto =
+  | { tipo: 'novo' }
+  | { tipo: 'bloqueio'; equipamento: Equipamento }
+  | { tipo: 'leitura'; equipamento: Equipamento }
+  | { tipo: 'chamado'; equipamentoId: string }
+  | null
 
 /** Rótulo e severidade de cada estado — dicionário único, usado em toda a tela. */
 const ESTADO: Record<EquipamentoStatus, { rotulo: string; sev: 'disponivel' | 'uso' | 'atencao' | 'critico' | 'inativo' }> = {
@@ -34,9 +46,10 @@ const ESTADO: Record<EquipamentoStatus, { rotulo: string; sev: 'disponivel' | 'u
  */
 export function Parque() {
   const [params, setParams] = useSearchParams()
-  const { filialId } = useSessao()
+  const { filialId, pode } = useSessao()
   const { situacao, dado } = useConsulta(() => api.equipamentos(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
+  const [aberto, setAberto] = useState<Aberto>(null)
 
   const estado = params.get('estado') ?? ''
   const categoria = params.get('categoria') ?? ''
@@ -143,6 +156,38 @@ export function Parque() {
         </span>
       ),
     },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      celula: (l) => {
+        const eq = l.equipamento
+        const temContador = categoriaPorCodigo.get(eq.categoria)?.temContador ?? false
+        return (
+          <div className="linha g2 envolver">
+            {pode('equipamento:movimentar') && temContador && (
+              <Botao pequeno onClick={() => setAberto({ tipo: 'leitura', equipamento: eq })}>
+                Leitura<span className="so-leitor"> do patrimônio {eq.patrimonio}</span>
+              </Botao>
+            )}
+            {pode('os:criar') && (
+              <Botao pequeno onClick={() => setAberto({ tipo: 'chamado', equipamentoId: eq.id })}>
+                Chamado<span className="so-leitor"> para o patrimônio {eq.patrimonio}</span>
+              </Botao>
+            )}
+            {pode('equipamento:desbloquear') && (
+              <Botao
+                pequeno
+                variante={eq.bloqueado ? 'primario' : 'secundario'}
+                onClick={() => setAberto({ tipo: 'bloqueio', equipamento: eq })}
+              >
+                {eq.bloqueado ? 'Desbloquear' : 'Bloquear'}
+                <span className="so-leitor"> patrimônio {eq.patrimonio}</span>
+              </Botao>
+            )}
+          </div>
+        )
+      },
+    },
   ]
 
   const fichas = [
@@ -161,6 +206,11 @@ export function Parque() {
             O estado do equipamento é a projeção da última movimentação registrada — não um campo editável.
           </p>
         </div>
+        {pode('equipamento:criar') && (
+          <Botao variante="primario" glifo="＋" onClick={() => setAberto({ tipo: 'novo' })}>
+            Cadastrar equipamento
+          </Botao>
+        )}
       </div>
 
       <Cartao>
@@ -247,6 +297,17 @@ export function Parque() {
           />
         )}
       </Cartao>
+
+      {aberto?.tipo === 'novo' && <FormEquipamento aoFechar={() => setAberto(null)} />}
+      {aberto?.tipo === 'bloqueio' && (
+        <FormBloqueio equipamento={aberto.equipamento} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'leitura' && (
+        <FormLeitura equipamento={aberto.equipamento} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'chamado' && (
+        <FormAbrirChamado equipamentoId={aberto.equipamentoId} aoFechar={() => setAberto(null)} />
+      )}
     </>
   )
 }

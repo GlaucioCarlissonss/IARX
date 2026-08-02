@@ -272,3 +272,47 @@ export function agregadoPorRegiao() {
     .filter((a) => a.total > 0)
     .sort((a, b2) => b2.total - a.total)
 }
+
+export interface PendenciaMedicao {
+  equipamento: Equipamento
+  clienteNome: string
+  competencia: string
+  /** Média histórica, base da estimativa quando a leitura não vier. */
+  mediaMono: number
+  /** Meses desde a última leitura registrada. */
+  mesesSemLeitura: number
+}
+
+/**
+ * Ativos locados sem leitura da competência corrente.
+ *
+ * É o que trava o fechamento: sem medição não há como calcular excedente, e um
+ * item de franquia + excedente não pode ser faturado por estimativa silenciosa.
+ * A lista existe para que cada pendência seja tratada individualmente — em
+ * lote, a estimativa vira o caminho fácil e a coleta de leitura acaba.
+ */
+export function pendenciasDeMedicao(): PendenciaMedicao[] {
+  const b = base()
+  const comps = b.indicadores.serieReceita.map((s) => s.competencia)
+  const atual = comps[comps.length - 1]!
+
+  return b.equipamentos
+    .filter(
+      (e) =>
+        e.status === 'LOCADO' &&
+        e.historicoConsumo.length > 0 &&
+        !e.historicoConsumo.some((h) => h.competencia === atual),
+    )
+    .map((e) => {
+      const ultima = e.historicoConsumo[e.historicoConsumo.length - 1]
+      const indiceUltima = ultima ? comps.indexOf(ultima.competencia) : -1
+      return {
+        equipamento: e,
+        clienteNome: b.clientes.find((c) => c.id === e.clienteId)?.nomeFantasia ?? '—',
+        competencia: atual,
+        mediaMono: Math.round(e.historicoConsumo.reduce((s, h) => s + h.mono, 0) / e.historicoConsumo.length),
+        mesesSemLeitura: indiceUltima >= 0 ? comps.length - 1 - indiceUltima : e.historicoConsumo.length,
+      }
+    })
+    .sort((a, b2) => b2.mesesSemLeitura - a.mesesSemLeitura)
+}

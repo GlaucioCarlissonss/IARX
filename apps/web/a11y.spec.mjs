@@ -407,3 +407,218 @@ test('faturamento por franquia e excedente aparece na memória de cálculo', asy
   await expect(memoria.getByRole('columnheader', { name: 'Excedente' })).toBeVisible()
   await expect(memoria.getByRole('columnheader', { name: 'Consumo' })).toBeVisible()
 })
+
+/* ==================================================================== */
+/* Formulários                                                          */
+/* ==================================================================== */
+
+/**
+ * Estes testes cobrem duas classes distintas de falha, e as duas custam caro.
+ *
+ * A primeira é de acessibilidade estrutural do modal: foco que não entra, Tab
+ * que escapa para o conteúdo de trás, Esc que não fecha, foco que não volta à
+ * origem. Nada disso quebra visualmente — só quem navega por teclado descobre.
+ *
+ * A segunda é de regra de domínio na fronteira de escrita: RN-001, RN-020,
+ * saldo negativo, CNPJ inválido. O formulário precisa recusar apontando o
+ * campo, não com um alerta genérico.
+ */
+
+async function abrirDialogo(page, { hash = '', nomeBotao }) {
+  await abrir(page, { hash })
+  await page.getByRole('button', { name: nomeBotao }).first().click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+  return dialogo
+}
+
+test('modal: foco entra, Esc fecha e o foco volta à origem', async ({ page }) => {
+  await abrir(page, { hash: '#/chamados' })
+  const gatilho = page.getByRole('button', { name: 'Abrir chamado' })
+  await gatilho.click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+  await expect(dialogo).toHaveAttribute('aria-modal', 'true')
+
+  // Foco vai para o primeiro campo, não para um botão: em formulário o usuário
+  // quer digitar.
+  const focadoDentro = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]')
+    return d?.contains(document.activeElement) ?? false
+  })
+  expect(focadoDentro, 'o foco precisa entrar no diálogo ao abrir').toBe(true)
+
+  await page.keyboard.press('Escape')
+  await expect(dialogo).toBeHidden()
+
+  // Devolver o foco à origem é o que impede o usuário de teclado de ser jogado
+  // de volta ao início do documento.
+  await expect(gatilho).toBeFocused()
+})
+
+test('modal: Tab circula dentro do diálogo', async ({ page }) => {
+  const dialogo = await abrirDialogo(page, { hash: '#/chamados', nomeBotao: 'Abrir chamado' })
+
+  for (let i = 0; i < 30; i += 1) {
+    await page.keyboard.press('Tab')
+    const dentro = await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      return d?.contains(document.activeElement) ?? false
+    })
+    expect(dentro, `Tab ${i + 1} escapou do diálogo`).toBe(true)
+  }
+  await expect(dialogo).toBeVisible()
+})
+
+test('axe nos diálogos de cada domínio', async ({ page }) => {
+  const casos = [
+    { hash: '#/chamados', nomeBotao: 'Abrir chamado' },
+    { hash: '#/contratos', nomeBotao: 'Novo contrato' },
+    { hash: '#/clientes', nomeBotao: 'Novo cliente' },
+    { hash: '#/parque', nomeBotao: 'Cadastrar equipamento' },
+  ]
+  for (const caso of casos) {
+    await abrirDialogo(page, caso)
+    const v = await violacoes(page)
+    expect(v, `${caso.nomeBotao}:\n  ${descrever(v)}`).toEqual([])
+  }
+})
+
+test('envio inválido leva o foco ao resumo, que conta os erros', async ({ page }) => {
+  await abrirDialogo(page, { hash: '#/clientes', nomeBotao: 'Novo cliente' })
+  await page.getByRole('button', { name: 'Cadastrar cliente' }).click()
+
+  const resumo = page.getByRole('alert')
+  await expect(resumo).toBeVisible()
+  await expect(resumo).toContainText(/campos precisam de atenção/)
+  await expect(resumo).toBeFocused()
+
+  // Cada erro leva ao campo correspondente: sem isso o usuário rola caçando
+  // qual input ficou vermelho.
+  const link = resumo.getByRole('link').first()
+  await expect(link).toHaveAttribute('href', /^#campo-/)
+})
+
+test('CNPJ com dígito verificador errado é recusado no campo', async ({ page }) => {
+  await abrirDialogo(page, { hash: '#/clientes', nomeBotao: 'Novo cliente' })
+
+  // 11.222.333/0001-80 tem o último dígito trocado (o correto é 81).
+  await page.locator('#campo-cnpj').fill('11222333000180')
+  await page.locator('#campo-razaoSocial').fill('EMPRESA TESTE LTDA')
+  await page.getByRole('dialog').getByRole('button', { name: 'Cadastrar cliente' }).click()
+
+  const campo = page.locator('#campo-cnpj')
+  await expect(campo).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.getByRole('alert')).toContainText(/dígitos verificadores/i)
+})
+
+test('RN-001: o seletor desabilita ativo já alocado e diz onde ele está', async ({ page }) => {
+  // Um patrimônio comprovadamente locado, lido da própria tela de parque em vez
+  // de fixado no teste: assim a massa pode mudar sem quebrar a verificação.
+  await abrir(page, { hash: '#/parque?estado=LOCADO' })
+  const patrimonio = (await page.getByRole('table').getByRole('rowheader').first().innerText())
+    .split('\n')[0]
+    .trim()
+  expect(patrimonio).toMatch(/^\d+$/)
+
+  await abrir(page, { hash: '#/contratos' })
+  // Contratos encerrados têm o botão desabilitado; o teste precisa de um vivo.
+  await page.locator('button:not([disabled])', { hasText: /^Alocar/ }).first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+
+  // Período que de fato colide com as alocações vigentes da massa.
+  await page.locator('#campo-vigenciaInicio').fill('2026-07-01')
+  await page.locator('#campo-vigenciaFim').fill('2026-09-30')
+
+  const campo = page.locator('#campo-equipamentoId')
+  await campo.click()
+  await campo.fill(patrimonio)
+
+  const lista = page.getByRole('listbox')
+  await expect(lista).toBeVisible()
+
+  // Ativo ocupado permanece visível, desabilitado e com o motivo — sumindo da
+  // lista, quem procura o patrimônio conclui que digitou errado.
+  const ocupado = lista.locator('li[data-desabilitada="true"]').first()
+  await expect(ocupado).toBeVisible()
+  await expect(ocupado).toHaveAttribute('aria-disabled', 'true')
+  await expect(ocupado).toContainText(/contrato|Bloqueado/i)
+})
+
+test('RN-020: leitura menor que a anterior é recusada citando o valor', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+  await page.getByRole('button', { name: /^Leitura/ }).first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+
+  const mono = page.locator('#campo-mono')
+  const anterior = Number(await mono.inputValue())
+  expect(anterior, 'o campo precisa vir preenchido com a leitura anterior').toBeGreaterThan(0)
+
+  await mono.fill(String(Math.max(0, anterior - 500)))
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar leitura', exact: true }).click()
+
+  await expect(page.getByRole('alert')).toContainText(/não retrocede|menor que a leitura anterior/i)
+  await expect(mono).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('abrir chamado cria o registro e a lista reflete sem recarregar', async ({ page }) => {
+  await abrir(page, { hash: '#/chamados' })
+  // A tabela pagina, então contar linhas visíveis não mede nada. A contagem
+  // total fica na região viva acima da tabela — que é, aliás, o que o leitor
+  // de tela anuncia quando o resultado muda.
+  const contagem = page.getByRole('status').filter({ hasText: /registros?/ }).first()
+  const totalAntes = Number((await contagem.innerText()).match(/^([\d.]+)/)?.[1]?.replace(/\./g, '') ?? '0')
+  expect(totalAntes).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: 'Abrir chamado' }).click()
+  await page.locator('#campo-equipamentoId').click()
+  await page.locator('li.combo__item:not([data-desabilitada])').first().click()
+  await page.locator('#campo-sintoma').fill('Atolamento recorrente na bandeja 2, três vezes hoje')
+  await page.getByRole('dialog').getByRole('button', { name: 'Abrir chamado', exact: true }).click()
+
+  await expect(page.getByRole('dialog')).toBeHidden()
+
+  // A região viva anuncia o resultado e traz o número do chamado.
+  const aviso = page.getByRole('region', { name: 'Avisos do sistema' })
+  await expect(aviso).toContainText(/Chamado OS-\d+ aberto/)
+  const numero = (await aviso.innerText()).match(/OS-\d+/)?.[0]
+  expect(numero).toBeTruthy()
+
+  // Recarga silenciosa: nenhuma região volta a "carregando" e o total cresce.
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
+  await expect(contagem).toContainText(String(totalAntes + 1))
+
+  // E o registro é encontrável — prova de que foi persistido, não só contado.
+  await page.getByLabel(/Chamado, patrimônio/).fill(numero)
+  await expect(page.getByRole('table').getByText(numero, { exact: true })).toBeVisible()
+})
+
+test('saldo insuficiente é recusado no campo da quantidade', async ({ page }) => {
+  await abrir(page, { hash: '#/estoque' })
+  await page.getByRole('button', { name: /^Movimentar/ }).first().click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+
+  await page.getByRole('radio', { name: /Saída/ }).check()
+  await page.locator('#campo-quantidade').fill('99999')
+  await page.locator('#campo-motivo').fill('Teste de saldo insuficiente')
+  await page.getByRole('dialog').getByRole('button', { name: 'Registrar movimentação' }).click()
+
+  await expect(page.getByRole('alert')).toContainText(/Saldo insuficiente/i)
+})
+
+test('botão de envio trava durante o processamento', async ({ page }) => {
+  await abrirDialogo(page, { hash: '#/parque', nomeBotao: 'Cadastrar equipamento' })
+
+  await page.locator('#campo-patrimonio').fill('99123')
+  await page.locator('#campo-numeroSerie').fill('TESTE-0001')
+  await page.locator('#campo-modeloId').click()
+  await page.locator('li.combo__item').first().click()
+
+  const enviar = page.getByRole('dialog').getByRole('button', { name: 'Cadastrar', exact: true })
+  await enviar.click()
+  // Sem a trava, um duplo clique cadastra dois ativos e o segundo só aparece
+  // quando alguém estranha o patrimônio duplicado.
+  await expect(page.getByRole('button', { name: 'Cadastrando…' })).toBeDisabled()
+  await expect(page.getByRole('dialog')).toBeHidden()
+})

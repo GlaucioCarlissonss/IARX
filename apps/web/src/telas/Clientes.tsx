@@ -9,6 +9,17 @@ import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } 
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { BarrasHorizontais } from '../componentes/ui/graficos'
+import { useSessao } from '../lib/contexto'
+import { FormCliente } from '../componentes/formularios/FormCliente'
+import { FormCredito } from '../componentes/formularios/FormCredito'
+import { FormContrato } from '../componentes/formularios/FormContrato'
+import type { Cliente } from '../dados/tipos'
+
+type Aberto =
+  | { tipo: 'novo' }
+  | { tipo: 'credito'; cliente: Cliente; emAberto: number }
+  | { tipo: 'contrato'; clienteId: string }
+  | null
 
 const CREDITO = {
   LIBERADO: { rotulo: 'Liberado', sev: 'disponivel' as const },
@@ -28,6 +39,8 @@ export function Clientes() {
   const { situacao, dado } = useConsulta(() => api.clientes(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [recorte, setRecorte] = useState('')
+  const [aberto, setAberto] = useState<Aberto>(null)
+  const { pode } = useSessao()
 
   const linhas = useMemo(() => (dado ? linhasClientes() : []), [dado])
 
@@ -136,6 +149,30 @@ export function Clientes() {
         </>
       ),
     },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      celula: (l) => (
+        <div className="linha g2 envolver">
+          {pode('cliente:criar') && (
+            <Botao pequeno onClick={() => setAberto({ tipo: 'credito', cliente: l.cliente, emAberto: l.aberto })}>
+              Crédito<span className="so-leitor"> de {l.cliente.nomeFantasia}</span>
+            </Botao>
+          )}
+          {pode('contrato:criar') && (
+            <Botao
+              pequeno
+              variante="primario"
+              disabled={l.cliente.situacaoCredito === 'BLOQUEADO'}
+              motivoDesabilitado="Cliente com crédito bloqueado não pode contratar"
+              onClick={() => setAberto({ tipo: 'contrato', clienteId: l.cliente.id })}
+            >
+              Contratar<span className="so-leitor"> com {l.cliente.nomeFantasia}</span>
+            </Botao>
+          )}
+        </div>
+      ),
+    },
   ]
 
   return (
@@ -147,6 +184,11 @@ export function Clientes() {
             Receita recorrente, consumo, margem e exposição vencida na mesma linha.
           </p>
         </div>
+        {pode('cliente:criar') && (
+          <Botao variante="primario" glifo="＋" onClick={() => setAberto({ tipo: 'novo' })}>
+            Novo cliente
+          </Botao>
+        )}
       </div>
 
       <div className="grade grade--metricas">
@@ -248,6 +290,14 @@ export function Clientes() {
           />
         )}
       </Cartao>
+
+      {aberto?.tipo === 'novo' && <FormCliente aoFechar={() => setAberto(null)} />}
+      {aberto?.tipo === 'credito' && (
+        <FormCredito cliente={aberto.cliente} emAberto={aberto.emAberto} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'contrato' && (
+        <FormContrato clienteId={aberto.clienteId} aoFechar={() => setAberto(null)} />
+      )}
     </>
   )
 }

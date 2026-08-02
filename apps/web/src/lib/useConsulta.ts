@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ErroApi } from '../dados/api'
+import { assinarMudancas, ErroApi } from '../dados/api'
 
 /**
  * Hook de consulta assíncrona.
@@ -23,12 +23,23 @@ export function useConsulta<T>(
 ): EstadoConsulta<T> & { recarregar: () => void } {
   const [estado, setEstado] = useState<EstadoConsulta<T>>({ situacao: 'carregando', dado: null, erro: null })
   const [tentativa, setTentativa] = useState(0)
+  const [revisao, setRevisao] = useState(0)
   const buscarRef = useRef(buscar)
   buscarRef.current = buscar
 
+  // `revisao` sobe a cada escrita e precisa reexecutar a busca sem voltar ao
+  // estado de carregamento. Guardá-la em ref, em vez de na lista de
+  // dependências, é o que separa "buscar de novo" de "mostrar skeleton".
+  const revisaoRef = useRef(revisao)
+  const silencioso = revisaoRef.current !== revisao
+  revisaoRef.current = revisao
+
   useEffect(() => {
     let vivo = true
-    setEstado({ situacao: 'carregando', dado: null, erro: null })
+    // Recarga após escrita mantém o conteúdo na tela: trocar a lista por
+    // skeleton depois de salvar faz o usuário perder o lugar em que estava, e
+    // pisca a página inteira por causa de uma linha que mudou.
+    if (!silencioso) setEstado({ situacao: 'carregando', dado: null, erro: null })
 
     buscarRef
       .current()
@@ -48,9 +59,14 @@ export function useConsulta<T>(
       vivo = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tentativa])
+  }, [...deps, tentativa, revisao])
 
+  /** Nova tentativa explícita do usuário: volta ao carregamento. */
   const recarregar = useCallback(() => setTentativa((t) => t + 1), [])
+
+  // Toda escrita bem-sucedida reexecuta a consulta. Sem isto a tela continuaria
+  // mostrando o estado anterior à ação que o próprio usuário acabou de fazer.
+  useEffect(() => assinarMudancas(() => setRevisao((r) => r + 1)), [])
 
   return { ...estado, recarregar }
 }

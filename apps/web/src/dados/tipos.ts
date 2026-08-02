@@ -318,6 +318,8 @@ export interface Indicadores {
 }
 
 export interface BaseDados {
+  /** Últimas 12 competências (AAAA-MM), da mais antiga à mais recente. */
+  competencias: string[]
   regioes: Regiao[]
   filiais: Filial[]
   fabricantes: Fabricante[]

@@ -487,6 +487,27 @@ export function gerarBase(semente = 20260730): BaseDados {
   const deficitario = equipamentos.find((e) => e.categoria === 'LASER_COLOR')!
   deficitario.custoManutencao12m = Math.round(deficitario.receita12m * 1.34)
 
+  /* --------------------------- casos plantados: pendências de medição */
+  // Quatro ativos locados sem leitura da competência corrente. É o que trava o
+  // fechamento na vida real — telemetria que não chegou, técnico que não
+  // conseguiu acesso ao andar, equipamento desligado no dia da coleta.
+  const compCorrente = comps[comps.length - 1]!
+  const semLeitura = equipamentos
+    .filter((e) => e.status === 'LOCADO' && e.historicoConsumo.length > 0)
+    .slice(0, 4)
+  for (const e of semLeitura) {
+    const i = e.historicoConsumo.findIndex((h) => h.competencia === compCorrente)
+    if (i >= 0) {
+      // Desfaz o acumulado da leitura removida: o contador precisa refletir a
+      // última medição de fato registrada, ou a próxima leitura viria menor
+      // que o acumulado e seria recusada por RN-020.
+      const removida = e.historicoConsumo[i]!
+      e.contadorMono -= removida.mono
+      e.contadorColor -= removida.color
+      e.historicoConsumo.splice(i, 1)
+    }
+  }
+
   /* ------------------------------------------------------------- contratos */
   const contratos: Contrato[] = []
   let seqContrato = 1
@@ -763,6 +784,7 @@ export function gerarBase(semente = 20260730): BaseDados {
   const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
   return {
+    competencias: comps,
     regioes: REGIOES,
     filiais: FILIAIS,
     fabricantes: FABRICANTES,
@@ -783,6 +805,25 @@ export function gerarBase(semente = 20260730): BaseDados {
 /* -------------------------------------------------------------------------- */
 /* Indicadores — derivados da base, nunca digitados                           */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Recalcula os indicadores a partir da base.
+ *
+ * Exportado porque toda escrita precisa disso: abrir um chamado muda
+ * `chamadosAbertos`, baixar uma peça muda `pecasAbaixoMinimo`. Se o painel
+ * continuasse mostrando o número anterior, a interface passaria a mentir logo
+ * depois da ação — que é justamente quando o usuário está olhando.
+ */
+export function recalcularIndicadores(base: BaseDados): Indicadores {
+  return calcularIndicadores({
+    equipamentos: base.equipamentos,
+    contratos: base.contratos,
+    faturas: base.faturas,
+    ordens: base.ordens,
+    pecas: base.pecas,
+    comps: base.competencias,
+  })
+}
 
 function calcularIndicadores(ctx: {
   equipamentos: Equipamento[]
@@ -899,7 +940,13 @@ function calcularIndicadores(ctx: {
     chamadosEmRiscoSla: emRisco.length,
     pecasAbaixoMinimo: pecas.filter((p) => p.saldo < p.estoqueMinimo).length,
     // Itens de impressão do ciclo corrente sem leitura registrada.
-    pendenciasMedicao: 4,
+    // Derivada, não fixada: resolver uma pendência precisa baixar o número.
+    pendenciasMedicao: ctx.equipamentos.filter(
+      (e) =>
+        e.status === 'LOCADO' &&
+        e.historicoConsumo.length > 0 &&
+        !e.historicoConsumo.some((h) => h.competencia === compAtual),
+    ).length,
     serieReceita: serie((c) => faturas.filter((f) => f.competencia === c).reduce((a, f) => a + f.valorLiquido, 0)),
     serieCusto: serie(
       (c) =>

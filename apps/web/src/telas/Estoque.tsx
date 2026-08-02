@@ -8,6 +8,11 @@ import { inteiro, moeda } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { FormEstoque } from '../componentes/formularios/FormEstoque'
+import { FormPolitica } from '../componentes/formularios/FormPolitica'
+import type { Peca } from '../dados/tipos'
+
+type Aberto = { tipo: 'movimentar'; peca: Peca } | { tipo: 'politica'; peca: Peca } | null
 
 const SITUACAO: Record<LinhaPeca['situacao'], { rotulo: string; sev: 'disponivel' | 'atencao' | 'critico' }> = {
   ZERADO: { rotulo: 'Zerado', sev: 'critico' },
@@ -28,6 +33,7 @@ export function Estoque() {
   const { situacao, dado } = useConsulta(() => api.pecas(), [])
   const [texto, setTexto] = useState('')
   const [filtro, setFiltro] = useState('')
+  const [aberto, setAberto] = useState<Aberto>(null)
 
   const linhas = useMemo(() => (dado ? linhasEstoque() : []), [dado])
 
@@ -142,6 +148,24 @@ export function Estoque() {
           <span className="texto-atenuado">—</span>
         ),
     },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      celula: (l) => (
+        <div className="linha g2 envolver">
+          {pode('estoque:movimentar') && (
+            <Botao pequeno variante="primario" onClick={() => setAberto({ tipo: 'movimentar', peca: l.peca })}>
+              Movimentar<span className="so-leitor"> {l.peca.codigo}</span>
+            </Botao>
+          )}
+          {pode('estoque:ajustar') && (
+            <Botao pequeno onClick={() => setAberto({ tipo: 'politica', peca: l.peca })}>
+              Política<span className="so-leitor"> de reposição de {l.peca.codigo}</span>
+            </Botao>
+          )}
+        </div>
+      ),
+    },
   ]
 
   return (
@@ -239,6 +263,9 @@ export function Estoque() {
           />
         )}
       </Cartao>
+
+      {aberto?.tipo === 'movimentar' && <FormEstoque peca={aberto.peca} aoFechar={() => setAberto(null)} />}
+      {aberto?.tipo === 'politica' && <FormPolitica peca={aberto.peca} aoFechar={() => setAberto(null)} />}
     </>
   )
 }

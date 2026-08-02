@@ -185,6 +185,29 @@ svg {
 .envolver { flex-wrap: wrap; }
 .crescer { flex: 1; min-width: 0; }
 .base { align-items: baseline; }
+.alinhar-fim { align-items: flex-end; }
+
+/* Lista de rótulo e valor. `dl` em vez de tabela: são pares descritivos, não
+   uma grade de dados, e o leitor de tela anuncia a relação corretamente. */
+.pares {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(180px, (100% - var(--e4)) / 3)), 1fr));
+  gap: var(--e3) var(--e4);
+  margin: 0;
+}
+.pares > div { min-width: 0; }
+.pares dt {
+  font-size: var(--t-11);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--cor-text-muted);
+  margin-bottom: 2px;
+}
+.pares dd {
+  margin: 0;
+  font-size: var(--t-14);
+  color: var(--cor-text-primary);
+}
 
 .texto-secundario { color: var(--cor-text-secondary); }
 .texto-atenuado { color: var(--cor-text-muted); font-size: var(--t-12); }
@@ -767,6 +790,14 @@ input::placeholder {
 
 /* ----------------------------------------------------------------- tabela --- */
 .tabela-caixa {
+  /* `position: relative` não é decorativo aqui: um descendente
+     `position: absolute` cujo bloco contêiner esteja FORA deste elemento
+     escapa do recorte de `overflow` — e o texto visualmente oculto
+     (`.so-leitor`) usa posicionamento absoluto. Sem isto, um rótulo de leitor
+     de tela numa coluna à direita de uma tabela larga aumenta o
+     `scrollWidth` do documento e a página inteira passa a rolar
+     lateralmente, mesmo com a tabela corretamente contida. */
+  position: relative;
   overflow-x: auto;
   border-radius: var(--raio-1);
 }
@@ -1309,6 +1340,266 @@ th.numerico {
   thead th {
     position: static;
   }
+  /* Diálogo em tela estreita ocupa quase tudo e encosta embaixo: é mais
+     próximo do polegar e evita a faixa de conteúdo inútil atrás. */
+  .dialogo-fundo {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .dialogo {
+    max-width: none;
+    width: 100%;
+    max-height: 92vh;
+    border-radius: var(--raio-2) var(--raio-2) 0 0;
+  }
+  .linha-campos {
+    grid-template-columns: 1fr;
+  }
+  .dialogo__rodape {
+    flex-direction: column-reverse;
+  }
+  .dialogo__rodape .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ========================================================================== */
+/* 6b. Formulários e diálogos                                                 */
+/* ========================================================================== */
+
+.dialogo-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--e5);
+  /* Escurece o que está atrás sem apagá-lo: o contexto da tela continua
+     legível, o que reduz a sensação de ter saído do lugar. */
+  background: color-mix(in srgb, var(--cor-text-primary) 45%, transparent);
+}
+
+.dialogo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100vh - 2 * var(--e5));
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  box-shadow: 0 18px 48px -12px color-mix(in srgb, var(--cor-text-primary) 34%, transparent);
+}
+.dialogo--estreito { max-width: 480px; }
+.dialogo--medio { max-width: 680px; }
+.dialogo--largo { max-width: 900px; }
+
+.dialogo__cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e4);
+  padding: var(--e4) var(--e5);
+  border-bottom: 1px solid var(--cor-border);
+}
+.dialogo__titulo {
+  font-size: var(--t-17);
+  font-weight: 660;
+}
+.dialogo__descricao {
+  margin-top: var(--e1);
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+  max-width: 62ch;
+}
+
+/* Só o corpo rola: cabeçalho e ações permanecem visíveis em formulário longo,
+   senão o botão de confirmar fica fora da tela e o usuário acha que travou. */
+.dialogo__corpo {
+  padding: var(--e5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.dialogo__rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e3);
+  padding: var(--e4) var(--e5);
+  border-top: 1px solid var(--cor-border);
+  background: var(--cor-surface);
+  border-radius: 0 0 var(--raio-2) var(--raio-2);
+}
+
+/* ------------------------------------------------------------ campos extras */
+
+.linha-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(220px, (100% - var(--e4)) / 2)), 1fr));
+  gap: var(--e4);
+  align-items: start;
+}
+
+textarea {
+  font: inherit;
+  font-size: var(--t-14);
+  min-height: 76px;
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  background: var(--cor-bg);
+  color: var(--cor-text-primary);
+  resize: vertical;
+}
+
+/* Prefixo e sufixo dentro da moldura do campo, não fora: um "R$" solto ao lado
+   se desalinha do input e deixa de parecer parte dele. */
+.campo-prefixado {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: 0 var(--e3);
+  min-height: 36px;
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  background: var(--cor-bg);
+  color: var(--cor-text-muted);
+  font-size: var(--t-13);
+}
+.campo-prefixado input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-height: 34px;
+  color: var(--cor-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.campo-prefixado:focus-within {
+  border-color: var(--cor-border-strong);
+}
+.campo-prefixado:has(input[aria-invalid='true']) {
+  border-color: var(--cor-critico-mark);
+  border-width: 2px;
+}
+
+/* ------------------------------------------------------------------ combobox */
+
+.combo {
+  position: relative;
+}
+.combo__lista {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: var(--e1);
+  list-style: none;
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--cor-text-primary) 30%, transparent);
+}
+.combo__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--e2) var(--e3);
+  border-radius: var(--raio-1);
+  cursor: pointer;
+  font-size: var(--t-14);
+}
+.combo__item small {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+}
+.combo__item[data-ativo='true'] {
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+}
+/* Opção indisponível continua visível e legível: some da lista e o usuário
+   conclui que digitou errado. O motivo é o que resolve. */
+.combo__item[data-desabilitada='true'] {
+  cursor: not-allowed;
+  opacity: 0.62;
+  text-decoration: line-through;
+  text-decoration-color: var(--cor-text-muted);
+}
+.combo__item[data-desabilitada='true'] small {
+  text-decoration: none;
+  color: var(--cor-critico);
+}
+.combo__vazio {
+  padding: var(--e3);
+  font-size: var(--t-13);
+  color: var(--cor-text-muted);
+}
+
+/* -------------------------------------------------------------- grupo de opções */
+
+.grupo-opcoes {
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  padding: var(--e3) var(--e4) var(--e4);
+  margin: 0;
+  min-width: 0;
+}
+.grupo-opcoes > legend {
+  padding: 0 var(--e2);
+  font-size: var(--t-13);
+  font-weight: 640;
+  color: var(--cor-text-secondary);
+}
+.grupo-opcoes__itens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(160px, (100% - var(--e2)) / 2)), 1fr));
+  gap: var(--e2);
+  margin-top: var(--e2);
+}
+
+.opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e2);
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  cursor: pointer;
+  /* Alvo inteiro clicável, não só o círculo do rádio: 44px de altura mínima
+     cobre o alvo de toque sem precisar mirar. */
+  min-height: var(--alvo-toque);
+}
+.opcao:hover {
+  background: var(--cor-surface-sunken);
+}
+.opcao[data-marcada='true'] {
+  border-color: var(--cor-primary);
+  background: var(--cor-primary-subtle-bg);
+}
+.opcao input {
+  margin-top: 3px;
+  min-height: 0;
+  accent-color: var(--cor-primary);
+}
+.opcao__texto {
+  font-size: var(--t-14);
+  font-weight: 600;
+}
+.opcao__detalhe {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+}
+/* A moldura marcada usa a cor primária, mas o par texto/fundo dela é o
+   `primary-subtle`, já verificado em contraste. */
+.opcao[data-marcada='true'] .opcao__texto {
+  color: var(--cor-primary-subtle-fg);
 }
 
 /* ========================================================================== */

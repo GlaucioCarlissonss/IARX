@@ -4,12 +4,34 @@ import { api } from '../dados/api'
 import { filialPorId } from '../dados/catalogo'
 import { HOJE } from '../dados/gerar'
 import { useConsulta } from '../lib/useConsulta'
-import { useSessao, useToast } from '../lib/contexto'
+import { useSessao } from '../lib/contexto'
 import { data, moeda, moedaCompacta } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import type { Contrato, ContratoStatus } from '../dados/tipos'
+import { FormContrato } from '../componentes/formularios/FormContrato'
+import { FormAlocarEquipamento } from '../componentes/formularios/FormAlocarEquipamento'
+import { FormTransicaoContrato } from '../componentes/formularios/FormTransicaoContrato'
+
+type Aberto =
+  | { tipo: 'novo' }
+  | { tipo: 'alocar'; contrato: Contrato }
+  | { tipo: 'transicao'; contrato: Contrato; destino: ContratoStatus }
+  | null
+
+/**
+ * Próximo passo natural de cada estado, para o botão principal da linha.
+ * O fluxo tem uma ordem esperada; oferecer todas as transições em cada linha
+ * transformaria a tabela numa lista de opções onde a certa some no meio.
+ */
+const PROXIMO: Partial<Record<ContratoStatus, { destino: ContratoStatus; rotulo: string }>> = {
+  RASCUNHO: { destino: 'EM_APROVACAO', rotulo: 'Submeter' },
+  EM_APROVACAO: { destino: 'AGUARDANDO_ASSINATURA', rotulo: 'Aprovar' },
+  AGUARDANDO_ASSINATURA: { destino: 'ATIVO', rotulo: 'Ativar' },
+  VENCIDO_EM_CAMPO: { destino: 'EM_RENOVACAO', rotulo: 'Renovar' },
+  SUSPENSO: { destino: 'ATIVO', rotulo: 'Retomar' },
+}
 
 const STATUS: Record<ContratoStatus, { rotulo: string; sev: 'disponivel' | 'uso' | 'atencao' | 'critico' | 'inativo' }> = {
   RASCUNHO: { rotulo: 'Rascunho', sev: 'inativo' },
@@ -40,10 +62,10 @@ interface LinhaContrato {
 export function Contratos() {
   const [params] = useSearchParams()
   const { pode, filialId } = useSessao()
-  const { avisar } = useToast()
   const { situacao, dado } = useConsulta(() => api.contratos(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [recorte, setRecorte] = useState(params.get('situacao') ?? '')
+  const [aberto, setAberto] = useState<Aberto>(null)
 
   const base = api.baseSincrona()
 
@@ -141,6 +163,40 @@ export function Contratos() {
       ocultarEmMobile: true,
       celula: (l) => <span className="texto-atenuado">{l.contrato.indiceReajuste}</span>,
     },
+    {
+      chave: 'acoes',
+      titulo: 'Ações',
+      celula: (l) => {
+        const proximo = PROXIMO[l.contrato.status]
+        const aceitaItem = ['RASCUNHO', 'EM_APROVACAO', 'AGUARDANDO_ASSINATURA', 'ATIVO', 'EM_RENOVACAO'].includes(
+          l.contrato.status,
+        )
+        return (
+          <div className="linha g2 envolver">
+            {pode('contrato:criar') && (
+              <Botao
+                pequeno
+                disabled={!aceitaItem}
+                motivoDesabilitado={`Contrato em ${l.contrato.status.toLowerCase()} não recebe novos itens`}
+                onClick={() => setAberto({ tipo: 'alocar', contrato: l.contrato })}
+              >
+                Alocar<span className="so-leitor"> equipamento no contrato {l.contrato.numero}</span>
+              </Botao>
+            )}
+            {proximo && pode('contrato:aprovar') && (
+              <Botao
+                pequeno
+                variante="primario"
+                onClick={() => setAberto({ tipo: 'transicao', contrato: l.contrato, destino: proximo.destino })}
+              >
+                {proximo.rotulo}
+                <span className="so-leitor"> contrato {l.contrato.numero}</span>
+              </Botao>
+            )}
+          </div>
+        )
+      },
+    },
   ]
 
   return (
@@ -153,7 +209,7 @@ export function Contratos() {
           </p>
         </div>
         {pode('contrato:criar') && (
-          <Botao variante="primario" glifo="＋" onClick={() => avisar({ tom: 'ok', titulo: 'Novo contrato', texto: 'O formulário de contratação entra na próxima onda.' })}>
+          <Botao variante="primario" glifo="＋" onClick={() => setAberto({ tipo: 'novo' })}>
             Novo contrato
           </Botao>
         )}
@@ -250,6 +306,18 @@ export function Contratos() {
           />
         )}
       </Cartao>
+
+      {aberto?.tipo === 'novo' && <FormContrato aoFechar={() => setAberto(null)} />}
+      {aberto?.tipo === 'alocar' && (
+        <FormAlocarEquipamento contrato={aberto.contrato} aoFechar={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === 'transicao' && (
+        <FormTransicaoContrato
+          contrato={aberto.contrato}
+          destino={aberto.destino}
+          aoFechar={() => setAberto(null)}
+        />
+      )}
     </>
   )
 }
