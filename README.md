@@ -70,6 +70,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [I — Refatoração do Front-End](docs/anexos/I-refatoracao-frontend.md) | Diagnóstico, arquitetura React, componentes, dashboards, navegação e base de teste do domínio |
 | [J — Implementação da API](docs/anexos/J-api-implementacao.md) | Contexto de tenant por transação, autorização negada por padrão, tradução de SQLSTATE, idempotência e o que os testes provam |
 | [K — Formulários](docs/anexos/K-formularios.md) | Os onze formulários de escrita, camada de comandos, diálogo acessível, combobox e os defeitos que os testes encontraram |
+| [L — Lacunas funcionais](docs/anexos/L-lacunas-funcionais.md) | Especificação dos sete módulos faltantes: NF de compra, franquia, preço, usuários, portal do cliente, consumo e mapa — com cronograma e decisões pendentes |
 
 ---
 
