@@ -71,6 +71,8 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [J — Implementação da API](docs/anexos/J-api-implementacao.md) | Contexto de tenant por transação, autorização negada por padrão, tradução de SQLSTATE, idempotência e o que os testes provam |
 | [K — Formulários](docs/anexos/K-formularios.md) | Os onze formulários de escrita, camada de comandos, diálogo acessível, combobox e os defeitos que os testes encontraram |
 | [L — Lacunas funcionais](docs/anexos/L-lacunas-funcionais.md) | Especificação dos sete módulos faltantes: NF de compra, franquia, preço, usuários, portal do cliente, consumo e mapa — com cronograma e decisões pendentes |
+| [M — Decisões de mercado](docs/anexos/M-decisoes-mercado-brasileiro.md) | ADR das treze decisões pendentes do Anexo L, resolvidas pela regra brasileira: CNPJ e grupo econômico, tributos na aquisição, retenção fiscal, contagem A3/duplex, reajuste, autenticação e mapa — com o custo de reverter cada uma |
+| [N — Nota fiscal de compra](docs/anexos/N-nota-fiscal-de-compra.md) | Módulo 1 implementado: composição do custo do imobilizado, rateio que fecha ao centavo, chave de acesso, XML como fonte, segregação de funções e o defeito de acessibilidade que os testes acharam |
 
 ---
 
@@ -87,10 +89,10 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 8 telas, 11 formulários de escrita, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 48 testes de axe, teclado, formulários, permissões e domínio |
+| `apps/web` | Aplicação React + TypeScript: 9 telas, 14 formulários de escrita, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 72 testes de axe, teclado, formulários, permissões, entrada fiscal e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência e concorrência otimista | `npm run api:test` — 32 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões e entidades | Compilado no CI; consumido pelos dois lados |
-| `packages/db` | 9 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência | `npm run db:test` — 20 assertivas de invariante contra PostgreSQL real |
+| `packages/db` | 10 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra | `npm run db:test` — 35 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 188/188 verificações |
 | `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança | Bloqueiam merge |
 
@@ -113,6 +115,12 @@ Ver [Anexo J](docs/anexos/J-api-implementacao.md).
 multifuncionais, laser, térmicas, desktops, notebooks, thin clients e nobreaks, com cobrança por
 franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-frontend.md).
 
+**O ativo nasce da nota.** Valor de aquisição, início da depreciação e prazo de garantia vêm da
+nota fiscal de compra — não são digitados no cadastro do equipamento. O custo do imobilizado é o
+total da nota menos os tributos recuperáveis (CPC 27 item 16), com padrão de locadora pura porque
+locação de bem móvel não é fato gerador de ICMS (Súmula 573 do STF). Ver
+[Anexo N](docs/anexos/N-nota-fiscal-de-compra.md).
+
 **Invariantes já impostas pelo banco, não por código de aplicação:**
 
 | Regra | Mecanismo | Teste |
@@ -122,6 +130,8 @@ franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-fronte
 | `RN-018` auditoria imutável | Gatilho genérico + ausência de `UPDATE`/`DELETE` + cadeia de hash | `tests/02` e `tests/03` |
 | `RN-020` leitura monotônica | Gatilho com consulta ao histórico | `tests/03` — 2 casos |
 | `RN-029` idempotência | Índice único `(tenant_id, chave)` serializando reenvios | `apps/api/test` — 5 casos, incluindo replay e chave divergente |
+| `RN-L01` nota integrada imutável | Gatilhos no cabeçalho, nos itens e nas séries | `tests/04` — 4 tentativas de alteração, todas recusadas |
+| `RN-L05` rateio fecha com a nota | `app.ratear_custo_nota` com resíduo concentrado | `tests/04` — 2 casos, incluindo acessório negativo |
 
 **E o que a API acrescenta sobre isso:** traduz a recusa do banco em `problem+json` com o contrato
 conflitante, a data de liberação e os ativos equivalentes livres — de modo que a mensagem de erro

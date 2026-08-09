@@ -7,6 +7,7 @@ import {
   categoriaPorCodigo,
   modeloPorId,
 } from './catalogo'
+import { gerarFornecedores, gerarNotas } from './gerar-notas'
 import type {
   Anexo,
   BaseDados,
@@ -823,6 +824,25 @@ export function gerarBase(semente = 20260730): BaseDados {
     }
   }
 
+  /* ------------------------------------------------ notas fiscais de compra */
+  // Reconstruídas a partir do parque já gerado: o valor dos produtos é a soma
+  // do que os ativos já carregavam. Inventar valores novos faria a nota
+  // divergir do patrimônio que ela originou.
+  const fornecedores = gerarFornecedores(() => gerarCnpj(s))
+  const { notas: notasFiscais } = gerarNotas(
+    s,
+    equipamentos,
+    fornecedores,
+    FILIAIS.map((f) => f.id),
+    HOJE,
+  )
+
+  // Documento fiscal das notas: o XML é o original, o DANFE é representação.
+  for (const nf of notasFiscais.slice(0, 12)) {
+    anexo('NOTA_FISCAL', nf.id, `NFe${nf.chaveAcesso ?? nf.numero}.xml`, 'text/xml', 'XML_NFE', 14)
+    anexo('NOTA_FISCAL', nf.id, `danfe-${nf.serie}-${nf.numero}.pdf`, 'application/pdf', 'DANFE', 168)
+  }
+
   /* ----------------------------------------------------------- indicadores */
   const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
@@ -837,6 +857,8 @@ export function gerarBase(semente = 20260730): BaseDados {
     locais,
     contratos,
     anexos,
+    fornecedores,
+    notasFiscais,
     equipamentos,
     tecnicos,
     ordens,

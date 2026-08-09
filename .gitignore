@@ -24,3 +24,7 @@ supabase/.branches/
 apps/api/dist/
 apps/api/dist-test/
 packages/contracts/dist/
+
+# Saída do Playwright — artefato de execução, não fonte.
+test-results/
+playwright-report/

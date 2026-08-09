@@ -17,6 +17,7 @@ const ROTAS = [
   { hash: '#/parque', nome: 'parque instalado', titulo: 'Parque instalado' },
   { hash: '#/contratos', nome: 'contratos', titulo: 'Contratos' },
   { hash: '#/clientes', nome: 'clientes', titulo: 'Clientes' },
+  { hash: '#/notas-fiscais', nome: 'notas fiscais', titulo: 'Notas fiscais de compra' },
   { hash: '#/chamados', nome: 'chamados', titulo: 'Chamados técnicos' },
   { hash: '#/estoque', nome: 'estoque', titulo: 'Peças e suprimentos' },
   { hash: '#/faturamento', nome: 'faturamento', titulo: 'Faturamento' },
@@ -784,4 +785,386 @@ test('axe no diálogo de anexos, com arquivos selecionados', async ({ page }) =>
   ])
   const v = await violacoes(page)
   expect(v, `diálogo de anexos:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ==================================================================== */
+/* Nota fiscal de compra — o ativo nasce da nota                        */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem: a procedência do valor de aquisição.
+ *
+ * Antes deste módulo, `valorAquisicao` era digitado no cadastro do
+ * equipamento. Duas unidades da mesma compra podiam ficar com valores
+ * diferentes sem que nada detectasse — e a depreciação e a margem por ativo
+ * são calculadas em cima desse número. As regras abaixo são o que impede que
+ * ele volte a ser opinião.
+ */
+
+/** Abre a primeira nota que satisfaz o recorte escolhido. */
+async function abrirNota(page, recorte) {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByLabel('Recorte').selectOption(recorte)
+  const linha = page.getByRole('row').filter({ has: page.getByRole('button', { name: /^Abrir nota/ }) }).first()
+  await expect(linha).toBeVisible()
+  await linha.getByRole('button', { name: /^Abrir nota/ }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  return page.getByRole('dialog')
+}
+
+const XML_BASE = ({
+  chave,
+  cnpj,
+  numero = '12345',
+  serie = '1',
+  emissao = '2026-07-10',
+  itens = [{ n: 1, desc: 'MULTIFUNC LASER MONO A4 40PPM', ncm: '84433221', cfop: '5551', q: 3, vu: '6000.00', vt: '18000.00' }],
+  vProd = '18000.00',
+  vFrete = '250.00',
+  vNF = '18250.00',
+}) => `<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe><infNFe Id="NFe${chave}" versao="4.00">
+    <ide><cUF>35</cUF><mod>55</mod><serie>${serie}</serie><nNF>${numero}</nNF><dhEmi>${emissao}T09:12:00-03:00</dhEmi></ide>
+    <emit><CNPJ>${cnpj}</CNPJ><xNome>Distribuidora Teste LTDA</xNome><enderEmit><UF>SP</UF></enderEmit><IE>111222333</IE></emit>
+    <dest><CNPJ>11222333000181</CNPJ></dest>
+    ${itens
+      .map(
+        (i) => `<det nItem="${i.n}"><prod><cProd>P${i.n}</cProd><xProd>${i.desc}</xProd><NCM>${i.ncm}</NCM><CFOP>${i.cfop}</CFOP><uCom>UN</uCom><qCom>${i.q}.0000</qCom><vUnCom>${i.vu}</vUnCom><vProd>${i.vt}</vProd></prod></det>`,
+      )
+      .join('')}
+    <total><ICMSTot><vProd>${vProd}</vProd><vST>0.00</vST><vFrete>${vFrete}</vFrete><vSeg>0.00</vSeg>
+      <vOutro>0.00</vOutro><vDesc>0.00</vDesc><vIPI>0.00</vIPI><vICMS>3285.00</vICMS><vNF>${vNF}</vNF></ICMSTot></total>
+  </infNFe></NFe>
+</nfeProc>`
+
+/** Módulo 11 com pesos 2–9 cíclicos — a mesma regra do banco e do front. */
+function dvChave(base43) {
+  let soma = 0
+  let peso = 2
+  for (let i = 42; i >= 0; i--) {
+    soma += Number(base43[i]) * peso
+    peso = peso === 9 ? 2 : peso + 1
+  }
+  const resto = soma % 11
+  return resto < 2 ? 0 : 11 - resto
+}
+
+function montarChave(cnpj, { serie = '1', numero = '12345', aamm = '2607' } = {}) {
+  const base = '35' + aamm + cnpj.padStart(14, '0') + '55' + serie.padStart(3, '0') + numero.padStart(9, '0') + '1' + '00000042'
+  return base + String(dvChave(base))
+}
+
+test('a chave de acesso é conferida pelo dígito verificador antes do envio', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  const dialogo = page.getByRole('dialog')
+
+  // 44 dígitos, estrutura plausível, DV errado. É exatamente o resultado de
+  // digitar um dígito trocado — e o que a conciliação fiscal só descobriria
+  // meses depois.
+  const valida = montarChave('11444777000161')
+  const quebrada = valida.slice(0, 43) + String((Number(valida[43]) + 1) % 10)
+
+  await dialogo.getByLabel('Chave de acesso').fill(quebrada)
+  await dialogo.getByLabel('Número').click()
+  await expect(dialogo.getByText(/não passa na verificação do dígito/i)).toBeVisible()
+
+  await dialogo.getByLabel('Chave de acesso').fill(valida)
+  await expect(dialogo.getByText(/não passa na verificação do dígito/i)).toHaveCount(0)
+  // Com a chave íntegra, a dica passa a mostrar o que ela carrega.
+  await expect(dialogo.getByText(/Emitente 11\.444\.777\/0001-61/)).toBeVisible()
+})
+
+test('XML da NF-e é fonte: preenche o cabeçalho e trava a digitação', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+
+  // O CNPJ do fornecedor da massa é gerado; lê-lo da tela é o que torna o
+  // teste independente da semente.
+  const dialogoLista = await abrirNota(page, 'INTEGRADA')
+  const cnpjTexto = await dialogoLista.getByText(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/).first().innerText()
+  const cnpj = cnpjTexto.replace(/\D/g, '')
+  await dialogoLista.getByRole('button', { name: 'Fechar', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  const dialogo = page.getByRole('dialog')
+
+  const chave = montarChave(cnpj, { numero: '90311' })
+  await dialogo.locator('#campo-xml').setInputFiles({
+    name: 'NFe.xml',
+    mimeType: 'text/xml',
+    buffer: Buffer.from(XML_BASE({ chave, cnpj, numero: '90311' })),
+  })
+
+  await expect(dialogo.getByText(/XML lido/)).toBeVisible()
+  await expect(dialogo.getByLabel('Número')).toHaveValue('90311')
+
+  // Somente leitura: digitar o que já está no documento é a origem mais comum
+  // de divergência fiscal.
+  await expect(dialogo.getByLabel('Número')).toHaveAttribute('readonly', '')
+  await expect(dialogo.getByLabel('Chave de acesso')).toHaveAttribute('readonly', '')
+
+  // A descrição fiscal veio do arquivo, mas o vínculo com o catálogo continua
+  // humano — "MULTIFUNC LASER MONO A4 40PPM" não casa com nome comercial.
+  await expect(dialogo.getByText('MULTIFUNC LASER MONO A4 40PPM')).toBeVisible()
+  await expect(dialogo.getByLabel('Modelo do catálogo')).toHaveValue('')
+})
+
+test('XML que não é NF-e é recusado dizendo o que fazer', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  const dialogo = page.getByRole('dialog')
+
+  // O caso real: o operador renomeia o DANFE em PDF para .xml.
+  await dialogo.locator('#campo-xml').setInputFiles({
+    name: 'nota.xml',
+    mimeType: 'text/xml',
+    buffer: Buffer.from('%PDF-1.7 conteudo binario'),
+  })
+
+  const alerta = dialogo.getByRole('alert')
+  await expect(alerta).toContainText(/não é um XML válido/i)
+  await expect(alerta).toContainText(/DANFE em PDF renomeado/i)
+})
+
+test('RN-L02: a nota não é conferida com unidades por identificar', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByLabel('Recorte').selectOption('PENDENTE_CONFERENCIA')
+
+  const incompleta = page
+    .getByRole('row')
+    .filter({ hasText: /item\(ns\) sem todas as unidades/ })
+    .first()
+  await expect(incompleta).toBeVisible()
+
+  const conferir = incompleta.getByRole('button', { name: /^Conferir/ })
+  await expect(conferir).toBeDisabled()
+  await expect(conferir).toHaveAttribute('title', /série e patrimônio/i)
+
+  // A contagem parcial é mostrada, não escondida: quem confere precisa saber
+  // quantas caixas faltam antes de ir ao almoxarifado.
+  await expect(incompleta).toContainText(/\d+\/\d+/)
+})
+
+test('RN-L04: série já usada no parque é recusada apontando o ativo', async ({ page }) => {
+  // A série de um ativo existente, lida da própria tela do parque.
+  await abrir(page, { hash: '#/parque' })
+  const serieExistente = await page
+    .getByRole('table')
+    .last()
+    .locator('tbody tr')
+    .first()
+    .innerText()
+    .then((t) => t.match(/[A-Z]{2,4}-\d{6}/)?.[0])
+  expect(serieExistente).toBeTruthy()
+
+  const dialogo = await abrirNota(page, 'PENDENTE_CONFERENCIA')
+  await dialogo.getByRole('button', { name: /séries do item/ }).first().click()
+
+  const series = page.getByRole('dialog')
+  await expect(series).toContainText('Identificar unidades')
+  await series.getByLabel('Série da unidade 1', { exact: true }).fill(serieExistente)
+  await series.getByRole('button', { name: /^Salvar \d+ unidade/ }).click()
+
+  // Não basta recusar: a mensagem diz de qual ativo é a etiqueta, que é o que
+  // permite descobrir se a caixa errada foi bipada.
+  await expect(series.getByRole('alert')).toContainText(/já pertence ao equipamento/i)
+})
+
+test('série repetida no mesmo item é acusada antes do envio', async ({ page }) => {
+  const dialogo = await abrirNota(page, 'PENDENTE_CONFERENCIA')
+  await dialogo.getByRole('button', { name: /séries do item/ }).first().click()
+  const series = page.getByRole('dialog')
+
+  await series.getByLabel('Série da unidade 1', { exact: true }).fill('DUPLICADA-001')
+  await series.getByLabel('Série da unidade 2', { exact: true }).fill('DUPLICADA-001')
+  await series.getByLabel('Série da unidade 2', { exact: true }).blur()
+
+  // Ler a mesma etiqueta duas vezes significa uma caixa não conferida.
+  await expect(series.getByText(/Repetida da unidade 1/)).toBeVisible()
+})
+
+test('RN-L05: a prévia de integração fecha exatamente com o custo da nota', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByLabel('Recorte').selectOption('CONFERIDA')
+
+  const linha = page.getByRole('row').filter({ hasText: 'Conferida' }).first()
+  const custo = (await linha.innerText()).match(/R\$[\s\u00A0]*[\d.]+,\d{2}/)[0]
+
+  await linha.getByRole('button', { name: /^Integrar/ }).click()
+  const previa = page.getByRole('dialog')
+  await expect(previa).toContainText('Integrar ao patrimônio')
+
+  // A soma do rateio é exibida ao lado do custo, e o selo diz que fecha. É o
+  // que torna a garantia verificável por quem confirma, não só por quem
+  // programou — o resíduo de arredondamento vai inteiro para a primeira
+  // unidade justamente para isto ser verdade.
+  const soma = await previa.getByRole('row').filter({ hasText: 'Soma do rateio' }).innerText()
+  expect(soma).toContain(custo)
+  await expect(previa.getByText('Fecha com a nota')).toBeVisible()
+})
+
+test('RN-L03/RN-L07: integrar cria os ativos disponíveis e sela a nota', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByLabel('Recorte').selectOption('CONFERIDA')
+
+  const linha = page.getByRole('row').filter({ hasText: 'Conferida' }).first()
+  const numero = (await linha.innerText()).match(/\d+\/\d+/)[0]
+
+  await linha.getByRole('button', { name: /^Integrar/ }).click()
+  const previa = page.getByRole('dialog')
+
+  const patrimonios = await previa.locator('tbody tr th').allInnerTexts()
+  expect(patrimonios.length).toBeGreaterThan(0)
+
+  await previa.getByRole('button', { name: /^Criar \d+ ativo/ }).click()
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(/ativo\(s\) criados no patrimônio/)
+
+  // Navega para o parque, e os ativos estão lá — disponíveis, nunca alocados.
+  await expect(page.getByRole('heading', { level: 1, name: 'Parque instalado' })).toBeVisible()
+  await page.getByLabel(/Patrimônio, série/i).fill(patrimonios[0])
+  const novo = page.getByRole('row').filter({ hasText: patrimonios[0] }).first()
+  await expect(novo).toBeVisible()
+  await expect(novo).toContainText('Disponível')
+
+  // RN-L01: a nota está selada — nem editar séries, nem cancelar.
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByLabel('Número, chave ou fornecedor').fill(numero.split('/')[1])
+  await page.getByRole('button', { name: /^Abrir nota/ }).first().click()
+  const detalhe = page.getByRole('dialog')
+  await expect(detalhe.getByText(/A nota está selada/)).toBeVisible()
+  await expect(detalhe.getByRole('button', { name: /séries do item/ })).toHaveCount(0)
+  await expect(detalhe.getByRole('button', { name: 'Cancelar nota' })).toHaveCount(0)
+})
+
+test('RN-027: quem lança a nota não pode conferi-la', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  const form = page.getByRole('dialog')
+
+  // Lançamento manual completo — o caminho sem XML.
+  await form.getByLabel('Fornecedor emitente').click()
+  await form.getByRole('listbox', { name: 'Fornecedor emitente' }).getByRole('option').first().click()
+  await form.getByLabel('Número').fill('77001')
+  await form.getByLabel('Produtos (R$)').fill('9000')
+  await form.getByLabel('Total da nota (R$)').fill('9000')
+
+  await form.getByRole('button', { name: 'Acrescentar item' }).click()
+  await form.getByLabel('Modelo do catálogo').click()
+  await form.getByRole('listbox', { name: 'Modelo do catálogo' }).getByRole('option').first().click()
+  await form.getByLabel('Descrição do item 1').fill('IMPRESSORA LASER MONO')
+  await form.getByLabel('Quantidade').fill('3')
+  await form.getByLabel('Valor unitário (R$)').fill('3000')
+
+  await form.getByRole('button', { name: 'Lançar nota' }).click()
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(/lançada/)
+
+  // Identifica as unidades, para que a recusa seguinte seja pela segregação de
+  // funções e não pela conferência incompleta.
+  await page.getByLabel('Número, chave ou fornecedor').fill('77001')
+  await page.getByRole('button', { name: /^Abrir nota/ }).first().click()
+  await page.getByRole('dialog').getByRole('button', { name: /séries do item/ }).click()
+  const series = page.getByRole('dialog')
+  for (let i = 1; i <= 3; i++) {
+    await series.getByLabel(`Série da unidade ${i}`, { exact: true }).fill(`SEG-00${i}`)
+  }
+  await series.getByRole('button', { name: /^Salvar 3 unidade/ }).click()
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(/3 unidade\(s\) identificada\(s\)/)
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar', exact: true }).click()
+
+  // Agora a conferência é possível pelo estado — e recusada pela regra.
+  await page.getByRole('row').filter({ hasText: '77001' }).getByRole('button', { name: /^Conferir/ }).click()
+  const avisos = page.getByRole('region', { name: 'Avisos do sistema' })
+  await expect(avisos).toContainText(/Conferência recusada/)
+  await expect(avisos).toContainText(/é de outra pessoa/)
+})
+
+test('a segregação também está no perfil: operação lança, suporte confere', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+
+  await page.getByLabel('Perfil de acesso').selectOption('operacao')
+  await expect(page.getByRole('button', { name: 'Registrar entrada' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Conferir/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Integrar/ })).toHaveCount(0)
+
+  await page.getByLabel('Perfil de acesso').selectOption('suporte')
+  await expect(page.getByRole('button', { name: 'Registrar entrada' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^Conferir/ }).first()).toBeVisible()
+
+  // Patrimônio é lançamento contábil: integrar é do financeiro.
+  await page.getByLabel('Perfil de acesso').selectOption('financeiro')
+  await expect(page.getByRole('button', { name: /^Integrar/ }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Conferir/ })).toHaveCount(0)
+})
+
+test('retenção fiscal: o XML da NF-e não pode ser removido dentro de 5 anos', async ({ page }) => {
+  const detalhe = await abrirNota(page, 'INTEGRADA')
+  await detalhe.getByRole('button', { name: 'Anexos' }).click()
+
+  const anexos = page.getByRole('dialog')
+  const linhaXml = anexos.getByRole('row').filter({ hasText: 'XML da NF-e' }).first()
+  await expect(linhaXml).toBeVisible()
+
+  await linhaXml.getByRole('button', { name: /^Remover/ }).click()
+  await anexos.getByLabel('Motivo da remoção').fill('arquivo enviado por engano')
+  await anexos.getByRole('button', { name: 'Remover definitivamente' }).click()
+
+  // O XML é o documento original — o DANFE é só representação dele. Perdê-lo é
+  // perder o documento, e a recusa precisa dizer quando a remoção passa a ser
+  // possível, em vez de apenas negar.
+  await expect(anexos.getByText(/retenção obrigatória de 5 anos/i)).toBeVisible()
+  await expect(anexos.getByText(/Removível a partir de \d{2}\/\d{2}\/\d{4}/)).toBeVisible()
+})
+
+test('a procedência ausente do parque antigo é declarada, não escondida', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+
+  // Fingir que todo ativo tem nota seria a mentira que este módulo elimina.
+  await expect(page.getByText('Sem nota vinculada')).toBeVisible()
+  await expect(page.getByText(/valor de aquisição sem origem verificável/)).toBeVisible()
+})
+
+test('axe nos diálogos da nota fiscal', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais' })
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  let v = await violacoes(page)
+  expect(v, `diálogo de lançamento:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click()
+  const detalhe = await abrirNota(page, 'CONFERIDA')
+  v = await violacoes(page)
+  expect(v, `detalhe da nota:\n  ${descrever(v)}`).toEqual([])
+
+  await detalhe.getByRole('button', { name: 'Fechar', exact: true }).click()
+  await page.getByRole('row').filter({ hasText: 'Conferida' }).first().getByRole('button', { name: /^Integrar/ }).click()
+  await expect(page.getByRole('dialog')).toContainText('Integrar ao patrimônio')
+  v = await violacoes(page)
+  expect(v, `prévia de integração:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('diálogo só de leitura que rola é alcançável pelo teclado', async ({ page }) => {
+  await abrir(page, { hash: '#/notas-fiscais', altura: 620 })
+  await page.getByLabel('Recorte').selectOption('CONFERIDA')
+  await page.getByRole('row').filter({ hasText: 'Conferida' }).first().getByRole('button', { name: /^Integrar/ }).click()
+
+  const corpo = page.locator('.dialogo__corpo')
+  await expect(corpo).toBeVisible()
+
+  // A prévia de integração é uma tabela sem nada clicável dentro. Sem o
+  // tabindex, o conteúdo abaixo da dobra não teria como ser rolado por quem
+  // não usa mouse — e as linhas invisíveis são justamente os ativos que serão
+  // criados (WCAG 2.1.1).
+  const rola = await corpo.evaluate((el) => el.scrollHeight > el.clientHeight + 1)
+  expect(rola, 'o diálogo precisa transbordar para o teste fazer sentido').toBe(true)
+
+  await expect(corpo).toHaveAttribute('tabindex', '0')
+  await expect(corpo).toHaveAttribute('role', 'region')
+  await corpo.focus()
+  await expect(corpo).toBeFocused()
+
+  // Já o diálogo de formulário não ganha parada extra: o Tab passa pelos campos.
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Registrar entrada' }).click()
+  await expect(page.locator('.dialogo__corpo')).not.toHaveAttribute('tabindex', '0')
 })

@@ -1,7 +1,7 @@
 import { gerarBase, HOJE, recalcularIndicadores } from './gerar'
 import * as cmd from './comandos'
 import type { Resultado } from './comandos'
-import type { BaseDados } from './tipos'
+import type { BaseDados, EntidadeAnexo } from './tipos'
 
 /**
  * Fachada de acesso aos dados.
@@ -110,7 +110,9 @@ export const api = {
   pecas: () => responder(() => [...BASE.pecas]),
   faturas: () => responder(() => [...BASE.faturas]),
   tecnicos: () => responder(() => [...BASE.tecnicos]),
-  anexos: (entidade: 'CONTRATO' | 'CLIENTE', entidadeId: string) =>
+  fornecedores: () => responder(() => [...BASE.fornecedores]),
+  notasFiscais: () => responder(() => [...BASE.notasFiscais]),
+  anexos: (entidade: EntidadeAnexo, entidadeId: string) =>
     responder(() => cmd.anexosDe(BASE, entidade, entidadeId)),
   catalogo: () =>
     responder(() => ({
@@ -149,7 +151,15 @@ export const api = {
   resolverMedicao: (equipamentoId: string, competencia: string, d: cmd.DadosMedicao) =>
     executar(() => cmd.resolverMedicao(BASE, equipamentoId, competencia, d)),
 
-  anexarArquivos: (entidade: 'CONTRATO' | 'CLIENTE', entidadeId: string, itens: cmd.DadosAnexo[]) =>
+  anexarArquivos: (entidade: EntidadeAnexo, entidadeId: string, itens: cmd.DadosAnexo[]) =>
     executar(() => cmd.anexarArquivos(BASE, entidade, entidadeId, itens)),
   removerAnexo: (anexoId: string, motivo: string) => executar(() => cmd.removerAnexo(BASE, anexoId, motivo)),
+
+  criarNotaFiscal: (d: cmd.DadosNotaFiscal, criadaPor: string) =>
+    executar(() => cmd.criarNotaFiscal(BASE, d, criadaPor)),
+  definirSeriesItem: (notaId: string, itemId: string, unidades: cmd.DadosSerie[]) =>
+    executar(() => cmd.definirSeriesItem(BASE, notaId, itemId, unidades)),
+  conferirNota: (notaId: string, conferidaPor: string) => executar(() => cmd.conferirNota(BASE, notaId, conferidaPor)),
+  integrarNota: (notaId: string, integradaPor: string) => executar(() => cmd.integrarNota(BASE, notaId, integradaPor)),
+  cancelarNota: (notaId: string, motivo: string) => executar(() => cmd.cancelarNota(BASE, notaId, motivo)),
 }

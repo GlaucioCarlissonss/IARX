@@ -38,6 +38,7 @@ interface DialogoProps {
 
 export function Dialogo({ titulo, descricao, aoFechar, children, acoes, largura = 'medio' }: DialogoProps) {
   const caixaRef = useRef<HTMLDivElement>(null)
+  const corpoRef = useRef<HTMLDivElement>(null)
   const origemRef = useRef<Element | null>(null)
   const idTitulo = useId()
   const idDescricao = useId()
@@ -59,6 +60,46 @@ export function Dialogo({ titulo, descricao, aoFechar, children, acoes, largura 
       if (origemRef.current instanceof HTMLElement) origemRef.current.focus()
     }
   }, [])
+
+  /**
+   * Corpo que rola precisa ser alcançável pelo teclado.
+   *
+   * Só vira parada de Tab quando de fato transborda **e** não tem nada focável
+   * dentro. Diálogo de formulário rola com os campos, e o Tab já passa por
+   * eles; um diálogo só de leitura — a prévia de integração da nota, com dez
+   * linhas de tabela — não tem nenhum, e sem isto o conteúdo abaixo da dobra
+   * fica inacessível a quem não usa mouse (WCAG 2.1.1).
+   */
+  useEffect(() => {
+    const el = corpoRef.current
+    if (!el) return
+
+    const ajustar = () => {
+      const transborda = el.scrollHeight > el.clientHeight + 1
+      const temFocavel = el.querySelector(FOCAVEIS) !== null
+      if (transborda && !temFocavel) {
+        el.setAttribute('tabindex', '0')
+        el.setAttribute('role', 'region')
+        el.setAttribute('aria-label', `${titulo} — role verticalmente`)
+      } else {
+        el.removeAttribute('tabindex')
+        el.removeAttribute('role')
+        el.removeAttribute('aria-label')
+      }
+    }
+
+    ajustar()
+    const obs = new ResizeObserver(ajustar)
+    obs.observe(el)
+    // O conteúdo pode crescer sem o contêiner mudar de tamanho — um resumo de
+    // erros que aparece, uma linha nova na tabela.
+    const mut = new MutationObserver(ajustar)
+    mut.observe(el, { childList: true, subtree: true })
+    return () => {
+      obs.disconnect()
+      mut.disconnect()
+    }
+  }, [titulo, children])
 
   function tecla(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -120,7 +161,9 @@ export function Dialogo({ titulo, descricao, aoFechar, children, acoes, largura 
           </button>
         </div>
 
-        <div className="dialogo__corpo">{children}</div>
+        <div className="dialogo__corpo" ref={corpoRef}>
+          {children}
+        </div>
 
         {acoes && <div className="dialogo__rodape">{acoes}</div>}
       </div>

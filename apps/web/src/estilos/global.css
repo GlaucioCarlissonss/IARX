@@ -952,6 +952,10 @@ th.numerico {
 .aviso--critico { border-color: var(--cor-critico-mark); background: var(--cor-critico-bg); }
 .aviso--atencao { border-color: var(--cor-atencao-mark); background: var(--cor-atencao-bg); }
 .aviso--ok      { border-color: var(--cor-disponivel-mark); background: var(--cor-disponivel-bg); }
+/* Informativo: explica um cálculo, não sinaliza estado. Fica no fundo neutro
+   rebaixado de propósito — pintá-lo de azul o faria competir com os avisos que
+   pedem ação. */
+.aviso--info    { border-color: var(--cor-primary); background: var(--cor-surface-sunken); }
 .aviso__titulo {
   font-weight: 660;
   margin-bottom: 2px;

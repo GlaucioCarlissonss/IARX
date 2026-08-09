@@ -1,5 +1,5 @@
 import { api } from '../../dados/api'
-import { cnpjValido, formatarCnpj } from '../../dados/comandos'
+import { cnpjValido, mascaraCnpj } from '../../dados/comandos'
 import { useFormulario } from '../../lib/useFormulario'
 import { useToast } from '../../lib/contexto'
 import { Botao, Entrada, Selecao } from '../ui/primitivos'
@@ -151,7 +151,7 @@ export function FormCliente({ aoFechar, aoCriar }: Props) {
           placeholder="00.000.000/0000-00"
           dica={cnpjOk ? '✓ Dígitos verificadores conferem.' : 'Validado pelos dois dígitos verificadores.'}
           value={form.valores.cnpj}
-          onChange={(e) => form.definir('cnpj', formatarCnpj(e.target.value))}
+          onChange={(e) => form.definir('cnpj', mascaraCnpj(e.target.value))}
           {...form.campo('cnpj')}
         />
 

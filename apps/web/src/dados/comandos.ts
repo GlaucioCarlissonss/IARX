@@ -1,5 +1,6 @@
 import { HOJE } from './gerar'
 import { categoriaPorCodigo, modeloPorId } from './catalogo'
+import { arredondar, chaveValida, decomporChave, diferencaTotal, formatarCnpj, somenteDigitos } from './nfe'
 import type {
   Anexo,
   BaseDados,
@@ -9,6 +10,8 @@ import type {
   EntidadeAnexo,
   Equipamento,
   ModalidadeCobranca,
+  NotaFiscal,
+  NotaFiscalItem,
   OrdemServico,
   Peca,
 } from './tipos'
@@ -295,7 +298,14 @@ export function cnpjValido(bruto: string): boolean {
   return d1 === d[12] && d2 === d[13]
 }
 
-export function formatarCnpj(bruto: string): string {
+/**
+ * Máscara aplicada enquanto se digita — aceita entrada parcial.
+ *
+ * Distinta de `formatarCnpj` (em `nfe.ts`), que formata um documento já
+ * completo. As duas existem porque os usos são diferentes: aqui o valor muda a
+ * cada tecla e ainda não é um CNPJ; lá é sempre um documento inteiro.
+ */
+export function mascaraCnpj(bruto: string): string {
   const n = bruto.replace(/\D/g, '').slice(0, 14)
   return n
     .replace(/^(\d{2})(\d)/, '$1.$2')
@@ -321,7 +331,7 @@ export function criarCliente(base: BaseDados, dados: DadosCliente) {
 
   const cliente = {
     id: novoId('cli'),
-    cnpj: formatarCnpj(cnpj),
+    cnpj: mascaraCnpj(cnpj),
     razaoSocial: dados.razaoSocial.trim(),
     nomeFantasia: dados.nomeFantasia.trim() || dados.razaoSocial.trim(),
     segmento: dados.segmento,
@@ -994,6 +1004,25 @@ export function removerAnexo(base: BaseDados, anexoId: string, motivo: string): 
   if (motivo.trim().length < 5) {
     return falha('REGRA_DE_NEGOCIO', 'Informe o motivo da remoção — a exclusão é auditada.', { campo: 'motivo' })
   }
+
+  // Retenção fiscal: 5 anos a contar do envio (CTN art. 173 — prazo decadencial
+  // para o Fisco constituir crédito tributário). O XML da NF-e é o documento
+  // *original*; o DANFE é só representação dele. Perder o XML é perder o
+  // documento, e a multa é do locador, não de quem clicou.
+  const alvo = base.anexos[i]!
+  if (CATEGORIAS_FISCAIS.has(alvo.categoria)) {
+    const liberaEm = somarMesesIso(alvo.enviadoEm, ANOS_RETENCAO_FISCAL * 12)
+    if (liberaEm > iso(HOJE)) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `“${alvo.nome}” é documento fiscal e tem retenção obrigatória de ${ANOS_RETENCAO_FISCAL} anos. Removível a partir de ${liberaEm.split('-').reverse().join('/')}.`,
+        {
+          campo: 'motivo',
+          acoes: ['Enviar a versão correta como novo anexo', 'Registrar a divergência na observação da nota'],
+        },
+      )
+    }
+  }
   const [removido] = base.anexos.splice(i, 1)
   return sucesso(removido!)
 }
@@ -1021,7 +1050,23 @@ export const CATEGORIAS_ANEXO: Record<EntidadeAnexo, { valor: CategoriaAnexo; te
     { valor: 'PROCURACAO', texto: 'Procuração' },
     { valor: 'OUTRO', texto: 'Outro documento' },
   ],
+  NOTA_FISCAL: [
+    { valor: 'XML_NFE', texto: 'XML da NF-e (documento original)' },
+    { valor: 'DANFE', texto: 'DANFE em PDF' },
+    { valor: 'BOLETO_COMPRA', texto: 'Boleto ou comprovante de pagamento' },
+    { valor: 'OUTRO', texto: 'Outro documento' },
+  ],
 }
+
+/**
+ * Categorias sujeitas à retenção fiscal.
+ *
+ * O boleto fica de fora de propósito: é comprovante de pagamento, não
+ * documento fiscal do imobilizado, e prendê-lo por cinco anos seria estender a
+ * regra sem base legal.
+ */
+export const CATEGORIAS_FISCAIS = new Set<CategoriaAnexo>(['XML_NFE', 'DANFE'])
+export const ANOS_RETENCAO_FISCAL = 5
 
 export const ROTULO_CATEGORIA: Record<CategoriaAnexo, string> = {
   CONTRATO_ASSINADO: 'Contrato assinado',
@@ -1032,5 +1077,679 @@ export const ROTULO_CATEGORIA: Record<CategoriaAnexo, string> = {
   CONTRATO_SOCIAL: 'Contrato social',
   CERTIDAO: 'Certidão',
   PROCURACAO: 'Procuração',
+  XML_NFE: 'XML da NF-e',
+  DANFE: 'DANFE',
+  BOLETO_COMPRA: 'Boleto de compra',
   OUTRO: 'Outro documento',
 }
+
+/* ==================================================== nota fiscal de compra = */
+
+/**
+ * Entrada fiscal de compra.
+ *
+ * A inversão que este módulo introduz: **o ativo nasce da nota**. Antes,
+ * `valorAquisicao` era digitado no cadastro de equipamento — duas unidades da
+ * mesma compra podiam ficar com valores diferentes, e a data de início da
+ * depreciação e o prazo de garantia não tinham origem alguma.
+ *
+ * O fluxo tem três portões, e nenhum deles é decorativo:
+ *
+ *  1. **Lançamento** — cabeçalho e itens, do XML quando existe (RN-L08).
+ *  2. **Conferência** — só passa com todas as unidades identificadas por série
+ *     e patrimônio (RN-L02). É a conferência física, e é o que impede que a
+ *     nota vire patrimônio antes de alguém ter aberto as caixas.
+ *  3. **Integração** — cria os ativos numa transação só (RN-L03) e sela a nota
+ *     (RN-L01). Depois disso a nota não muda mais: os ativos já carregam valor
+ *     de aquisição e garantia derivados dela.
+ *
+ * Em `apps/api` estas regras vivem no banco — RN-L01 e RN-L02 são gatilhos,
+ * não `if`. Aqui são replicadas em memória com as mesmas mensagens.
+ */
+
+/** Custo de aquisição do imobilizado: total da nota menos tributos recuperáveis. */
+export function custoAquisicao(n: NotaFiscal): number {
+  return arredondar(
+    n.valorTotal - (n.icmsRecuperavel ? n.valorIcms : 0) - (n.ipiRecuperavel ? n.valorIpi : 0),
+  )
+}
+
+export function notaPorId(base: BaseDados, id: string): NotaFiscal | undefined {
+  return base.notasFiscais.find((n) => n.id === id)
+}
+
+export interface DadosItemNota {
+  modeloId: string
+  descricaoNf: string
+  codigoFornecedor?: string
+  ncm?: string
+  cfop?: string
+  unidade?: string
+  quantidade: number
+  valorUnitario: number
+  valorTotalItem: number
+  garantiaMeses: number | null
+}
+
+export interface DadosNotaFiscal {
+  fornecedorId: string
+  filialDestinoId: string
+  numero: string
+  serie: string
+  chaveAcesso: string | null
+  modeloDocumento: string
+  dataEmissao: string
+  dataEntrada: string
+  valorProdutos: number
+  valorFrete: number
+  valorSeguro: number
+  valorOutrasDespesas: number
+  valorDesconto: number
+  valorIpi: number
+  valorIcms: number
+  valorIcmsSt: number
+  valorTotal: number
+  icmsRecuperavel: boolean
+  ipiRecuperavel: boolean
+  origemDados: 'MANUAL' | 'XML'
+  observacao?: string
+  itens: DadosItemNota[]
+}
+
+export function criarNotaFiscal(
+  base: BaseDados,
+  dados: DadosNotaFiscal,
+  criadaPor = 'Operação IARX',
+): Resultado<NotaFiscal> {
+  const fornecedor = base.fornecedores.find((f) => f.id === dados.fornecedorId)
+  if (!fornecedor) return falha('NAO_ENCONTRADO', 'Selecione o fornecedor da nota.', { campo: 'fornecedorId' })
+
+  if (!dados.numero.trim()) return falha('PAYLOAD_INVALIDO', 'Informe o número da nota.', { campo: 'numero' })
+  if (!dados.serie.trim()) return falha('PAYLOAD_INVALIDO', 'Informe a série da nota.', { campo: 'serie' })
+
+  if (dados.dataEntrada < dados.dataEmissao) {
+    return falha('REGRA_DE_NEGOCIO', 'A entrada não pode ser anterior à emissão da nota.', {
+      campo: 'dataEntrada',
+      acoes: ['Conferir a data de emissão no DANFE'],
+    })
+  }
+  if (dados.dataEntrada > iso(HOJE)) {
+    return falha('REGRA_DE_NEGOCIO', 'A entrada não pode ser em data futura.', { campo: 'dataEntrada' })
+  }
+
+  // A chave carrega verificação própria. Recusar aqui evita que o erro só
+  // apareça na conciliação fiscal, meses depois.
+  if (dados.chaveAcesso) {
+    const limpa = somenteDigitos(dados.chaveAcesso)
+    if (!chaveValida(limpa)) {
+      return falha('PAYLOAD_INVALIDO', 'A chave de acesso não passa na verificação do dígito.', {
+        campo: 'chaveAcesso',
+        acoes: ['Conferir os 44 dígitos no rodapé do DANFE', 'Enviar o XML em vez de digitar'],
+      })
+    }
+
+    const partes = decomporChave(limpa)!
+    if (partes.cnpjEmitente !== somenteDigitos(fornecedor.cnpj)) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `A chave é do emitente ${formatarCnpj(partes.cnpjEmitente)}, e a nota está sendo lançada para ${fornecedor.razaoSocial}.`,
+        { campo: 'chaveAcesso', acoes: ['Selecionar o fornecedor correto', 'Conferir se o XML é desta compra'] },
+      )
+    }
+    if (partes.numero !== String(Number(dados.numero)) || partes.serie !== String(Number(dados.serie))) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `A chave é da nota ${partes.serie}/${partes.numero}, e o cabeçalho declara ${dados.serie}/${dados.numero}.`,
+        { campo: 'chaveAcesso' },
+      )
+    }
+    if (partes.competencia !== dados.dataEmissao.slice(0, 7)) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `A chave é da competência ${partes.competencia}, e a emissão informada é ${dados.dataEmissao}.`,
+        { campo: 'dataEmissao' },
+      )
+    }
+
+    const repetida = base.notasFiscais.find(
+      (n) => n.chaveAcesso === limpa && n.status !== 'CANCELADA',
+    )
+    if (repetida) {
+      return falha('RECURSO_DUPLICADO', `Esta chave já foi lançada na nota ${repetida.serie}/${repetida.numero}.`, {
+        campo: 'chaveAcesso',
+        acoes: [`Abrir a nota ${repetida.serie}/${repetida.numero}`],
+      })
+    }
+  }
+
+  const duplicada = base.notasFiscais.find(
+    (n) =>
+      n.fornecedorId === dados.fornecedorId &&
+      n.numero === dados.numero.trim() &&
+      n.serie === dados.serie.trim() &&
+      n.modeloDocumento === dados.modeloDocumento &&
+      n.status !== 'CANCELADA',
+  )
+  if (duplicada) {
+    return falha('RECURSO_DUPLICADO', `A nota ${dados.serie}/${dados.numero} deste fornecedor já foi lançada.`, {
+      campo: 'numero',
+      acoes: [`Abrir a nota ${duplicada.serie}/${duplicada.numero}`],
+    })
+  }
+
+  if (dados.itens.length === 0) {
+    return falha('PAYLOAD_INVALIDO', 'Uma nota sem item não descreve compra alguma.', { campo: 'itens' })
+  }
+
+  for (const [i, item] of dados.itens.entries()) {
+    if (!item.modeloId) {
+      return falha(
+        'PAYLOAD_INVALIDO',
+        `Vincule o item ${i + 1} (“${item.descricaoNf}”) a um modelo do catálogo.`,
+        { campo: 'itens', acoes: ['Cadastrar o modelo, se ainda não existir'] },
+      )
+    }
+    if (!modeloPorId.has(item.modeloId)) {
+      return falha('NAO_ENCONTRADO', `Modelo do item ${i + 1} não existe no catálogo.`, { campo: 'itens' })
+    }
+    if (!Number.isInteger(item.quantidade) || item.quantidade <= 0) {
+      return falha('PAYLOAD_INVALIDO', `A quantidade do item ${i + 1} precisa ser um número inteiro de unidades.`, {
+        campo: 'itens',
+      })
+    }
+    if (Math.abs(item.valorTotalItem - item.quantidade * item.valorUnitario) > 0.01) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `O total do item ${i + 1} não fecha com quantidade × valor unitário.`,
+        { campo: 'itens' },
+      )
+    }
+  }
+
+  const somaItens = arredondar(dados.itens.reduce((s, i) => s + i.valorTotalItem, 0))
+  if (Math.abs(somaItens - dados.valorProdutos) > 0.01) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `A soma dos itens (${moedaSimples(somaItens)}) não fecha com o valor dos produtos (${moedaSimples(dados.valorProdutos)}).`,
+      { campo: 'valorProdutos' },
+    )
+  }
+
+  const dif = diferencaTotal(dados)
+  if (dif !== null) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O total da nota está ${dif > 0 ? 'acima' : 'abaixo'} do somatório em ${moedaSimples(Math.abs(dif))}.`,
+      {
+        campo: 'valorTotal',
+        acoes: ['Conferir frete, seguro, despesas, IPI, ST e desconto no DANFE'],
+      },
+    )
+  }
+  if (dados.valorIcms > dados.valorProdutos) {
+    // ICMS é imposto por dentro: está contido no valor dos produtos.
+    return falha('REGRA_DE_NEGOCIO', 'O ICMS destacado não pode exceder o valor dos produtos.', { campo: 'valorIcms' })
+  }
+
+  const nota: NotaFiscal = {
+    id: novoId('nf'),
+    fornecedorId: dados.fornecedorId,
+    filialDestinoId: dados.filialDestinoId,
+    numero: dados.numero.trim(),
+    serie: dados.serie.trim(),
+    chaveAcesso: dados.chaveAcesso ? somenteDigitos(dados.chaveAcesso) : null,
+    modeloDocumento: dados.modeloDocumento,
+    dataEmissao: dados.dataEmissao,
+    dataEntrada: dados.dataEntrada,
+    valorProdutos: dados.valorProdutos,
+    valorFrete: dados.valorFrete,
+    valorSeguro: dados.valorSeguro,
+    valorOutrasDespesas: dados.valorOutrasDespesas,
+    valorDesconto: dados.valorDesconto,
+    valorIpi: dados.valorIpi,
+    valorIcms: dados.valorIcms,
+    valorIcmsSt: dados.valorIcmsSt,
+    valorTotal: dados.valorTotal,
+    icmsRecuperavel: dados.icmsRecuperavel,
+    ipiRecuperavel: dados.ipiRecuperavel,
+    status: 'PENDENTE_CONFERENCIA',
+    origemDados: dados.origemDados,
+    observacao: dados.observacao?.trim() || undefined,
+    conferidaEm: null,
+    conferidaPor: null,
+    integradaEm: null,
+    integradaPor: null,
+    canceladaEm: null,
+    motivoCancelamento: null,
+    criadaPor,
+    itens: dados.itens.map((item, i) => ({
+      id: novoId('nfi'),
+      numeroItem: i + 1,
+      modeloId: item.modeloId,
+      descricaoNf: item.descricaoNf.trim(),
+      codigoFornecedor: item.codigoFornecedor?.trim() ?? '',
+      ncm: item.ncm ?? '',
+      cfop: item.cfop ?? '',
+      unidade: item.unidade || 'UN',
+      quantidade: item.quantidade,
+      valorUnitario: item.valorUnitario,
+      valorTotalItem: item.valorTotalItem,
+      garantiaMeses: item.garantiaMeses,
+      garantiaAte: null,
+      series: [],
+    })),
+  }
+
+  base.notasFiscais.push(nota)
+  return sucesso(nota)
+}
+
+export interface DadosSerie {
+  numeroSerie: string
+  patrimonio: string
+}
+
+/**
+ * Informa série e patrimônio das unidades de um item.
+ *
+ * Substitui o conjunto inteiro do item, não acrescenta: a tela edita uma
+ * grade de `quantidade` linhas, e um comando que só adiciona tornaria
+ * impossível corrigir uma leitura de código de barras errada.
+ *
+ * Valida tudo antes de gravar qualquer coisa. Um lote parcialmente aceito
+ * deixa o conferente sem saber quais linhas entraram.
+ */
+export function definirSeriesItem(
+  base: BaseDados,
+  notaId: string,
+  itemId: string,
+  unidades: DadosSerie[],
+): Resultado<NotaFiscalItem> {
+  const nota = notaPorId(base, notaId)
+  if (!nota) return falha('NAO_ENCONTRADO', 'Nota fiscal não encontrada.')
+  if (nota.status === 'INTEGRADA') {
+    return falha('TRANSICAO_INVALIDA', `A nota ${nota.serie}/${nota.numero} já foi integrada e não aceita alteração.`, {
+      acoes: ['Registrar uma nota de ajuste referenciando a original'],
+    })
+  }
+  if (nota.status === 'CANCELADA') {
+    return falha('TRANSICAO_INVALIDA', 'Esta nota está cancelada.', { acoes: ['Lançar a entrada novamente'] })
+  }
+
+  const item = nota.itens.find((i) => i.id === itemId)
+  if (!item) return falha('NAO_ENCONTRADO', 'Item não encontrado nesta nota.')
+
+  if (unidades.length !== item.quantidade) {
+    return falha(
+      'PAYLOAD_INVALIDO',
+      `O item ${item.numeroItem} tem ${item.quantidade} unidade(s); foram informadas ${unidades.length}.`,
+      { campo: 'unidades' },
+    )
+  }
+
+  // Índice do que já está em uso, ignorando as linhas do próprio item — que
+  // estão sendo substituídas.
+  const seriesEmUso = new Map<string, string>()
+  const patrimoniosEmUso = new Map<string, string>()
+
+  for (const e of base.equipamentos) {
+    seriesEmUso.set(e.numeroSerie.toUpperCase(), `equipamento ${e.patrimonio}`)
+    patrimoniosEmUso.set(e.patrimonio.toUpperCase(), `equipamento ${e.patrimonio}`)
+  }
+  for (const n of base.notasFiscais) {
+    if (n.status === 'CANCELADA') continue
+    for (const outro of n.itens) {
+      if (outro.id === itemId) continue
+      for (const s of outro.series) {
+        const onde = `nota ${n.serie}/${n.numero}, item ${outro.numeroItem}`
+        seriesEmUso.set(s.numeroSerie.toUpperCase(), onde)
+        patrimoniosEmUso.set(s.patrimonio.toUpperCase(), onde)
+      }
+    }
+  }
+
+  const vistosSerie = new Set<string>()
+  const vistosPatrimonio = new Set<string>()
+
+  for (const [i, u] of unidades.entries()) {
+    const serie = u.numeroSerie.trim()
+    const patrimonio = u.patrimonio.trim()
+
+    if (!serie) {
+      return falha('PAYLOAD_INVALIDO', `Informe o número de série da unidade ${i + 1}.`, { campo: `serie-${i}` })
+    }
+    if (!patrimonio) {
+      return falha('PAYLOAD_INVALIDO', `Informe o patrimônio da unidade ${i + 1}.`, { campo: `patrimonio-${i}` })
+    }
+
+    const chaveSerie = serie.toUpperCase()
+    const chavePatrimonio = patrimonio.toUpperCase()
+
+    if (vistosSerie.has(chaveSerie)) {
+      // Quase sempre é o leitor de código de barras lendo a mesma etiqueta
+      // duas vezes — a caixa seguinte ficou sem ser bipada.
+      return falha('RECURSO_DUPLICADO', `A série ${serie} foi informada duas vezes neste item.`, {
+        campo: `serie-${i}`,
+        acoes: ['Conferir se a etiqueta foi lida duas vezes'],
+      })
+    }
+    if (vistosPatrimonio.has(chavePatrimonio)) {
+      return falha('RECURSO_DUPLICADO', `O patrimônio ${patrimonio} foi informado duas vezes neste item.`, {
+        campo: `patrimonio-${i}`,
+      })
+    }
+
+    const conflitoSerie = seriesEmUso.get(chaveSerie)
+    if (conflitoSerie) {
+      return falha('RECURSO_DUPLICADO', `A série ${serie} já pertence ao ${conflitoSerie}.`, {
+        campo: `serie-${i}`,
+        acoes: ['Conferir a etiqueta da unidade'],
+      })
+    }
+    const conflitoPatrimonio = patrimoniosEmUso.get(chavePatrimonio)
+    if (conflitoPatrimonio) {
+      return falha('RECURSO_DUPLICADO', `O patrimônio ${patrimonio} já pertence ao ${conflitoPatrimonio}.`, {
+        campo: `patrimonio-${i}`,
+        acoes: ['Usar a próxima etiqueta da sequência da filial'],
+      })
+    }
+
+    vistosSerie.add(chaveSerie)
+    vistosPatrimonio.add(chavePatrimonio)
+  }
+
+  item.series = unidades.map((u) => ({
+    id: novoId('nfs'),
+    numeroSerie: u.numeroSerie.trim(),
+    patrimonio: u.patrimonio.trim(),
+    equipamentoId: null,
+  }))
+
+  return sucesso(item)
+}
+
+/** Sugere o próximo patrimônio livre, seguindo a numeração já em uso. */
+export function proximoPatrimonio(base: BaseDados): string {
+  let maior = 10000
+  for (const e of base.equipamentos) {
+    const n = Number(e.patrimonio)
+    if (Number.isFinite(n) && n > maior) maior = n
+  }
+  for (const n of base.notasFiscais) {
+    for (const item of n.itens) {
+      for (const s of item.series) {
+        const v = Number(s.patrimonio)
+        if (Number.isFinite(v) && v > maior) maior = v
+      }
+    }
+  }
+  return String(maior + 1)
+}
+
+/** Itens que ainda não têm todas as unidades identificadas (RN-L02). */
+export function itensIncompletos(nota: NotaFiscal): NotaFiscalItem[] {
+  return nota.itens.filter((i) => i.series.length !== i.quantidade)
+}
+
+export function conferirNota(base: BaseDados, notaId: string, conferidaPor: string): Resultado<NotaFiscal> {
+  const nota = notaPorId(base, notaId)
+  if (!nota) return falha('NAO_ENCONTRADO', 'Nota fiscal não encontrada.')
+
+  if (nota.status !== 'PENDENTE_CONFERENCIA') {
+    return falha('TRANSICAO_INVALIDA', `A nota ${nota.serie}/${nota.numero} não está pendente de conferência.`)
+  }
+  if (nota.itens.length === 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma nota sem item não descreve compra alguma.')
+  }
+
+  const faltando = itensIncompletos(nota)
+  if (faltando.length > 0) {
+    const primeiro = faltando[0]!
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O item ${primeiro.numeroItem} (${primeiro.descricaoNf}) tem ${primeiro.series.length} de ${primeiro.quantidade} unidades identificadas.`,
+      {
+        acoes: faltando.map((i) => `Informar as séries do item ${i.numeroItem}`),
+      },
+    )
+  }
+
+  // Segregação de funções (RN-027): quem lançou a nota não a confere. A
+  // conferência existe para ser uma segunda pessoa olhando a mercadoria; se
+  // fosse a mesma, seria só um segundo clique.
+  if (nota.criadaPor === conferidaPor) {
+    return falha(
+      'PERMISSAO_NEGADA',
+      `A nota foi lançada por ${nota.criadaPor}. A conferência é de outra pessoa — é o que a torna uma conferência.`,
+      { acoes: ['Solicitar a conferência a outro operador'] },
+    )
+  }
+
+  nota.status = 'CONFERIDA'
+  nota.conferidaEm = iso(HOJE)
+  nota.conferidaPor = conferidaPor
+  return sucesso(nota)
+}
+
+export interface UnidadePrevista {
+  serieId: string
+  itemId: string
+  numeroItem: number
+  patrimonio: string
+  numeroSerie: string
+  modeloId: string
+  valorAquisicao: number
+  garantiaAte: string | null
+}
+
+/**
+ * Prévia da integração: os ativos que serão criados, com valor rateado.
+ *
+ * O rateio distribui o acessório — frete, seguro, ST, IPI e outras despesas,
+ * menos desconto e tributos recuperáveis — proporcionalmente ao valor de cada
+ * item. Pode ser **negativo**, quando o ICMS recuperável supera o frete; é o
+ * resultado correto, não um erro de sinal.
+ *
+ * O resíduo de arredondamento vai inteiro para a primeira unidade de cada
+ * item, de modo que a soma feche exatamente com o custo de aquisição da nota.
+ * Distribuir o resíduo faria a conciliação depender da ordem de leitura;
+ * concentrá-lo torna o desvio de um centavo localizável.
+ *
+ * Espelha `app.ratear_custo_nota` da migração 0010.
+ */
+export function previaIntegracao(nota: NotaFiscal): UnidadePrevista[] {
+  const custo = custoAquisicao(nota)
+  const acessorioTotal = arredondar(custo - nota.valorProdutos)
+  const previstas: UnidadePrevista[] = []
+
+  for (const item of nota.itens) {
+    const acessorioItem =
+      nota.valorProdutos === 0 ? 0 : (acessorioTotal * item.valorTotalItem) / nota.valorProdutos
+    const custoItem = arredondar(item.valorTotalItem + acessorioItem)
+    const porUnidade = arredondar(custoItem / item.quantidade)
+    const residuo = arredondar(custoItem - porUnidade * item.quantidade)
+
+    const garantia =
+      item.garantiaAte ??
+      (item.garantiaMeses !== null ? somarMesesIso(nota.dataEntrada, item.garantiaMeses) : null)
+
+    const ordenadas = [...item.series].sort((a, b) => a.patrimonio.localeCompare(b.patrimonio, 'pt-BR'))
+    ordenadas.forEach((s, i) => {
+      previstas.push({
+        serieId: s.id,
+        itemId: item.id,
+        numeroItem: item.numeroItem,
+        patrimonio: s.patrimonio,
+        numeroSerie: s.numeroSerie,
+        modeloId: item.modeloId,
+        valorAquisicao: i === 0 ? arredondar(porUnidade + residuo) : porUnidade,
+        garantiaAte: garantia,
+      })
+    })
+  }
+
+  return previstas
+}
+
+/**
+ * Integra a nota ao patrimônio: cria os ativos e sela a nota.
+ *
+ * Atômico por construção (RN-L03): tudo é validado, os equipamentos são
+ * montados em memória e só então empurrados de uma vez. Falha em um significa
+ * nenhum criado — um lote parcialmente integrado deixa o operador sem saber o
+ * que entrou, e a única saída seria conferir cento e poucas etiquetas à mão.
+ */
+export function integrarNota(
+  base: BaseDados,
+  notaId: string,
+  integradaPor: string,
+): Resultado<{ nota: NotaFiscal; criados: Equipamento[] }> {
+  const nota = notaPorId(base, notaId)
+  if (!nota) return falha('NAO_ENCONTRADO', 'Nota fiscal não encontrada.')
+
+  if (nota.status === 'INTEGRADA') {
+    return falha('TRANSICAO_INVALIDA', `A nota ${nota.serie}/${nota.numero} já foi integrada ao patrimônio.`, {
+      acoes: ['Abrir o parque filtrado nos ativos desta nota'],
+    })
+  }
+  if (nota.status !== 'CONFERIDA') {
+    return falha(
+      'TRANSICAO_INVALIDA',
+      'A nota precisa ser conferida antes de virar patrimônio.',
+      { acoes: ['Conferir a nota'] },
+    )
+  }
+
+  const previstas = previaIntegracao(nota)
+  if (previstas.length === 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Não há unidades a integrar nesta nota.')
+  }
+
+  // Revalidação completa antes de escrever a primeira linha: entre a
+  // conferência e a integração alguém pode ter cadastrado um equipamento à mão
+  // com a mesma etiqueta.
+  const seriesEmUso = new Map(base.equipamentos.map((e) => [e.numeroSerie.toUpperCase(), e.patrimonio]))
+  const patrimoniosEmUso = new Map(base.equipamentos.map((e) => [e.patrimonio.toUpperCase(), e.patrimonio]))
+
+  for (const u of previstas) {
+    const conflito =
+      seriesEmUso.get(u.numeroSerie.toUpperCase()) ?? patrimoniosEmUso.get(u.patrimonio.toUpperCase())
+    if (conflito) {
+      return falha(
+        'RECURSO_DUPLICADO',
+        `A unidade ${u.patrimonio} / ${u.numeroSerie} conflita com o equipamento ${conflito}, cadastrado depois da conferência.`,
+        { acoes: ['Corrigir as séries do item', 'Conferir se o ativo já foi lançado à mão'] },
+      )
+    }
+    if (!modeloPorId.has(u.modeloId)) {
+      return falha('NAO_ENCONTRADO', `Modelo do item ${u.numeroItem} não existe mais no catálogo.`)
+    }
+  }
+
+  const somaRateio = arredondar(previstas.reduce((s, u) => s + u.valorAquisicao, 0))
+  const custo = custoAquisicao(nota)
+  if (Math.abs(somaRateio - custo) > 0.005) {
+    // Se isto disparar, o rateio tem defeito — e integrar produziria um
+    // patrimônio que não reconcilia com a nota. Melhor recusar.
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O rateio soma ${moedaSimples(somaRateio)} e o custo de aquisição da nota é ${moedaSimples(custo)}.`,
+      { acoes: ['Conferir os valores da nota'] },
+    )
+  }
+
+  const filial = base.filiais.find((f) => f.id === nota.filialDestinoId)
+  const criados: Equipamento[] = previstas.map((u) => {
+    const modelo = modeloPorId.get(u.modeloId)!
+    return {
+      id: `eqp-${u.patrimonio}`,
+      patrimonio: u.patrimonio,
+      numeroSerie: u.numeroSerie,
+      modeloId: u.modeloId,
+      categoria: modelo.categoria,
+      filialId: nota.filialDestinoId,
+      // RN-L07: nasce disponível, na filial de destino, sem contrato. Nunca
+      // nasce alocado — alocar é decisão comercial, não consequência da compra.
+      status: 'DISPONIVEL',
+      motivoIndisponibilidade: null,
+      bloqueado: false,
+      bloqueioMotivo: null,
+      clienteId: null,
+      localId: null,
+      contratoId: null,
+      regiaoId: filial?.regiaoId ?? base.regioes[0]!.id,
+      contadorMono: 0,
+      contadorColor: 0,
+      historicoConsumo: [],
+      dataAquisicao: nota.dataEntrada,
+      valorAquisicao: u.valorAquisicao,
+      receita12m: 0,
+      custoManutencao12m: 0,
+      diasParado: 0,
+      ultimaPreventiva: null,
+      proximaPreventivaPaginas: null,
+      notaSerieId: u.serieId,
+      garantiaAte: u.garantiaAte ?? undefined,
+    }
+  })
+
+  // Ponto de escrita: daqui para baixo nada mais pode falhar.
+  base.equipamentos.push(...criados)
+  for (const item of nota.itens) {
+    for (const s of item.series) {
+      const criado = criados.find((e) => e.notaSerieId === s.id)
+      if (criado) s.equipamentoId = criado.id
+    }
+    item.garantiaAte = previstas.find((u) => u.itemId === item.id)?.garantiaAte ?? item.garantiaAte
+  }
+
+  nota.status = 'INTEGRADA'
+  nota.integradaEm = iso(HOJE)
+  nota.integradaPor = integradaPor
+
+  return sucesso({ nota, criados })
+}
+
+export function cancelarNota(base: BaseDados, notaId: string, motivo: string): Resultado<NotaFiscal> {
+  const nota = notaPorId(base, notaId)
+  if (!nota) return falha('NAO_ENCONTRADO', 'Nota fiscal não encontrada.')
+
+  if (nota.status === 'INTEGRADA') {
+    return falha(
+      'TRANSICAO_INVALIDA',
+      `A nota ${nota.serie}/${nota.numero} gerou ${nota.itens.reduce((s, i) => s + i.quantidade, 0)} ativos no patrimônio e não pode ser cancelada.`,
+      { acoes: ['Baixa patrimonial dos ativos gerados', 'Registrar nota de devolução'] },
+    )
+  }
+  if (nota.status === 'CANCELADA') {
+    return falha('TRANSICAO_INVALIDA', 'Esta nota já está cancelada.')
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do cancelamento — a operação é auditada.', { campo: 'motivo' })
+  }
+
+  nota.status = 'CANCELADA'
+  nota.canceladaEm = iso(HOJE)
+  nota.motivoCancelamento = motivo.trim()
+  return sucesso(nota)
+}
+
+/* ------------------------------------------------------------- utilidades -- */
+
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+/** Soma meses a uma data AAAA-MM-DD sem passar por fuso horário. */
+function somarMesesIso(data: string, meses: number): string {
+  const [a, m, d] = data.split('-').map(Number) as [number, number, number]
+  const total = (a * 12 + (m - 1)) + meses
+  const ano = Math.floor(total / 12)
+  const mes = (total % 12) + 1
+  // Dia 31 somado a um mês de 30 cai no último dia do mês, não no dia 1 do
+  // seguinte — que é como o cálculo de garantia é lido comercialmente.
+  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate()
+  const dia = Math.min(d, ultimoDia)
+  return `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+}
+
+const moedaSimples = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

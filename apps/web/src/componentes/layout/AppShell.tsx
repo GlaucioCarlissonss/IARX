@@ -32,6 +32,13 @@ const ITENS: ItemNav[] = [
   { para: '/contratos', rotulo: 'Contratos', glifo: '❐', permissao: 'contrato:ler', grupo: 'Operação' },
   { para: '/clientes', rotulo: 'Clientes', glifo: '⚯', permissao: 'cliente:ler', grupo: 'Operação' },
   {
+    para: '/notas-fiscais',
+    rotulo: 'Notas fiscais',
+    glifo: '⎙',
+    permissao: 'nota_fiscal:ler',
+    grupo: 'Operação',
+  },
+  {
     para: '/chamados',
     rotulo: 'Chamados',
     glifo: '⚒',

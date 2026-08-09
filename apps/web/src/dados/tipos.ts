@@ -195,6 +195,98 @@ export interface Equipamento {
   diasParado: number
   ultimaPreventiva: string | null
   proximaPreventivaPaginas: number | null
+  /**
+   * Procedência fiscal: a unidade da nota de compra que originou este ativo.
+   *
+   * Ausente no parque cadastrado antes do módulo de notas — e é justamente
+   * essa ausência que a tela do parque precisa mostrar, porque ativo sem
+   * procedência tem valor de aquisição sem origem verificável.
+   */
+  notaSerieId?: string
+  /** Herdada do item da nota na integração e congelada ali (RN-L06). */
+  garantiaAte?: string
+}
+
+/* ------------------------------------------------------- nota fiscal de compra */
+
+export type NfStatus = 'PENDENTE_CONFERENCIA' | 'CONFERIDA' | 'INTEGRADA' | 'CANCELADA'
+
+export interface Fornecedor {
+  id: string
+  cnpj: string
+  razaoSocial: string
+  nomeFantasia: string
+  uf: string
+  inscricaoEstadual: string
+}
+
+/** Uma unidade física da nota — vira exatamente um equipamento na integração. */
+export interface NotaFiscalSerie {
+  id: string
+  numeroSerie: string
+  patrimonio: string
+  /** Preenchido na integração. Enquanto nulo, a unidade ainda não é ativo. */
+  equipamentoId: string | null
+}
+
+export interface NotaFiscalItem {
+  id: string
+  numeroItem: number
+  modeloId: string
+  /** Descrição como veio na nota, sem normalizar — é o que o fisco lê. */
+  descricaoNf: string
+  codigoFornecedor: string
+  ncm: string
+  cfop: string
+  unidade: string
+  quantidade: number
+  valorUnitario: number
+  valorTotalItem: number
+  garantiaMeses: number | null
+  garantiaAte: string | null
+  series: NotaFiscalSerie[]
+}
+
+export interface NotaFiscal {
+  id: string
+  fornecedorId: string
+  filialDestinoId: string
+  numero: string
+  serie: string
+  chaveAcesso: string | null
+  modeloDocumento: string
+  dataEmissao: string
+  dataEntrada: string
+
+  /** Composição do layout 4.00: vNF = vProd + vST + vFrete + vSeg + vOutro + vIPI − vDesc. */
+  valorProdutos: number
+  valorFrete: number
+  valorSeguro: number
+  valorOutrasDespesas: number
+  valorDesconto: number
+  valorIpi: number
+  valorIcms: number
+  valorIcmsSt: number
+  valorTotal: number
+
+  /**
+   * Regime tributário gravado **na nota**, não só em parâmetro do tenant.
+   * Mudança de regime não pode reprecificar aquisição já feita.
+   */
+  icmsRecuperavel: boolean
+  ipiRecuperavel: boolean
+
+  status: NfStatus
+  origemDados: 'MANUAL' | 'XML'
+  observacao?: string
+  conferidaEm: string | null
+  conferidaPor: string | null
+  integradaEm: string | null
+  integradaPor: string | null
+  canceladaEm: string | null
+  motivoCancelamento: string | null
+  criadaPor: string
+  itens: NotaFiscalItem[]
 }
 
 export interface Tecnico {
@@ -278,7 +370,7 @@ export interface Fatura {
 
 /* --------------------------------------------------------------- anexos --- */
 
-export type EntidadeAnexo = 'CONTRATO' | 'CLIENTE'
+export type EntidadeAnexo = 'CONTRATO' | 'CLIENTE' | 'NOTA_FISCAL'
 
 /**
  * Classificação do documento.
@@ -296,6 +388,13 @@ export type CategoriaAnexo =
   | 'CONTRATO_SOCIAL'
   | 'CERTIDAO'
   | 'PROCURACAO'
+  /**
+   * Documento fiscal. Retenção mínima de 5 anos (CTN art. 173) — a remoção é
+   * recusada dentro do prazo, e é por isso que a categoria é separada.
+   */
+  | 'XML_NFE'
+  | 'DANFE'
+  | 'BOLETO_COMPRA'
   | 'OUTRO'
 
 export interface Anexo {
@@ -373,6 +472,8 @@ export interface BaseDados {
   locais: LocalOperacao[]
   contratos: Contrato[]
   anexos: Anexo[]
+  fornecedores: Fornecedor[]
+  notasFiscais: NotaFiscal[]
   equipamentos: Equipamento[]
   tecnicos: Tecnico[]
   ordens: OrdemServico[]

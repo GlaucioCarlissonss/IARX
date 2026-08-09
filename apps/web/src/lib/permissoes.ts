@@ -15,6 +15,10 @@ export type Permissao =
   | 'fatura:ler' | 'prefatura:aprovar' | 'fatura:emitir'
   | 'financeiro:painel_executivo' | 'financeiro:rentabilidade_ler'
   | 'cliente:ler' | 'cliente:criar'
+  // Segregação de funções (RN-027): registrar, conferir e integrar são
+  // permissões distintas de propósito. Quem lança a nota não a confere.
+  | 'nota_fiscal:ler' | 'nota_fiscal:criar' | 'nota_fiscal:conferir'
+  | 'nota_fiscal:integrar' | 'nota_fiscal:cancelar'
   | 'usuario:gerenciar' | 'auditoria:consultar'
 
 export interface Perfil {
@@ -31,6 +35,8 @@ const TODAS: Permissao[] = [
   'fatura:ler', 'prefatura:aprovar', 'fatura:emitir',
   'financeiro:painel_executivo', 'financeiro:rentabilidade_ler',
   'cliente:ler', 'cliente:criar',
+  'nota_fiscal:ler', 'nota_fiscal:criar', 'nota_fiscal:conferir',
+  'nota_fiscal:integrar', 'nota_fiscal:cancelar',
   'usuario:gerenciar', 'auditoria:consultar',
 ]
 
@@ -43,6 +49,9 @@ export const PERFIS: Perfil[] = [
       'contrato:ler', 'contrato:criar', 'contrato:renovar',
       'equipamento:ler', 'equipamento:criar', 'equipamento:movimentar',
       'os:ler', 'os:criar', 'peca:ler', 'fatura:ler', 'cliente:ler', 'cliente:criar',
+      // Lança e cancela a nota. Não confere nem integra: são as duas outras
+      // mãos da segregação (RN-027).
+      'nota_fiscal:ler', 'nota_fiscal:criar', 'nota_fiscal:cancelar',
     ],
   },
   {
@@ -52,6 +61,8 @@ export const PERFIS: Perfil[] = [
       'equipamento:ler', 'equipamento:movimentar', 'equipamento:desbloquear',
       'os:ler', 'os:criar', 'os:triar', 'os:executar', 'os:validar',
       'peca:ler', 'estoque:movimentar', 'estoque:ajustar', 'contrato:ler', 'cliente:ler',
+      // Confere a mercadoria: é quem abre as caixas e lê as etiquetas.
+      'nota_fiscal:ler', 'nota_fiscal:conferir',
     ],
   },
   {
@@ -61,6 +72,8 @@ export const PERFIS: Perfil[] = [
       'fatura:ler', 'prefatura:aprovar', 'fatura:emitir',
       'financeiro:painel_executivo', 'financeiro:rentabilidade_ler',
       'contrato:ler', 'cliente:ler', 'equipamento:ler', 'os:ler', 'peca:ler',
+      // Integra ao imobilizado: é o lançamento contábil do ativo.
+      'nota_fiscal:ler', 'nota_fiscal:integrar',
     ],
   },
   {
@@ -69,6 +82,7 @@ export const PERFIS: Perfil[] = [
     permissoes: [
       'financeiro:painel_executivo', 'financeiro:rentabilidade_ler', 'auditoria:consultar',
       'contrato:ler', 'contrato:aprovar', 'equipamento:ler', 'os:ler', 'fatura:ler', 'cliente:ler', 'peca:ler',
+      'nota_fiscal:ler',
     ],
   },
 ]
