@@ -85,6 +85,77 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       errors: [{ field: 'valor_unitario', code: 'VALOR_INVALIDO' }],
     }),
 
+  /* ------------------------------------------- entrada fiscal de compra --- */
+
+  nfc_chave_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Chave de acesso já lançada', {
+      detail: 'Esta chave de acesso já pertence a outra nota fiscal registrada.',
+      errors: [{ field: 'chave_acesso', code: 'CHAVE_DUPLICADA' }],
+    }),
+
+  nfc_numero_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Nota já lançada para este fornecedor', {
+      detail: 'Já existe uma nota com o mesmo modelo, série e número para este fornecedor.',
+      errors: [{ field: 'numero', code: 'NOTA_DUPLICADA' }],
+    }),
+
+  nfc_total_fecha: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Total da nota não fecha', {
+      detail:
+        'vNF = vProd + vST + vFrete + vSeg + vOutro + vIPI − vDesc (layout 4.00 da NF-e). ' +
+        'Confira frete, seguro, despesas, IPI, ST e desconto no DANFE.',
+      errors: [{ field: 'valor_total', code: 'TOTAL_INCOERENTE' }],
+    }),
+
+  nfc_entrada_apos_emissao: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Entrada anterior à emissão', {
+      detail: 'A mercadoria não pode ter entrado antes de a nota ser emitida.',
+      errors: [{ field: 'data_entrada', code: 'ENTRADA_ANTES_DA_EMISSAO' }],
+    }),
+
+  nfc_chave_formato: () =>
+    new ErroDominio('PAYLOAD_INVALIDO', 'Chave de acesso inválida', {
+      detail: 'A chave precisa ter 44 dígitos e passar na verificação do dígito verificador (módulo 11).',
+      errors: [{ field: 'chave_acesso', code: 'DV_INVALIDO' }],
+    }),
+
+  nfc_icms_dentro_dos_produtos: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'ICMS maior que o valor dos produtos', {
+      detail: 'ICMS é imposto por dentro: ele está contido no valor dos produtos e não pode excedê-lo.',
+      errors: [{ field: 'valor_icms', code: 'ICMS_INCOERENTE' }],
+    }),
+
+  nfi_total_fecha: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Total do item não fecha', {
+      detail: 'O total de cada item precisa corresponder a quantidade × valor unitário.',
+      errors: [{ field: 'itens', code: 'ITEM_INCOERENTE' }],
+    }),
+
+  nfi_quantidade_positiva: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Quantidade inválida', {
+      detail: 'Cada unidade vira um patrimônio próprio, então a quantidade é um inteiro positivo.',
+      errors: [{ field: 'quantidade', code: 'QUANTIDADE_INVALIDA' }],
+    }),
+
+  nfis_serie_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Número de série já usado', {
+      detail: 'Esta série já foi informada em outra nota fiscal deste tenant.',
+      errors: [{ field: 'numero_serie', code: 'SERIE_DUPLICADA' }],
+      acoes: [{ code: 'CONFERIR_ETIQUETA', descricao: 'Conferir se a etiqueta correta foi lida' }],
+    }),
+
+  nfis_patrimonio_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Patrimônio já usado', {
+      detail: 'Este patrimônio já foi informado em outra nota fiscal deste tenant.',
+      errors: [{ field: 'patrimonio', code: 'PATRIMONIO_DUPLICADO' }],
+    }),
+
+  equipamento_nfis_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Unidade já integrada', {
+      detail: 'Esta unidade da nota já gerou um equipamento no patrimônio.',
+      errors: [{ field: 'nota_fiscal_item_serie_id', code: 'JA_INTEGRADA' }],
+    }),
+
   ri_chave_uq: () =>
     new ErroDominio('IDEMPOTENCIA_EM_ANDAMENTO', 'Requisição idêntica em processamento', {
       detail: 'Outra requisição com a mesma Idempotency-Key ainda está sendo processada.',

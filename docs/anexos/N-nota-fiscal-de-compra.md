@@ -282,6 +282,23 @@ depreciação e da margem repousa sobre número digitado.
 | 14 | Pulo de etapa, cancelamento sem motivo e reabertura recusados |
 | 15 | Nota isolada por tenant sob RLS |
 
+### API — `apps/api/test/notas-fiscais.test.ts`, 25 casos
+
+Contra PostgreSQL real, como o resto da suíte: um mock provaria apenas que o
+mock foi programado para concordar com o teste.
+
+| Grupo | Prova |
+| --- | --- |
+| Lançamento | O custo de aquisição é **derivado**, nunca informado; tributo recuperável sai do custo e só dele; total que não fecha é recusado apontando `valor_total`; DV inválido é recusado antes de tocar o banco; chave íntegra de outro emitente é recusada **nomeando o CNPJ**; chave repetida cai no índice único |
+| Séries | Contagem divergente da do item; série repetida no mesmo lote, apontando as duas posições; série já usada no parque, nomeando o ativo; substituir o conjunto corrige a leitura errada **sem duplicar** |
+| Conferência | Item incompleto é nomeado; RN-027 recusa o autor do lançamento **mesmo com a permissão**; outra pessoa confere; conferir duas vezes é recusado |
+| Integração | A prévia soma exatamente o custo, com resíduo; garantia de 24 meses vira `2028-05-12`; os ativos nascem `DISPONIVEL`; nota integrada recusa alteração e cancelamento; integrar sem conferir é recusado; RN-029 — integrar duas vezes com a mesma chave devolve a mesma resposta, byte por byte |
+| Permissões e RLS | Cada ação exige a sua permissão; nota de outro tenant devolve **404, não 403** — revelar que o registro existe já é vazamento; a listagem não vaza |
+
+O contrato da API carrega a inversão de responsabilidade no próprio esquema: não
+existe campo `valor_aquisicao` na entrada. Aceitá-lo reabriria exatamente o
+problema que o módulo elimina.
+
 ### Interface — `apps/web/a11y.spec.mjs`, 16 testes novos
 
 Além de axe (claro e escuro), reflow em 320 px e indicador de foco, que a rota
@@ -308,7 +325,41 @@ nova herda da suíte existente:
 
 ---
 
-## N.11 O defeito que os testes encontraram
+## N.11 Endpoints
+
+```
+GET    /api/v1/notas-fiscais                        nota_fiscal:ler
+GET    /api/v1/notas-fiscais/{id}                   nota_fiscal:ler        ?include=itens,series
+POST   /api/v1/notas-fiscais                        nota_fiscal:criar      [Idempotency-Key]
+POST   /api/v1/notas-fiscais/{id}/itens/{i}/series  nota_fiscal:editar
+POST   /api/v1/notas-fiscais/{id}/conferir          nota_fiscal:conferir
+GET    /api/v1/notas-fiscais/{id}/previa-integracao nota_fiscal:ler
+POST   /api/v1/notas-fiscais/{id}/integrar          nota_fiscal:integrar   [Idempotency-Key]
+POST   /api/v1/notas-fiscais/{id}/cancelar          nota_fiscal:cancelar
+GET    /api/v1/fornecedores                         fornecedor:ler
+```
+
+Três decisões de contrato que merecem registro:
+
+- **A prévia é `GET`.** Não muda nada, e é justamente por isso que existe: a
+  integração é irreversível, então conferir antes precisa ser barato e
+  repetível. Ela devolve `fecha: boolean` para o cliente poder desabilitar a
+  confirmação em vez de deixar o operador descobrir no `422`.
+- **Lançar e integrar são idempotentes.** Relançar a mesma compra por causa de
+  um timeout duplicaria o patrimônio na integração seguinte; reintegrar
+  duplicaria os ativos direto. Nos dois casos o replay devolve a resposta
+  guardada, byte por byte (RN-029).
+- **Informar séries, conferir e cancelar devolvem `200`, não `201`.** São
+  atualizações de um recurso que já existe — nada ganha URL própria.
+
+O rateio vem de `app.ratear_custo_nota`, chamado pelo repositório. Reimplementá-lo
+em TypeScript criaria duas verdades sobre o custo do imobilizado, e a divergência
+só apareceria numa conciliação contábil, meses depois, sem ninguém saber qual dos
+dois números estava certo.
+
+---
+
+## N.12 O defeito que os testes encontraram
 
 **Diálogo somente leitura que rola era inacessível pelo teclado.**
 
@@ -329,7 +380,7 @@ correção, passa com ela.
 
 ---
 
-## N.12 Correção ao Anexo L
+## N.13 Correção ao Anexo L
 
 O Anexo L listava `fornecedor` como dependência **existente**. Não existia —
 fornecedor era um campo de texto solto na massa de peças. A tabela foi criada
@@ -349,7 +400,7 @@ passo próprio.
 
 ---
 
-## N.13 O que fica para a próxima onda
+## N.14 O que fica para a próxima onda
 
 | Item | Por que não agora |
 | --- | --- |

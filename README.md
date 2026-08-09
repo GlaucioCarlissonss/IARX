@@ -90,8 +90,8 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
 | `apps/web` | Aplicação React + TypeScript: 9 telas, 14 formulários de escrita, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 72 testes de axe, teclado, formulários, permissões, entrada fiscal e domínio |
-| `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência e concorrência otimista | `npm run api:test` — 32 assertivas contra PostgreSQL real |
-| `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões e entidades | Compilado no CI; consumido pelos dois lados |
+| `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
+| `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
 | `packages/db` | 10 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra | `npm run db:test` — 35 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 188/188 verificações |
 | `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança | Bloqueiam merge |

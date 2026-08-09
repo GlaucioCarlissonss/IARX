@@ -13,6 +13,12 @@ import { ContratosService } from './modulos/contratos/contratos.service.js'
 import { EquipamentosController } from './modulos/equipamentos/equipamentos.controller.js'
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
+import {
+  FornecedoresController,
+  NotasFiscaisController,
+} from './modulos/notas-fiscais/notas-fiscais.controller.js'
+import { NotasFiscaisRepositorio } from './modulos/notas-fiscais/notas-fiscais.repositorio.js'
+import { NotasFiscaisService } from './modulos/notas-fiscais/notas-fiscais.service.js'
 import { SaudeController } from './modulos/saude/saude.controller.js'
 
 /**
@@ -29,13 +35,21 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
  * por byte o que a primeira chamada devolveu.
  */
 @Module({
-  controllers: [SaudeController, EquipamentosController, ContratosController],
+  controllers: [
+    SaudeController,
+    EquipamentosController,
+    ContratosController,
+    NotasFiscaisController,
+    FornecedoresController,
+  ],
   providers: [
     BancoService,
     EquipamentosRepositorio,
     EquipamentosService,
     ContratosRepositorio,
     ContratosService,
+    NotasFiscaisRepositorio,
+    NotasFiscaisService,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },

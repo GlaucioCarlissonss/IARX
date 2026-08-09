@@ -86,6 +86,20 @@ export const PERMISSOES = [
   'ordem_compra:aprovar',
   'ordem_compra:receber',
 
+  // Entrada fiscal de compra.
+  //
+  // Registrar, conferir e integrar são permissões distintas por exigência de
+  // segregação de funções (RN-027): quem lança a nota não a confere, e quem
+  // confere a mercadoria não é quem faz o lançamento contábil do imobilizado.
+  'nota_fiscal:ler',
+  'nota_fiscal:criar',
+  'nota_fiscal:editar',
+  'nota_fiscal:conferir',
+  'nota_fiscal:integrar',
+  'nota_fiscal:cancelar',
+  'fornecedor:ler',
+  'fornecedor:gerenciar',
+
   // Faturamento
   'medicao:ler',
   'medicao:consolidar',

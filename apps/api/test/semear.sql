@@ -99,3 +99,78 @@ insert into public.contrato_item
    '11111111-1111-4111-8111-11111111a001', 'FRANQUIA_EXCEDENTE', 289.0000,
    3000, 'ITEM', 0.0800,
    '2026-01-01T00:00:00-03:00', '2026-12-31T23:59:59-03:00', 'ATIVO');
+
+-- -----------------------------------------------------------------------------
+-- Entrada fiscal de compra (Módulo 1)
+--
+-- Um fornecedor por tenant. O CNPJ do fornecedor de Alfa é o mesmo que entra na
+-- chave de acesso montada pelo teste — a coerência entre os dois é justamente
+-- o que RN-L10 verifica, e um CNPJ divergente aqui faria todo lançamento com
+-- chave ser recusado sem que isso significasse defeito.
+-- -----------------------------------------------------------------------------
+-- Os usuários existem porque `conferida_por`, `integrada_por` e `cancelada_por`
+-- são chaves estrangeiras: sem eles, a conferência falharia por FK e o teste
+-- acusaria um defeito que não existe.
+insert into public.usuario (id, tenant_id, nome, email) values
+  ('11111111-1111-4111-8111-111111110001', '11111111-1111-4111-8111-111111111111',
+   'Operador Alfa', 'operador@alfa.local'),
+  ('11111111-1111-4111-8111-111111110002', '11111111-1111-4111-8111-111111111111',
+   'Comprador Alfa', 'compras@alfa.local'),
+  ('22222222-2222-4222-8222-222222220001', '22222222-2222-4222-8222-222222222222',
+   'Operador Beta', 'operador@beta.local');
+
+insert into public.fornecedor (id, tenant_id, documento, razao_social, nome_fantasia, uf) values
+  ('11111111-1111-4111-8111-11111111f001', '11111111-1111-4111-8111-111111111111',
+   '11444777000161', 'PRINTECH DISTRIBUICAO LTDA', 'Printech', 'SP'),
+  ('22222222-2222-4222-8222-22222222f001', '22222222-2222-4222-8222-222222222222',
+   '99888777000166', 'BETA SUPRIMENTOS LTDA', 'Beta Sup', 'RJ');
+
+-- Nota conferida e pronta para integrar: dois itens, frete e IPI que não
+-- dividem igualmente pelas unidades. É o caso em que o rateio ingênuo perde
+-- centavo, e é o que o teste de RN-L05 precisa ter para provar alguma coisa.
+--
+--   vProd 30.000,00 + frete 1.000,00 + IPI 500,00 − desconto 100,00 = 31.400,00
+--   ICMS 5.400,00 destacado, não recuperável → custo = total
+insert into public.nota_fiscal_compra
+  (id, tenant_id, fornecedor_id, filial_destino_id, numero, serie, modelo_documento,
+   data_emissao, data_entrada, valor_produtos, valor_frete, valor_desconto, valor_ipi,
+   valor_icms, valor_total, status, conferida_em, origem_dados, created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111e001', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111f001', '11111111-1111-4111-8111-1111111111f1',
+   '12345', '1', '55', '2026-05-10', '2026-05-12',
+   30000, 1000, 100, 500, 5400, 31400,
+   'PENDENTE_CONFERENCIA', null, 'MANUAL',
+   -- Lançada por OUTRO usuário: a segregação de funções (RN-027) recusaria a
+   -- conferência se fosse o mesmo, e o teste do caminho feliz não passaria.
+   '11111111-1111-4111-8111-111111110002', '2026-05-12T09:00:00-03:00');
+
+insert into public.nota_fiscal_item
+  (id, tenant_id, nota_fiscal_id, numero_item, modelo_id, descricao_nf, ncm, cfop,
+   quantidade, valor_unitario, valor_total_item, garantia_meses) values
+  ('11111111-1111-4111-8111-11111111e101', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111e001', 1, '11111111-1111-4111-8111-1111111111d1',
+   'MULTIFUNC LASER MONO A4 45PPM ECOSYS M3145IDN', '84433221', '5551',
+   3, 6000, 18000, 24),
+  ('11111111-1111-4111-8111-11111111e102', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111e001', 2, '11111111-1111-4111-8111-1111111111d1',
+   'MULTIFUNC LASER MONO A4 45PPM ECOSYS M3145IDN (LOTE 2)', '84433221', '5551',
+   2, 6000, 12000, 12);
+
+-- Só o item 1 identificado: a nota está incompleta de propósito, para o teste
+-- provar que RN-L02 recusa a conferência e nomeia o item que falta.
+insert into public.nota_fiscal_item_serie
+  (id, tenant_id, nota_fiscal_item_id, numero_serie, patrimonio) values
+  ('11111111-1111-4111-8111-11111111e201', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111e101', 'W7A1000001', 'PAT-90001'),
+  ('11111111-1111-4111-8111-11111111e202', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111e101', 'W7A1000002', 'PAT-90002'),
+  ('11111111-1111-4111-8111-11111111e203', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111e101', 'W7A1000003', 'PAT-90003');
+
+-- Nota do tenant B, para o teste de isolamento ter um outro lado.
+insert into public.nota_fiscal_compra
+  (id, tenant_id, fornecedor_id, filial_destino_id, numero, serie, modelo_documento,
+   data_emissao, data_entrada, valor_produtos, valor_total, status, origem_dados) values
+  ('22222222-2222-4222-8222-22222222e001', '22222222-2222-4222-8222-222222222222',
+   '22222222-2222-4222-8222-22222222f001', '22222222-2222-4222-8222-2222222222f1',
+   '77777', '1', '55', '2026-05-10', '2026-05-12', 1000, 1000, 'PENDENTE_CONFERENCIA', 'MANUAL');
