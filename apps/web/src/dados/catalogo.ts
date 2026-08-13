@@ -320,15 +320,35 @@ export const MODELOS: Modelo[] = [
   },
 ]
 
+/**
+ * Praças de atendimento, com coordenadas geográficas reais.
+ *
+ * Antes eram `x`/`y` em pixels de um mapa que nunca existiu — um par de números
+ * que só faria sentido junto com a imagem para a qual foram medidos. Latitude e
+ * longitude sobrevivem a qualquer projeção, e é o que permite o mapa ser real em
+ * vez de um desenho com pontos colados por cima.
+ *
+ * A distribuição é a de uma operação nacional de locação de TI: concentração no
+ * Sudeste, onde está a base instalada, e presença nas capitais do Nordeste, que
+ * é onde o setor mais cresceu na última década.
+ */
 export const REGIOES: Regiao[] = [
-  { id: 'reg-sp-cap', nome: 'São Paulo — Capital', uf: 'SP', x: 300, y: 250 },
-  { id: 'reg-sp-abc', nome: 'Grande ABC', uf: 'SP', x: 330, y: 285 },
-  { id: 'reg-sp-cam', nome: 'Campinas e região', uf: 'SP', x: 235, y: 205 },
-  { id: 'reg-rj', nome: 'Rio de Janeiro', uf: 'RJ', x: 470, y: 215 },
-  { id: 'reg-mg', nome: 'Belo Horizonte', uf: 'MG', x: 430, y: 130 },
-  { id: 'reg-pr', nome: 'Curitiba', uf: 'PR', x: 220, y: 320 },
-  { id: 'reg-rs', nome: 'Porto Alegre', uf: 'RS', x: 165, y: 385 },
-  { id: 'reg-pe', nome: 'Recife', uf: 'PE', x: 640, y: 60 },
+  { id: 'reg-sp-cap', nome: 'São Paulo — Capital', cidade: 'São Paulo',      uf: 'SP', lat: -23.5505, lon: -46.6333 },
+  { id: 'reg-sp-abc', nome: 'Grande ABC',          cidade: 'Santo André',    uf: 'SP', lat: -23.6639, lon: -46.5383 },
+  { id: 'reg-sp-cam', nome: 'Campinas e região',   cidade: 'Campinas',       uf: 'SP', lat: -22.9099, lon: -47.0626 },
+  { id: 'reg-rj',     nome: 'Rio de Janeiro',      cidade: 'Rio de Janeiro', uf: 'RJ', lat: -22.9068, lon: -43.1729 },
+  { id: 'reg-mg',     nome: 'Belo Horizonte',      cidade: 'Belo Horizonte', uf: 'MG', lat: -19.9167, lon: -43.9345 },
+  { id: 'reg-pr',     nome: 'Curitiba',            cidade: 'Curitiba',       uf: 'PR', lat: -25.4284, lon: -49.2733 },
+  { id: 'reg-rs',     nome: 'Porto Alegre',        cidade: 'Porto Alegre',   uf: 'RS', lat: -30.0346, lon: -51.2177 },
+  { id: 'reg-sc',     nome: 'Florianópolis',       cidade: 'Florianópolis',  uf: 'SC', lat: -27.5954, lon: -48.5480 },
+  { id: 'reg-pe',     nome: 'Recife',              cidade: 'Recife',         uf: 'PE', lat: -8.0476,  lon: -34.8770 },
+  { id: 'reg-ba',     nome: 'Salvador',            cidade: 'Salvador',       uf: 'BA', lat: -12.9777, lon: -38.5016 },
+  { id: 'reg-ce',     nome: 'Fortaleza',           cidade: 'Fortaleza',      uf: 'CE', lat: -3.7319,  lon: -38.5267 },
+  { id: 'reg-df',     nome: 'Distrito Federal',    cidade: 'Brasília',       uf: 'DF', lat: -15.7939, lon: -47.8828 },
+  { id: 'reg-go',     nome: 'Goiânia',             cidade: 'Goiânia',        uf: 'GO', lat: -16.6869, lon: -49.2648 },
+  { id: 'reg-mt',     nome: 'Cuiabá',              cidade: 'Cuiabá',         uf: 'MT', lat: -15.6014, lon: -56.0979 },
+  { id: 'reg-pa',     nome: 'Belém',               cidade: 'Belém',          uf: 'PA', lat: -1.4558,  lon: -48.4902 },
+  { id: 'reg-am',     nome: 'Manaus',              cidade: 'Manaus',         uf: 'AM', lat: -3.1190,  lon: -60.0217 },
 ]
 
 export const FILIAIS: Filial[] = [
@@ -338,6 +358,8 @@ export const FILIAIS: Filial[] = [
   { id: 'fil-mg01', codigo: 'MG-01', nome: 'Filial Belo Horizonte', regiaoId: 'reg-mg' },
   { id: 'fil-pr01', codigo: 'PR-01', nome: 'Filial Curitiba', regiaoId: 'reg-pr' },
   { id: 'fil-pe01', codigo: 'PE-01', nome: 'Filial Recife', regiaoId: 'reg-pe' },
+  { id: 'fil-ba01', codigo: 'BA-01', nome: 'Filial Salvador', regiaoId: 'reg-ba' },
+  { id: 'fil-df01', codigo: 'DF-01', nome: 'Filial Brasília', regiaoId: 'reg-df' },
 ]
 
 export const categoriaPorCodigo = new Map(CATEGORIAS.map((c) => [c.codigo, c]))

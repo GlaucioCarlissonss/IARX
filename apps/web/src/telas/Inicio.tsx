@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../dados/api'
 import { agregadoPorRegiao, linhasChamados, linhasEstoque } from '../dados/consultas'
@@ -7,6 +8,10 @@ import { HOJE } from '../dados/gerar'
 import { Aviso, BarraMedida, Carregando, Cartao, Chip, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { BarrasHorizontais, Sparkline } from '../componentes/ui/graficos'
 import { Rolagem } from '../componentes/ui/Rolagem'
+import { Mapa as MapaGeografico } from '../componentes/ui/Mapa'
+import { regiaoPorId } from '../dados/catalogo'
+import { useSessao } from '../lib/contexto'
+import type { PontoMapa } from '../componentes/ui/Mapa'
 
 /**
  * Painel do dia.
@@ -17,7 +22,39 @@ import { Rolagem } from '../componentes/ui/Rolagem'
  */
 export function Inicio() {
   const navegar = useNavigate()
+  const { pode } = useSessao()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.indicadores(), [])
+
+  /**
+   * Pontos do mapa do painel: clientes com o parque que têm em campo.
+   *
+   * Lido da base síncrona porque o cartão é secundário na dobra — pendurá-lo
+   * numa segunda consulta assíncrona faria o painel inteiro esperar por ele.
+   */
+  const pontosMapa = useMemo<PontoMapa[]>(() => {
+    const base = api.baseSincrona()
+    const porCliente = new Map<string, number>()
+    for (const e of base.equipamentos) {
+      if (e.clienteId) porCliente.set(e.clienteId, (porCliente.get(e.clienteId) ?? 0) + 1)
+    }
+    return base.clientes.map((c) => {
+      const praca = regiaoPorId.get(c.regiaoId)
+      return {
+        id: c.id,
+        nome: c.nomeFantasia,
+        detalhe: `${praca?.cidade ?? '—'}/${praca?.uf ?? '—'} · ${porCliente.get(c.id) ?? 0} ativo(s)`,
+        lat: c.lat,
+        lon: c.lon,
+        peso: porCliente.get(c.id) ?? 0,
+        tom:
+          c.situacaoCredito === 'BLOQUEADO'
+            ? 'critico'
+            : c.situacaoCredito === 'OBSERVACAO'
+              ? 'atencao'
+              : 'normal',
+      }
+    })
+  }, [dado])
 
   if (situacao === 'erro') {
     return (
@@ -124,6 +161,43 @@ export function Inicio() {
           </button>
         ))}
       </section>
+
+      {pode('mapa:ler') && (
+        <Cartao
+          comoRegiao
+          titulo="Distribuição geográfica"
+          acessorio={
+            <button className="btn btn--sutil btn--pequeno" onClick={() => navegar('/mapa')}>
+              Expandir
+            </button>
+          }
+        >
+          {/*
+            Mapa de verdade dentro do cartão, e não uma imagem que abre o Google
+            Maps em outra aba. Sair da aplicação para ver onde está o parque
+            quebra o fluxo justamente quando a pessoa está decidindo de onde
+            despachar um técnico — e a aba que abre não sabe nada dos filtros
+            nem do estado de crédito de cada cliente.
+          */}
+          <MapaGeografico
+            rotulo="Distribuição geográfica de clientes"
+            pontos={pontosMapa}
+            altura={300}
+            aoSelecionar={() => navegar('/mapa')}
+            rodape={
+              <span className="mapa__contagem">
+                <span>
+                  <strong>{pontosMapa.length}</strong> localizações
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  <strong>{inteiro(pontosMapa.reduce((s, p) => s + p.peso, 0))}</strong> ativos
+                </span>
+              </span>
+            }
+          />
+        </Cartao>
+      )}
 
       <div className="grade grade--2">
         <Cartao

@@ -1747,3 +1747,278 @@ textarea {
     0 0 0 4px var(--cor-focus-ring);
   border-radius: var(--raio-1);
 }
+
+/* -------------------------------------------------------------------- mapa */
+
+/*
+ * Mapa geográfico vetorial.
+ *
+ * As cores do território saem dos mesmos tokens do resto da interface — o mapa
+ * não tem paleta própria. Um mapa com verde e azul "de mapa" seria a única
+ * superfície da aplicação que ignora o tema escuro, e o contraste dos
+ * marcadores deixaria de estar coberto pelo gate de contraste do CI.
+ */
+.mapa {
+  position: relative;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  overflow: hidden;
+  background: var(--cor-surface);
+}
+
+.mapa__tela {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Sem isto, arrastar o mapa no celular rola a página junto e o gesto vira
+     uma disputa entre os dois. */
+  touch-action: none;
+  user-select: none;
+}
+.mapa__tela:active {
+  cursor: grabbing;
+}
+.mapa__tela:focus-visible {
+  outline: 2px solid var(--cor-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Água e terra saem de tokens já verificados no gate de contraste. A tonalidade
+   azulada de `primary-subtle-bg` distingue oceano de continente sem introduzir
+   uma cor fora do sistema — e continua legível no tema escuro, onde um azul
+   literal de mapa ficaria brilhante demais. */
+.mapa__agua {
+  fill: var(--cor-primary-subtle-bg);
+}
+.mapa__uf {
+  fill: var(--cor-surface-raised);
+  stroke: var(--cor-border-strong);
+  stroke-width: 0.75;
+  stroke-linejoin: round;
+}
+.mapa__grade line {
+  stroke: var(--cor-border);
+  stroke-width: 0.5;
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------ marcadores */
+
+.mapa__marcadores {
+  position: absolute;
+  inset: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mapa__marcadores > li {
+  position: absolute;
+  /* O ponto de ancoragem é o centro do marcador, e não o canto: é a coordenada
+     geográfica que ele representa. */
+  transform: translate(-50%, -50%);
+}
+
+.mapa__marcador {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--cor-surface);
+  background: var(--cor-primary);
+  /* `text-on-accent`, e não um `-fg` por estado: aqueles não existem no
+     conjunto de tokens, e a cor caía silenciosamente para a herdada — texto
+     escuro sobre o âmbar, reprovado no gate de contraste. */
+  color: var(--cor-text-on-accent);
+  font-size: var(--t-12);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 0;
+  min-height: 0; /* o tamanho vem do peso do ponto, não do alvo padrão */
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.32);
+  transition: transform 120ms ease;
+}
+.mapa__marcador:hover,
+.mapa__marcador:focus-visible {
+  transform: scale(1.14);
+  z-index: 2;
+}
+.mapa__marcador[data-tom='atencao'] {
+  background: var(--cor-atencao-mark);
+  color: var(--cor-text-on-accent);
+}
+.mapa__marcador[data-tom='critico'] {
+  background: var(--cor-critico-mark);
+  color: var(--cor-text-on-accent);
+}
+/* Agrupamento tem anel duplo: a forma distingue "vários" de "um" sem depender
+   de o usuário ler o número. */
+.mapa__marcador[data-grupo] {
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--cor-primary) 26%, transparent),
+    0 1px 4px rgb(0 0 0 / 0.32);
+}
+.mapa__marcador[data-destacado] {
+  outline: 3px solid var(--cor-focus-ring);
+  outline-offset: 2px;
+  z-index: 3;
+}
+
+.mapa__balao {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: var(--cor-surface-raised);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  padding: var(--e2) var(--e3);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 4;
+  display: grid;
+  gap: 2px;
+  font-size: var(--t-13);
+}
+.mapa__balao span {
+  color: var(--cor-text-muted);
+  font-size: var(--t-12);
+}
+
+/* -------------------------------------------------------------- controles */
+
+.mapa__sobreposicao {
+  position: absolute;
+  inset-block-start: var(--e3);
+  inset-inline: var(--e3);
+  display: flex;
+  gap: var(--e2);
+  flex-wrap: wrap;
+  align-items: center;
+  z-index: 5;
+}
+.mapa__sobreposicao:empty {
+  display: none;
+}
+
+.mapa__zoom {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: var(--e3);
+  transform: translateY(-50%);
+  display: grid;
+  gap: 1px;
+  z-index: 5;
+  border-radius: var(--raio-1);
+  overflow: hidden;
+  border: 1px solid var(--cor-border-strong);
+}
+.mapa__zoom button {
+  width: var(--alvo-toque);
+  height: var(--alvo-toque);
+  border: 0;
+  background: var(--cor-surface-raised);
+  color: var(--cor-text);
+  font-size: var(--t-16);
+  cursor: pointer;
+}
+.mapa__zoom button:hover {
+  background: var(--cor-surface-sunken);
+}
+
+.mapa__rodape {
+  position: absolute;
+  inset-block-end: var(--e3);
+  inset-inline: var(--e3);
+  display: flex;
+  gap: var(--e3);
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  z-index: 5;
+  pointer-events: none;
+}
+.mapa__rodape > * {
+  pointer-events: auto;
+}
+
+.mapa__escala {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  font-size: var(--t-12);
+  color: var(--cor-text-secondary);
+  background: color-mix(in srgb, var(--cor-surface) 85%, transparent);
+  padding: 2px var(--e2);
+  border-radius: var(--raio-1);
+}
+.mapa__escala__barra {
+  height: 3px;
+  background: var(--cor-text-secondary);
+  border-radius: 2px;
+}
+
+/* Contagens sobre o mapa, no padrão do exemplo de referência. */
+.mapa__contagem {
+  display: flex;
+  gap: var(--e3);
+  align-items: center;
+  background: var(--cor-surface-raised);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  padding: var(--e2) var(--e3);
+  font-size: var(--t-13);
+}
+.mapa__contagem strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------- painel lateral da tela */
+
+.mapa-painel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+  gap: var(--e4);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .mapa-painel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mapa-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e2);
+  max-height: 520px;
+  overflow-y: auto;
+}
+.mapa-lista button {
+  width: 100%;
+  text-align: start;
+  display: grid;
+  gap: 2px;
+  padding: var(--e3);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-1);
+  background: var(--cor-surface);
+  cursor: pointer;
+  color: inherit;
+}
+.mapa-lista button:hover {
+  background: var(--cor-surface-sunken);
+}
+.mapa-lista button[aria-current='true'] {
+  border-color: var(--cor-primary);
+  background: var(--cor-primary-subtle-bg);
+}
+.mapa-lista__nome {
+  font-weight: 640;
+  font-size: var(--t-14);
+}
+.mapa-lista__local {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+}

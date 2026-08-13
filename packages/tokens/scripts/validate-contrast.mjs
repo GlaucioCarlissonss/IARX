@@ -76,6 +76,11 @@ function regrasContraste(tema) {
     add(`${s} / ${s}-bg`, s, `${s}-bg`, texto_normal, 'WCAG 1.4.3 rótulo sobre chip')
     add(`${s}-mark / bg`, `${s}-mark`, 'bg', componente_ui, 'WCAG 1.4.11 marcador de estado')
     add(`${s}-mark / surface`, `${s}-mark`, 'surface', componente_ui, 'WCAG 1.4.11 marcador de estado')
+    // O marcador do mapa carrega a contagem dentro do disco colorido: ali o
+    // `-mark` deixa de ser só uma marca e passa a ser fundo de texto, e o
+    // limite sobe de 3:1 para 4,5:1. Este par foi acrescentado depois de um
+    // defeito real — o número saía com a cor herdada sobre o âmbar.
+    add(`text-on-accent / ${s}-mark`, 'text-on-accent', `${s}-mark`, texto_normal, 'WCAG 1.4.3 contagem no marcador do mapa')
   }
 
   // Limites de componente

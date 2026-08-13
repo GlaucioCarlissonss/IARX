@@ -73,6 +73,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [L — Lacunas funcionais](docs/anexos/L-lacunas-funcionais.md) | Especificação dos sete módulos faltantes: NF de compra, franquia, preço, usuários, portal do cliente, consumo e mapa — com cronograma e decisões pendentes |
 | [M — Decisões de mercado](docs/anexos/M-decisoes-mercado-brasileiro.md) | ADR das treze decisões pendentes do Anexo L, resolvidas pela regra brasileira: CNPJ e grupo econômico, tributos na aquisição, retenção fiscal, contagem A3/duplex, reajuste, autenticação e mapa — com o custo de reverter cada uma |
 | [N — Nota fiscal de compra](docs/anexos/N-nota-fiscal-de-compra.md) | Módulo 1 implementado: composição do custo do imobilizado, rateio que fecha ao centavo, chave de acesso, XML como fonte, segregação de funções e o defeito de acessibilidade que os testes acharam |
+| [O — Mapa geográfico](docs/anexos/O-mapa-geografico.md) | Módulo 7 implementado: mapa vetorial interativo dentro da aplicação, por que a decisão D-12 mudou, coordenadas reais no lugar de pixels, e os três defeitos que os testes acharam |
 
 ---
 
@@ -89,11 +90,11 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 9 telas, 14 formulários de escrita, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 72 testes de axe, teclado, formulários, permissões, entrada fiscal e domínio |
+| `apps/web` | Aplicação React + TypeScript: 10 telas, 14 formulários de escrita, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 86 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
 | `packages/db` | 10 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra | `npm run db:test` — 35 assertivas de invariante contra PostgreSQL real |
-| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 188/188 verificações |
+| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 198/198 verificações |
 | `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança | Bloqueiam merge |
 
 ```bash
@@ -114,6 +115,11 @@ Ver [Anexo J](docs/anexos/J-api-implementacao.md).
 **Domínio da base de demonstração:** locação de impressoras e computadores corporativos —
 multifuncionais, laser, térmicas, desktops, notebooks, thin clients e nobreaks, com cobrança por
 franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-frontend.md).
+
+**O mapa é um mapa.** A distribuição geográfica é interativa dentro da aplicação — projeção Web
+Mercator, coordenadas reais, agrupamento, zoom e arrasto — e não um botão que abre o Google Maps
+noutra aba. A aba que abre não conhece os filtros, não sabe quem está com crédito bloqueado e não
+volta. Ver [Anexo O](docs/anexos/O-mapa-geografico.md).
 
 **O ativo nasce da nota.** Valor de aquisição, início da depreciação e prazo de garantia vêm da
 nota fiscal de compra — não são digitados no cadastro do equipamento. O custo do imobilizado é o

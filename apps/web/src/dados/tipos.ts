@@ -98,10 +98,17 @@ export interface Modelo {
 export interface Regiao {
   id: string
   nome: string
+  cidade: string
   uf: string
-  /** Coordenadas aproximadas, usadas apenas na visão geográfica. */
-  x: number
-  y: number
+  /**
+   * Coordenadas geográficas reais.
+   *
+   * Antes eram `x`/`y` em pixels de um mapa que nunca foi construído. Latitude
+   * e longitude sobrevivem a qualquer projeção — é o que permite trocar o
+   * desenho do mapa sem recalcular a posição de nenhum marcador.
+   */
+  lat: number
+  lon: number
 }
 
 export interface Filial {
@@ -123,6 +130,9 @@ export interface Cliente {
   diasAtrasoMaximo: number
   desde: string
   contato: { nome: string; email: string; telefone: string }
+  /** Sede do cliente. Deriva da praça, com deslocamento próprio do endereço. */
+  lat: number
+  lon: number
 }
 
 export interface LocalOperacao {
@@ -131,6 +141,8 @@ export interface LocalOperacao {
   nome: string
   endereco: string
   regiaoId: string
+  lat: number
+  lon: number
 }
 
 export interface ContratoItem {

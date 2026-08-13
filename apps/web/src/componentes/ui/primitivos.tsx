@@ -64,6 +64,15 @@ interface CampoBaseProps {
    * apontar para ele com uma âncora e levar o foco ao input errado.
    */
   nome?: string
+  /**
+   * Esconde o rótulo visualmente, sem removê-lo da árvore de acessibilidade.
+   *
+   * Para o caso em que o contexto visual já diz o que é o campo — a busca
+   * sobreposta ao mapa, com lupa e placeholder — mas o leitor de tela ainda
+   * precisa do nome. Usar só `placeholder` como rótulo é o erro clássico: ele
+   * some ao digitar, e alguns leitores nem o anunciam.
+   */
+  rotuloOculto?: boolean
   children: (props: { id: string; descricaoId?: string; invalido: boolean }) => ReactNode
 }
 
@@ -72,7 +81,7 @@ interface CampoBaseProps {
  * Erro é vinculado por aria-describedby e marcado com aria-invalid — o leitor
  * de tela recebe os dois, sem a tela precisar cuidar disso.
  */
-export function Campo({ rotulo, dica, erro, nome, children }: CampoBaseProps) {
+export function Campo({ rotulo, dica, erro, nome, rotuloOculto, children }: CampoBaseProps) {
   const gerado = useId()
   const id = nome ? `campo-${nome}` : gerado
   const dicaId = dica ? `${id}-dica` : undefined
@@ -81,7 +90,7 @@ export function Campo({ rotulo, dica, erro, nome, children }: CampoBaseProps) {
 
   return (
     <div className="campo">
-      <label className="campo__rotulo" htmlFor={id}>
+      <label className={rotuloOculto ? 'so-leitor' : 'campo__rotulo'} htmlFor={id}>
         {rotulo}
       </label>
       {children({ id, descricaoId, invalido: Boolean(erro) })}
@@ -104,11 +113,12 @@ interface EntradaProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'>
   dica?: string
   erro?: string
   nome?: string
+  rotuloOculto?: boolean
 }
 
-export function Entrada({ rotulo, dica, erro, nome, ...resto }: EntradaProps) {
+export function Entrada({ rotulo, dica, erro, nome, rotuloOculto, ...resto }: EntradaProps) {
   return (
-    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome}>
+    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome} rotuloOculto={rotuloOculto}>
       {({ id, descricaoId, invalido }) => (
         <input id={id} aria-describedby={descricaoId} aria-invalid={invalido || undefined} {...resto} />
       )}
@@ -121,12 +131,13 @@ interface SelecaoProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id
   dica?: string
   erro?: string
   nome?: string
+  rotuloOculto?: boolean
   opcoes: { valor: string; texto: string }[]
 }
 
-export function Selecao({ rotulo, dica, erro, nome, opcoes, ...resto }: SelecaoProps) {
+export function Selecao({ rotulo, dica, erro, nome, rotuloOculto, opcoes, ...resto }: SelecaoProps) {
   return (
-    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome}>
+    <Campo rotulo={rotulo} dica={dica} erro={erro} nome={nome} rotuloOculto={rotuloOculto}>
       {({ id, descricaoId, invalido }) => (
         <select id={id} aria-describedby={descricaoId} aria-invalid={invalido || undefined} {...resto}>
           {opcoes.map((o) => (

@@ -17,6 +17,7 @@ const ROTAS = [
   { hash: '#/parque', nome: 'parque instalado', titulo: 'Parque instalado' },
   { hash: '#/contratos', nome: 'contratos', titulo: 'Contratos' },
   { hash: '#/clientes', nome: 'clientes', titulo: 'Clientes' },
+  { hash: '#/mapa', nome: 'mapa', titulo: 'Mapa de distribuição' },
   { hash: '#/notas-fiscais', nome: 'notas fiscais', titulo: 'Notas fiscais de compra' },
   { hash: '#/chamados', nome: 'chamados', titulo: 'Chamados técnicos' },
   { hash: '#/estoque', nome: 'estoque', titulo: 'Peças e suprimentos' },
@@ -1167,4 +1168,221 @@ test('diálogo só de leitura que rola é alcançável pelo teclado', async ({ p
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: 'Registrar entrada' }).click()
   await expect(page.locator('.dialogo__corpo')).not.toHaveAttribute('tabindex', '0')
+})
+
+/* ==================================================================== */
+/* Mapa de distribuição                                                 */
+/* ==================================================================== */
+
+/**
+ * O requisito que estes testes protegem: o mapa é um mapa, aqui dentro.
+ *
+ * Um quadro que abre o Google Maps em outra aba resolve o problema errado.
+ * A aba que abre não conhece os filtros, não sabe quais clientes estão com
+ * crédito bloqueado e não volta — e a pessoa que precisava decidir de onde
+ * despachar um técnico perdeu o contexto no caminho.
+ */
+
+test('o mapa é desenhado na própria tela, não é um link para fora', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  // Geometria de verdade: um caminho SVG por unidade da federação.
+  const contornos = page.locator('.mapa__uf')
+  await expect(contornos.first()).toBeVisible()
+  expect(await contornos.count()).toBe(27)
+
+  // O caminho é um polígono fechado com muitos vértices — não um retângulo
+  // decorativo nem um ícone de "abrir mapa".
+  const d = await contornos.first().getAttribute('d')
+  expect(d.startsWith('M')).toBe(true)
+  expect(d.trim().endsWith('Z')).toBe(true)
+  expect(d.split('L').length).toBeGreaterThan(10)
+
+  // Nada de iframe, nada de link para provedor externo, nada de imagem remota:
+  // o arquivo é único e abre por duplo clique — uma dependência de rede aqui
+  // apareceria como um retângulo cinza.
+  await expect(page.locator('iframe')).toHaveCount(0)
+  await expect(page.locator('a[href*="google"], a[href*="openstreetmap"], a[href*="maps"]')).toHaveCount(0)
+  await expect(page.locator('img[src^="http"], image[href^="http"]')).toHaveCount(0)
+})
+
+test('marcadores são botões reais, com nome que diz o que agrupam', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const marcadores = page.locator('.mapa__marcador')
+  await expect(marcadores.first()).toBeVisible()
+
+  // Cada marcador é <button>: alcançável por Tab, acionável por Enter, com
+  // nome acessível. Um <circle> no SVG não é nada disso.
+  const nomes = await marcadores.evaluateAll((els) =>
+    els.map((e) => ({ tag: e.tagName, rotulo: e.getAttribute('aria-label') })),
+  )
+  expect(nomes.every((n) => n.tag === 'BUTTON')).toBe(true)
+  expect(nomes.some((n) => /agrupamento de \d+ locais/i.test(n.rotulo))).toBe(true)
+  expect(nomes.some((n) => /ativo\(s\)/i.test(n.rotulo))).toBe(true)
+
+  await marcadores.first().focus()
+  await expect(marcadores.first()).toBeFocused()
+})
+
+test('o agrupamento se abre ao aproximar — o critério é o que o olho vê', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const maiorGrupo = async () => {
+    const contagens = await page
+      .locator('.mapa__marcador[data-grupo]')
+      .evaluateAll((els) => els.map((e) => Number(e.textContent)))
+    return contagens.length === 0 ? 0 : Math.max(...contagens)
+  }
+
+  const antes = await maiorGrupo()
+  expect(antes).toBeGreaterThan(1)
+
+  // Clicar num agrupamento aproxima, e o que estava junto se separa. A prova
+  // é o maior grupo encolher — a contagem total de marcadores visíveis cai
+  // junto, porque aproximar também tira pontos da moldura.
+  await page.locator('.mapa__marcador[data-grupo]').first().click()
+  await page.waitForTimeout(250)
+  await page.locator('.mapa__marcador[data-grupo]').first().click()
+  await page.waitForTimeout(250)
+
+  expect(await maiorGrupo()).toBeLessThan(antes)
+})
+
+test('o mapa é operável só pelo teclado', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const tela = page.locator('.mapa__tela')
+  await tela.focus()
+  await expect(tela).toBeFocused()
+  await expect(tela).toHaveAttribute('aria-label', /setas.*Home/is)
+
+  // A escala muda ao aproximar: é o indicador de que a tecla fez efeito, e é
+  // um dado do mapa, não um detalhe de implementação.
+  const escalaInicial = await page.locator('.mapa__escala').innerText()
+  await page.keyboard.press('+')
+  await page.keyboard.press('+')
+  await page.keyboard.press('+')
+  await page.waitForTimeout(150)
+  expect(await page.locator('.mapa__escala').innerText()).not.toBe(escalaInicial)
+
+  // Home reenquadra o Brasil — sem isso, quem se perde navegando fica perdido.
+  await page.keyboard.press('Home')
+  await page.waitForTimeout(150)
+  expect(await page.locator('.mapa__escala').innerText()).toBe(escalaInicial)
+})
+
+test('a barra de escala acompanha o zoom', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  // Mapa sem escala não permite julgar distância, e distância é o que decide
+  // roteiro de técnico.
+  const escala = page.locator('.mapa__escala')
+  await expect(escala).toContainText(/^\d[\d.]*\s(km|m)$/m)
+
+  await page.getByRole('button', { name: 'Aproximar o mapa' }).click()
+  await page.getByRole('button', { name: 'Aproximar o mapa' }).click()
+  await page.waitForTimeout(150)
+  await expect(escala).toContainText(/(km|m)/)
+})
+
+test('crédito bloqueado é visível no mapa, não escondido no agrupamento', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  // A massa tem um cliente bloqueado e dois em observação. O tom do grupo é o
+  // do pior membro: um bloqueado escondido dentro de um marcador verde é
+  // exatamente o que não pode acontecer.
+  await expect(page.locator('.mapa__marcador[data-tom="critico"]').first()).toBeVisible()
+
+  // E não depende só de cor: o recorte lista os mesmos clientes por escrito.
+  await page.getByLabel('Recorte').selectOption('inadimplente')
+  await page.waitForTimeout(200)
+  const lista = page.locator('.mapa-lista button')
+  expect(await lista.count()).toBeGreaterThan(0)
+  await expect(lista.first()).toContainText(/ativo\(s\)/)
+})
+
+test('filtrar reduz marcadores e lista juntos', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const antes = await page.locator('.mapa-lista button').count()
+  expect(antes).toBeGreaterThan(3)
+
+  await page.getByLabel('Buscar cliente, cidade ou UF').fill('São Paulo')
+  await page.waitForTimeout(250)
+
+  const depois = await page.locator('.mapa-lista button').count()
+  expect(depois).toBeGreaterThan(0)
+  expect(depois).toBeLessThan(antes)
+
+  // O mapa e a lista contam a mesma coisa — se divergissem, uma das duas
+  // estaria mentindo, e não haveria como saber qual.
+  await expect(page.locator('.mapa__contagem')).toContainText(String(depois))
+})
+
+test('o mapa de calor troca marcadores por densidade', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+  await expect(page.locator('.mapa__marcador').first()).toBeVisible()
+
+  const calor = page.getByRole('button', { name: 'Mapa de calor' })
+  await calor.click()
+  await expect(calor).toHaveAttribute('aria-pressed', 'true')
+
+  await expect(page.locator('.mapa__marcador')).toHaveCount(0)
+  expect(await page.locator('circle[fill="url(#mapa-calor)"]').count()).toBeGreaterThan(0)
+})
+
+test('nada do mapa existe só na forma visual: a aba de análises repete em tabela', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const metricas = await page.locator('.grade--metricas').first().innerText()
+  const totalCartao = Number(metricas.match(/Ativos mapeados\s+([\d.]+)/)[1].replace(/\D/g, ''))
+
+  await page.getByRole('tab', { name: /Análises/ }).click()
+  const tabela = page.getByRole('table', { name: /Clientes, ativos e receita por praça/i })
+  await expect(tabela).toBeVisible()
+
+  // A soma da coluna reproduz o KPI. É a asserção que impede a tabela de ser
+  // um enfeite desatualizado ao lado do mapa.
+  const somaLinhas = await tabela.locator('tbody tr').evaluateAll((linhas) =>
+    linhas.reduce((s, l) => s + Number(l.children[2].textContent.replace(/\D/g, '')), 0),
+  )
+  expect(somaLinhas).toBe(totalCartao)
+})
+
+test('o painel do dia traz o mapa embutido, com atalho para a tela cheia', async ({ page }) => {
+  await abrir(page)
+
+  const cartao = page.getByRole('region', { name: 'Distribuição geográfica' })
+  await expect(cartao).toBeVisible()
+  // Mapa de verdade dentro do cartão, não uma miniatura que abre outra aba.
+  await expect(cartao.locator('.mapa__uf').first()).toBeVisible()
+  await expect(cartao.locator('.mapa__marcador').first()).toBeVisible()
+
+  await cartao.getByRole('button', { name: 'Expandir' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Mapa de distribuição' })).toBeVisible()
+})
+
+test('exportar entrega o CSV das coordenadas', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Exportar CSV' }).click()
+  const arquivo = await download
+
+  expect(arquivo.suggestedFilename()).toBe('distribuicao-geografica.csv')
+})
+
+test('axe no mapa com marcadores, calor e análises', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+  let v = await violacoes(page)
+  expect(v, `mapa com marcadores:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('button', { name: 'Mapa de calor' }).click()
+  v = await violacoes(page)
+  expect(v, `mapa de calor:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('tab', { name: /Análises/ }).click()
+  v = await violacoes(page)
+  expect(v, `aba de análises:\n  ${descrever(v)}`).toEqual([])
 })

@@ -329,6 +329,13 @@ export function criarCliente(base: BaseDados, dados: DadosCliente) {
   const filial = base.filiais.find((f) => f.id === dados.filialId)
   if (!filial) return falha('NAO_ENCONTRADO', 'Filial não encontrada.', { campo: 'filialId' })
 
+  // Coordenada da praça da filial responsável, sem geocodificar o endereço.
+  // O cliente aparece no mapa desde o cadastro — na cidade certa, no ponto
+  // aproximado. Geocodificar de verdade é do módulo de mapa (D-13, Anexo M):
+  // ViaCEP, depois Nominatim, com cache; até lá, a praça é a melhor
+  // aproximação honesta, e o mapa a marca como não confirmada.
+  const praca = base.regioes.find((r) => r.id === filial.regiaoId) ?? base.regioes[0]!
+
   const cliente = {
     id: novoId('cli'),
     cnpj: mascaraCnpj(cnpj),
@@ -345,6 +352,8 @@ export function criarCliente(base: BaseDados, dados: DadosCliente) {
       email: dados.contatoEmail.trim(),
       telefone: dados.contatoTelefone.trim(),
     },
+    lat: praca.lat,
+    lon: praca.lon,
   }
   base.clientes.push(cliente)
   return sucesso(cliente)

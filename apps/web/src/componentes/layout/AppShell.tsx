@@ -31,6 +31,7 @@ const ITENS: ItemNav[] = [
   { para: '/parque', rotulo: 'Parque instalado', glifo: '▤', permissao: 'equipamento:ler', grupo: 'Operação' },
   { para: '/contratos', rotulo: 'Contratos', glifo: '❐', permissao: 'contrato:ler', grupo: 'Operação' },
   { para: '/clientes', rotulo: 'Clientes', glifo: '⚯', permissao: 'cliente:ler', grupo: 'Operação' },
+  { para: '/mapa', rotulo: 'Mapa', glifo: '◉', permissao: 'mapa:ler', grupo: 'Operação' },
   {
     para: '/notas-fiscais',
     rotulo: 'Notas fiscais',

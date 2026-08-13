@@ -6,6 +6,7 @@ import {
   REGIOES,
   categoriaPorCodigo,
   modeloPorId,
+  regiaoPorId,
 } from './catalogo'
 import { gerarFornecedores, gerarNotas } from './gerar-notas'
 import type {
@@ -91,6 +92,33 @@ class Sorteio {
 /* -------------------------------------------------------------------------- */
 /* Utilitários de domínio                                                     */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Espalha um ponto ao redor de uma praça, em graus.
+ *
+ * A correção por `cos(lat)` não é preciosismo: um grau de longitude em Manaus
+ * mede quase 111 km e em Porto Alegre, 96 km. Sem ela, os clientes do Sul
+ * ficariam visivelmente mais espalhados no eixo leste-oeste que os do Norte —
+ * um artefato de projeção que nada no negócio explica.
+ */
+function dispersar(
+  s: Sorteio,
+  regiao: { lat: number; lon: number },
+  raioGraus: number,
+  baseLat?: number,
+  baseLon?: number,
+): { lat: number; lon: number } {
+  const lat0 = baseLat ?? regiao.lat
+  const lon0 = baseLon ?? regiao.lon
+  const angulo = s.real(0, Math.PI * 2)
+  // Raiz do sorteio para a densidade ficar uniforme no disco; sem ela os
+  // pontos se acumulam no centro.
+  const raio = raioGraus * Math.sqrt(s.real(0, 1))
+  return {
+    lat: Number((lat0 + raio * Math.sin(angulo)).toFixed(5)),
+    lon: Number((lon0 + (raio * Math.cos(angulo)) / Math.cos((lat0 * Math.PI) / 180)).toFixed(5)),
+  }
+}
 
 /** Gera CNPJ fictício com dígitos verificadores válidos. */
 export function gerarCnpj(s: Sorteio): string {
@@ -334,6 +362,11 @@ export function gerarBase(semente = 20260730): BaseDados {
         email: `compras@${primeiroNome}.com.br`,
         telefone: `(${s.int(11, 85)}) ${s.int(3000, 9999)}-${s.int(1000, 9999)}`,
       },
+      // Deslocamento dentro da mancha urbana, não coordenada da capital.
+      // Sem ele, todos os clientes da mesma praça cairiam no mesmo pixel: o
+      // agrupamento do mapa nunca se abriria por mais que se aproximasse, e a
+      // tela mentiria dizendo "1 local" onde há seis.
+      ...dispersar(s, regiao, 0.28),
     }
   })
 
@@ -351,6 +384,9 @@ export function gerarBase(semente = 20260730): BaseDados {
             : s.um(['Filial centro', 'Unidade industrial', 'Depósito', 'Loja shopping', 'Almoxarifado', 'Unidade norte', 'Recepção']),
         endereco: `${s.um(['Av.', 'R.', 'Rod.'])} ${s.um(['das Nações', 'Brasil', 'Santo Antônio', 'Independência', 'dos Ipês', 'Marechal Deodoro'])}, ${s.int(50, 3800)}`,
         regiaoId: c.regiaoId,
+        // Unidades do mesmo cliente ficam próximas entre si, mas não no mesmo
+        // ponto — é o que a operação vê em campo.
+        ...dispersar(s, regiaoPorId.get(c.regiaoId) ?? REGIOES[0]!, 0.12, c.lat, c.lon),
       })
     }
   })
