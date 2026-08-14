@@ -15,7 +15,20 @@ const pegar = (re, nome) => {
   return m
 }
 
-const titulo = pegar(/<title>([\s\S]*?)<\/title>/, '<title>')[1]
+/*
+ * Nome do artefato publicado, deliberadamente **fixo**.
+ *
+ * O título do documento mudou ao longo do desenvolvimento; o nome na galeria
+ * do usuário, não. Ele é como a pessoa reencontra o artefato entre vários, e
+ * trocá-lo a cada publicação faria o mesmo endereço aparecer com outro nome —
+ * que, na prática, é perdê-lo de vista.
+ */
+const NOME_ARTEFATO = 'IARX — LTI'
+
+// Lido só para falhar cedo se o build vier sem <title>: um documento sem
+// título é sinal de que o bundle saiu quebrado.
+pegar(/<title>([\s\S]*?)<\/title>/, '<title>')
+const titulo = NOME_ARTEFATO
 // O plugin de arquivo único move o <script> embutido para o <head>, então
 // coletamos estilos e scripts do documento inteiro, não apenas do <body>.
 const estilos = [...doc.matchAll(/<style[^>]*>[\s\S]*?<\/style>/g)].map((m) => m[0])
