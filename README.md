@@ -74,6 +74,7 @@ por ativo, a taxa de ocupação real e o custo de manutenção por hora locada.
 | [M — Decisões de mercado](docs/anexos/M-decisoes-mercado-brasileiro.md) | ADR das treze decisões pendentes do Anexo L, resolvidas pela regra brasileira: CNPJ e grupo econômico, tributos na aquisição, retenção fiscal, contagem A3/duplex, reajuste, autenticação e mapa — com o custo de reverter cada uma |
 | [N — Nota fiscal de compra](docs/anexos/N-nota-fiscal-de-compra.md) | Módulo 1 implementado: composição do custo do imobilizado, rateio que fecha ao centavo, chave de acesso, XML como fonte, segregação de funções e o defeito de acessibilidade que os testes acharam |
 | [O — Mapa geográfico](docs/anexos/O-mapa-geografico.md) | Módulo 7 implementado: mapa vetorial interativo dentro da aplicação, por que a decisão D-12 mudou, coordenadas reais no lugar de pixels, e os três defeitos que os testes acharam |
+| [P — Núcleo comercial e consumo](docs/anexos/P-nucleo-comercial-e-consumo.md) | Itens 0, 2, 3 e 6 do cronograma: eixo de cliente com RLS restritiva, tabelas de franquia e preço versionadas, simulador que usa a mesma resolução da fatura, e consumo derivado de leitura |
 
 ---
 
