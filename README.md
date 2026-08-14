@@ -93,9 +93,9 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 | `apps/web` | Aplicação React + TypeScript: 10 telas, 14 formulários de escrita, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 86 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
-| `packages/db` | 10 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra | `npm run db:test` — 35 assertivas de invariante contra PostgreSQL real |
+| `packages/db` | 11 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente | `npm run db:test` — 45 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 198/198 verificações |
-| `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança | Bloqueiam merge |
+| `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança — inclusive a que reprova política de locatário permissiva | Bloqueiam merge |
 
 ```bash
 npm run dev           # servidor de desenvolvimento da aplicação
@@ -138,6 +138,7 @@ locação de bem móvel não é fato gerador de ICMS (Súmula 573 do STF). Ver
 | `RN-029` idempotência | Índice único `(tenant_id, chave)` serializando reenvios | `apps/api/test` — 5 casos, incluindo replay e chave divergente |
 | `RN-L01` nota integrada imutável | Gatilhos no cabeçalho, nos itens e nas séries | `tests/04` — 4 tentativas de alteração, todas recusadas |
 | `RN-L05` rateio fecha com a nota | `app.ratear_custo_nota` com resíduo concentrado | `tests/04` — 2 casos, incluindo acessório negativo |
+| `RN-L12` isolamento do locatário | Política **restritiva** sobre a de tenant, com predicado único | `tests/05` — 10 casos, incluindo o concorrente do mesmo fornecedor |
 
 **E o que a API acrescenta sobre isso:** traduz a recusa do banco em `problem+json` com o contrato
 conflitante, a data de liberação e os ativos equivalentes livres — de modo que a mensagem de erro

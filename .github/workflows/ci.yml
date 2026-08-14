@@ -274,3 +274,42 @@ jobs:
           done
           [ "$faltando" -eq 0 ] && echo "todas as tabelas de negócio têm RLS habilitada"
           exit $faltando
+
+      - name: Política do locatário é restritiva, nunca permissiva
+        run: |
+          # D-01 exige que o eixo de cliente **restrinja** o de tenant. O
+          # PostgreSQL combina políticas permissivas com OU: uma política de
+          # cliente esquecida como permissiva abriria acesso em vez de fechar,
+          # e o vazamento seria entre locatários do mesmo fornecedor — que no
+          # outsourcing costumam ser concorrentes diretos.
+          cd packages/db/supabase/migrations
+          # Nota: `%I_leitura_cliente` da 0006 é outra coisa — política
+          # permissiva de LEITURA no eixo de tenant, para o PostgREST. O alvo
+          # aqui é só o sufixo `_cliente`, do eixo de locatário.
+          suspeitas=$(grep -nE "create policy [^ ]*[^a-z_]cliente on|create policy %I_cliente on" *.sql || true)
+          if [ -n "$suspeitas" ]; then
+            if echo "$suspeitas" | grep -qv 'as restrictive'; then
+              echo "::error::política de cliente sem AS RESTRICTIVE (ver D-01)"
+              echo "$suspeitas"
+              exit 1
+            fi
+          fi
+          # O predicado precisa ser o único: uma política com o nome certo e o
+          # corpo escrito à mão passaria pela verificação acima e divergiria da
+          # regra de grupo econômico sem que nada acusasse.
+          if ! grep -q 'app.cliente_visivel' 0011_eixo_cliente.sql; then
+            echo "::error::eixo de cliente sem o predicado app.cliente_visivel (ver D-01)"
+            exit 1
+          fi
+          echo "eixo de cliente restringe, e usa o predicado único"
+
+      - name: Contexto de cliente também é local à transação
+        run: |
+          # Mesmo raciocínio de app.tenant_id: um SET de sessão para
+          # app.cliente_id sob pooler em modo transação vazaria o locatário
+          # para a requisição seguinte de outro locatário.
+          if [ -d apps/api/src ] && grep -rInE "set_config\(\s*'app\.cliente_id'[^)]*,\s*false\s*\)" apps/api/src; then
+            echo "::error::set_config de app.cliente_id com is_local=false"
+            exit 1
+          fi
+          echo "contexto de cliente sempre local à transação"

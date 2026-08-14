@@ -188,6 +188,8 @@ delete from public.contrato where tenant_id in (:'t1', :'t2');
 delete from public.cliente  where tenant_id in (:'t1', :'t2');
 delete from public.filial   where tenant_id in (:'t1', :'t2');
 delete from public.empresa  where tenant_id in (:'t1', :'t2');
+-- Perfis de cliente são provisionados por gatilho na criação do tenant (0011).
+delete from public.perfil   where tenant_id in (:'t1', :'t2');
 delete from public.tenant   where id in (:'t1', :'t2');
 
 \echo '== 02_rn028_isolamento_tenant: TODOS OS CASOS APROVADOS =='
