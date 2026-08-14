@@ -93,7 +93,7 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 | `apps/web` | Aplicação React + TypeScript: 11 telas, 14 formulários de escrita, simulador comercial, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 97 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa, política comercial e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
-| `packages/db` | 12 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente, franquia e preço | `npm run db:test` — 60 assertivas de invariante contra PostgreSQL real |
+| `packages/db` | 13 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente, franquia e preço, consumo | `npm run db:test` — 69 assertivas de invariante contra PostgreSQL real |
 | `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 198/198 verificações |
 | `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança — inclusive a que reprova política de locatário permissiva | Bloqueiam merge |
 
@@ -146,6 +146,8 @@ locação de bem móvel não é fato gerador de ICMS (Súmula 573 do STF). Ver
 | `RN-L05` rateio fecha com a nota | `app.ratear_custo_nota` com resíduo concentrado | `tests/04` — 2 casos, incluindo acessório negativo |
 | `RN-L12` isolamento do locatário | Política **restritiva** sobre a de tenant, com predicado único | `tests/05` — 10 casos, incluindo o concorrente do mesmo fornecedor |
 | `RN-L16` uma política por alvo e período | `EXCLUDE USING gist` sobre `daterange` | `tests/06` — 2 casos, incluindo a sucessão adjacente |
+| `RN-L28` consumo é derivado | Colunas geradas: não há caminho para digitá-lo | `tests/07` — 2 casos |
+| `RN-L29` a série de consumo fecha | Gatilho comparando com a competência anterior | `tests/07` — 1 caso, citando a leitura que não fecha |
 
 **E o que a API acrescenta sobre isso:** traduz a recusa do banco em `problem+json` com o contrato
 conflitante, a data de liberação e os ativos equivalentes livres — de modo que a mensagem de erro
