@@ -18,6 +18,7 @@ const ROTAS = [
   { hash: '#/contratos', nome: 'contratos', titulo: 'Contratos' },
   { hash: '#/clientes', nome: 'clientes', titulo: 'Clientes' },
   { hash: '#/mapa', nome: 'mapa', titulo: 'Mapa de distribuição' },
+  { hash: '#/comercial', nome: 'política comercial', titulo: 'Política comercial' },
   { hash: '#/notas-fiscais', nome: 'notas fiscais', titulo: 'Notas fiscais de compra' },
   { hash: '#/chamados', nome: 'chamados', titulo: 'Chamados técnicos' },
   { hash: '#/estoque', nome: 'estoque', titulo: 'Peças e suprimentos' },
@@ -1385,4 +1386,172 @@ test('axe no mapa com marcadores, calor e análises', async ({ page }) => {
   await page.getByRole('tab', { name: /Análises/ }).click()
   v = await violacoes(page)
   expect(v, `aba de análises:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ==================================================================== */
+/* Política comercial — franquia, preço e simulador                     */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem: a proposta e a fatura contando a mesma história.
+ *
+ * O simulador reusa a mesma resolução que o faturamento — precedência de
+ * tabela, franquia por especificidade, desconto sem acúmulo. Se cotasse por uma
+ * regra e faturasse por outra, a divergência só apareceria no primeiro
+ * fechamento, na frente do cliente, sobre um valor que ele já assinou.
+ */
+
+/** Lê um KPI da faixa de métricas pelo rótulo. */
+async function metrica(page, rotulo) {
+  const texto = await page.locator('.grade--metricas').first().innerText()
+  const m = texto.match(new RegExp(`${rotulo}\\s+([^\\n]+)`))
+  return m ? m[1].trim() : null
+}
+
+const emReais = (t) => Number(String(t).replace(/[^\d,]/g, '').replace(',', '.'))
+
+test('o simulador separa recorrente de evento', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+
+  const mensal = emReais(await metrica(page, 'Mensal líquido'))
+  const instalacao = emReais(await metrica(page, 'Instalação'))
+  const primeira = emReais(await metrica(page, 'Primeira fatura'))
+
+  expect(mensal).toBeGreaterThan(0)
+  expect(instalacao).toBeGreaterThan(0)
+
+  // Instalação entra na primeira fatura e **não** no MRR. Somá-la ao recorrente
+  // infla o indicador com um valor que acontece uma vez, e o erro só aparece
+  // quando alguém compara o MRR com o extrato do mês seguinte.
+  expect(primeira).toBeCloseTo(mensal + instalacao, 1)
+  await expect(page.getByText('evento — não compõe o MRR')).toBeVisible()
+})
+
+test('volume acima da franquia vira excedente, e a memória mostra a conta', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+
+  await expect(page.getByRole('cell', { name: /dentro da franquia/ }).first()).toBeVisible()
+  const antes = emReais(await metrica(page, 'Mensal líquido'))
+
+  // O volume inicial é a própria franquia do modelo — cenário neutro. Dobrá-lo
+  // é o caso que o cliente sempre pergunta: "e se eu imprimir mais?"
+  const campo = page.getByLabel('Volume mono/mês')
+  const atual = Number(await campo.inputValue())
+  await campo.fill(String(atual * 2))
+  await page.waitForTimeout(200)
+
+  const depois = emReais(await metrica(page, 'Mensal líquido'))
+  expect(depois).toBeGreaterThan(antes)
+  await expect(page.getByText(/pág\. além/).first()).toBeVisible()
+})
+
+test('a condição do cliente vence a tabela geral', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+
+  // O nome do cliente com condição negociada é lido da própria aba de preços,
+  // e não fixado no teste: assim ele continua válido se a massa mudar, e de
+  // quebra amarra as duas abas à mesma verdade.
+  await page.getByRole('tab', { name: /Preços/ }).click()
+  const chip = page.getByText(/Cliente · /).first()
+  await expect(chip).toBeVisible()
+  const nomeCliente = (await chip.innerText()).split('Cliente · ')[1].trim()
+
+  await page.getByRole('tab', { name: /Simulador/ }).click()
+  const geral = emReais(await metrica(page, 'Mensal líquido'))
+
+  // `getByRole('combobox')`: o `aria-label` da lista repete o do campo, e um
+  // getByLabel casaria com os dois.
+  const combo = page.getByRole('combobox', { name: 'Cliente (opcional)' })
+  await combo.click()
+  await combo.fill(nomeCliente)
+  await page.getByRole('listbox', { name: 'Cliente (opcional)' }).getByRole('option').first().click()
+  await page.waitForTimeout(250)
+
+  await expect(page.getByText(/^Aplicando/)).toBeVisible()
+  const negociado = emReais(await metrica(page, 'Mensal líquido'))
+  expect(negociado).toBeLessThan(geral)
+
+  // E a memória de cálculo diz de onde veio o preço: valor sem procedência
+  // vira discussão comercial sem árbitro.
+  await expect(page.getByRole('table', { name: /Composição do valor mensal/ })).toContainText(/Condição/)
+})
+
+test('desconto reduz o recorrente e aparece na memória', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+  const antes = emReais(await metrica(page, 'Mensal líquido'))
+
+  await page.getByLabel('Desconto comercial (%)').fill('10')
+  await page.waitForTimeout(200)
+
+  const depois = emReais(await metrica(page, 'Mensal líquido'))
+  expect(depois).toBeCloseTo(antes * 0.9, 0)
+  await expect(page.getByRole('row', { name: /Desconto de 10%/ })).toBeVisible()
+})
+
+test('modelo sem política de franquia não é cotado em silêncio', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+
+  // Nobreak não tem medidor: a linha é válida e cobrada por valor fixo. O que
+  // não pode acontecer é uma multifuncional sem franquia sair com excedente
+  // zero, que cobraria todo o volume como se estivesse incluso.
+  await page.getByLabel('Modelo da linha 1').click()
+  await page.getByRole('listbox', { name: 'Modelo da linha 1' }).getByRole('option', { name: /APC/ }).first().click()
+  await page.waitForTimeout(200)
+
+  await expect(page.getByText('Sem medidor: cobrança por valor fixo mensal.')).toBeVisible()
+  expect(emReais(await metrica(page, 'Mensal líquido'))).toBeGreaterThan(0)
+})
+
+test('o total do contrato conta a instalação uma vez só', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+
+  const mensal = emReais(await metrica(page, 'Mensal líquido'))
+  const instalacao = emReais(await metrica(page, 'Instalação'))
+  const total = emReais(await metrica(page, 'Total em 36 meses'))
+
+  // 36 × recorrente + 1 × instalação. Multiplicar a instalação pelo prazo é o
+  // erro que faz uma proposta de três anos parecer 35 instalações mais cara.
+  expect(total).toBeCloseTo(mensal * 36 + instalacao, 0)
+
+  await page.getByLabel('Prazo (meses)').fill('12')
+  await page.waitForTimeout(200)
+  const total12 = emReais(await metrica(page, 'Total em 12 meses'))
+  expect(total12).toBeCloseTo(mensal * 12 + instalacao, 0)
+})
+
+test('tabela vigente diz por que não se edita', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+  await page.getByRole('tab', { name: /Franquias/ }).click()
+
+  await expect(page.getByRole('heading', { name: /Franquia padrão 2026/ })).toBeVisible()
+  await expect(page.getByText('Tabela vigente não se edita')).toBeVisible()
+  await expect(page.getByText(/reprecificaria, em silêncio/)).toBeVisible()
+
+  // A versão encerrada continua visível: é o histórico que explica por que um
+  // contrato antigo tem valores diferentes dos de hoje.
+  await expect(page.getByRole('heading', { name: /Franquia padrão 2025/ })).toBeVisible()
+  await expect(page.getByText('Encerrada').first()).toBeVisible()
+})
+
+test('a tabela de preço declara índice e periodicidade de reajuste', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+  await page.getByRole('tab', { name: /Preços/ }).click()
+
+  // Lei 10.192/01 art. 2º §1º: periodicidade inferior a um ano é nula.
+  await expect(page.getByText(/reajuste por IPCA a cada 12 meses/).first()).toBeVisible()
+  await expect(page.getByText(/nunca compõem o MRR/).first()).toBeVisible()
+})
+
+test('axe nas três abas da política comercial', async ({ page }) => {
+  await abrir(page, { hash: '#/comercial' })
+  let v = await violacoes(page)
+  expect(v, `simulador:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('tab', { name: /Franquias/ }).click()
+  v = await violacoes(page)
+  expect(v, `franquias:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('tab', { name: /Preços/ }).click()
+  v = await violacoes(page)
+  expect(v, `preços:\n  ${descrever(v)}`).toEqual([])
 })

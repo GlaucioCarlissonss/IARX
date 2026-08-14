@@ -486,10 +486,84 @@ export interface BaseDados {
   anexos: Anexo[]
   fornecedores: Fornecedor[]
   notasFiscais: NotaFiscal[]
+  tabelasFranquia: TabelaFranquia[]
+  tabelasPreco: TabelaPreco[]
+  descontos: DescontoComercial[]
   equipamentos: Equipamento[]
   tecnicos: Tecnico[]
   ordens: OrdemServico[]
   pecas: Peca[]
   faturas: Fatura[]
   indicadores: Indicadores
+}
+
+/* ------------------------------------------------- tabelas comerciais */
+
+export type TabelaStatus = 'RASCUNHO' | 'ATIVA' | 'INATIVA'
+
+/** Alvo de uma linha de tabela: exatamente um dos dois. */
+export interface AlvoTabela {
+  categoria: CategoriaCodigo | null
+  modeloId: string | null
+}
+
+export interface FranquiaItem extends AlvoTabela {
+  id: string
+  franquiaMono: number
+  franquiaColor: number
+  /** ITEM apura o excedente por ativo; CONTRATO, sobre a soma deles. */
+  escopo: 'ITEM' | 'CONTRATO'
+  excedenteMono: number
+  excedenteColor: number
+  permiteAcumulo: boolean
+  mesesAcumulo: number | null
+}
+
+export interface TabelaFranquia {
+  id: string
+  nome: string
+  descricao: string
+  vigenciaInicio: string
+  vigenciaFim: string | null
+  status: TabelaStatus
+  versao: number
+  substituiId: string | null
+  itens: FranquiaItem[]
+}
+
+export interface PrecoItem extends AlvoTabela {
+  id: string
+  valorMensal: number
+  valorInstalacao: number
+  valorRetirada: number
+  prazoMinimoMeses: number | null
+}
+
+export interface TabelaPreco {
+  id: string
+  nome: string
+  descricao: string
+  vigenciaInicio: string
+  vigenciaFim: string | null
+  status: TabelaStatus
+  versao: number
+  /** Precedência: CONTRATO vence CLIENTE, que vence GERAL. */
+  abrangencia: 'GERAL' | 'CLIENTE' | 'CONTRATO'
+  clienteId: string | null
+  contratoId: string | null
+  indiceReajuste: 'IPCA' | 'IGPM' | 'INPC' | 'FIXO'
+  mesesReajuste: number
+  itens: PrecoItem[]
+}
+
+export interface DescontoComercial {
+  id: string
+  contratoId: string | null
+  contratoItemId: string | null
+  tipo: 'PERCENTUAL' | 'VALOR_FIXO'
+  percentual: number | null
+  valor: number | null
+  vigenciaInicio: string
+  vigenciaFim: string | null
+  motivo: string
 }

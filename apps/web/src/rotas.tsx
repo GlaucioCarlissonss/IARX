@@ -6,6 +6,7 @@ import { Inicio } from './telas/Inicio'
 import { Parque } from './telas/Parque'
 import { Contratos } from './telas/Contratos'
 import { Clientes } from './telas/Clientes'
+import { Comercial } from './telas/Comercial'
 import { Mapa } from './telas/Mapa'
 import { NotasFiscais } from './telas/NotasFiscais'
 import { Chamados } from './telas/Chamados'
@@ -61,6 +62,14 @@ export function Rotas() {
           element={
             <Protegida permissao="cliente:ler">
               <Clientes />
+            </Protegida>
+          }
+        />
+        <Route
+          path="comercial"
+          element={
+            <Protegida permissao="comercial:ler">
+              <Comercial />
             </Protegida>
           }
         />

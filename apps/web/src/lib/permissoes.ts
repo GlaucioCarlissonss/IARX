@@ -20,6 +20,7 @@ export type Permissao =
   | 'nota_fiscal:ler' | 'nota_fiscal:criar' | 'nota_fiscal:conferir'
   | 'nota_fiscal:integrar' | 'nota_fiscal:cancelar'
   | 'mapa:ler'
+  | 'comercial:ler' | 'comercial:gerenciar'
   | 'usuario:gerenciar' | 'auditoria:consultar'
 
 export interface Perfil {
@@ -39,6 +40,7 @@ const TODAS: Permissao[] = [
   'nota_fiscal:ler', 'nota_fiscal:criar', 'nota_fiscal:conferir',
   'nota_fiscal:integrar', 'nota_fiscal:cancelar',
   'mapa:ler',
+  'comercial:ler', 'comercial:gerenciar',
   'usuario:gerenciar', 'auditoria:consultar',
 ]
 
@@ -54,7 +56,7 @@ export const PERFIS: Perfil[] = [
       // Lança e cancela a nota. Não confere nem integra: são as duas outras
       // mãos da segregação (RN-027).
       'nota_fiscal:ler', 'nota_fiscal:criar', 'nota_fiscal:cancelar',
-      'mapa:ler',
+      'mapa:ler', 'comercial:ler',
     ],
   },
   {
@@ -78,7 +80,7 @@ export const PERFIS: Perfil[] = [
       'contrato:ler', 'cliente:ler', 'equipamento:ler', 'os:ler', 'peca:ler',
       // Integra ao imobilizado: é o lançamento contábil do ativo.
       'nota_fiscal:ler', 'nota_fiscal:integrar',
-      'mapa:ler',
+      'mapa:ler', 'comercial:ler', 'comercial:gerenciar',
     ],
   },
   {
@@ -87,7 +89,7 @@ export const PERFIS: Perfil[] = [
     permissoes: [
       'financeiro:painel_executivo', 'financeiro:rentabilidade_ler', 'auditoria:consultar',
       'contrato:ler', 'contrato:aprovar', 'equipamento:ler', 'os:ler', 'fatura:ler', 'cliente:ler', 'peca:ler',
-      'nota_fiscal:ler', 'mapa:ler',
+      'nota_fiscal:ler', 'mapa:ler', 'comercial:ler',
     ],
   },
 ]

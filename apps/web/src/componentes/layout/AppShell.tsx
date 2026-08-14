@@ -63,6 +63,13 @@ const ITENS: ItemNav[] = [
     grupo: 'Financeiro',
     contador: (i) => i.pendenciasMedicao,
   },
+  {
+    para: '/comercial',
+    rotulo: 'Política comercial',
+    glifo: '◫',
+    permissao: 'comercial:ler',
+    grupo: 'Financeiro',
+  },
   { para: '/resultado', rotulo: 'Resultado', glifo: '◈', permissao: 'financeiro:painel_executivo', grupo: 'Financeiro' },
 ]
 

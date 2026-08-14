@@ -20,11 +20,14 @@ import type {
   FaturaItem,
   Indicadores,
   LeituraContador,
+  DescontoComercial,
   LocalOperacao,
   ModalidadeCobranca,
   OrdemServico,
   Peca,
   SerieMensal,
+  TabelaFranquia,
+  TabelaPreco,
   Tecnico,
 } from './tipos'
 
@@ -879,6 +882,133 @@ export function gerarBase(semente = 20260730): BaseDados {
     anexo('NOTA_FISCAL', nf.id, `danfe-${nf.serie}-${nf.numero}.pdf`, 'application/pdf', 'DANFE', 168)
   }
 
+  /* ------------------------------------------------- tabelas comerciais */
+  //
+  // Derivadas do catálogo, não inventadas: `precoMensal`, `franquiaMono` e
+  // `precoExcedenteMono` já existem em cada modelo e são o que a base usa para
+  // calcular receita. Criar números novos aqui faria a tabela comercial
+  // divergir do faturamento da própria demonstração.
+  const franquiaPadrao: TabelaFranquia = {
+    id: 'tfr-001',
+    nome: 'Franquia padrão 2026',
+    descricao: 'Política vigente para contratos novos. Excedente por página, apurado por ativo.',
+    vigenciaInicio: iso(somarMeses(HOJE, -7)),
+    vigenciaFim: null,
+    status: 'ATIVA',
+    versao: 1,
+    substituiId: null,
+    itens: MODELOS.filter((m) => m.franquiaMono !== null).map((m, i) => ({
+      id: `tfri-${String(i + 1).padStart(3, '0')}`,
+      categoria: null,
+      modeloId: m.id,
+      franquiaMono: m.franquiaMono ?? 0,
+      franquiaColor: m.franquiaColor ?? 0,
+      escopo: 'ITEM' as const,
+      excedenteMono: m.precoExcedenteMono ?? 0,
+      excedenteColor: m.precoExcedenteColor ?? 0,
+      permiteAcumulo: false,
+      mesesAcumulo: null,
+    })),
+  }
+
+  // Versão anterior, encerrada. Existe para a tela ter o que mostrar de
+  // histórico — e para provar que trocar a tabela não mexeu em contrato algum.
+  const franquiaAnterior: TabelaFranquia = {
+    ...franquiaPadrao,
+    id: 'tfr-000',
+    nome: 'Franquia padrão 2025',
+    descricao: 'Encerrada. Contratos assinados sob ela mantêm os valores acordados.',
+    vigenciaInicio: iso(somarMeses(HOJE, -19)),
+    vigenciaFim: iso(somarMeses(HOJE, -7)),
+    status: 'INATIVA',
+    itens: franquiaPadrao.itens.map((it, i) => ({
+      ...it,
+      id: `tfri0-${String(i + 1).padStart(3, '0')}`,
+      franquiaMono: Math.round(it.franquiaMono * 0.9),
+      excedenteMono: Number((it.excedenteMono * 0.94).toFixed(4)),
+    })),
+  }
+
+  const precoGeral: TabelaPreco = {
+    id: 'tpr-001',
+    nome: 'Tabela geral 2026',
+    descricao: 'Preço de referência por modelo, para contratos sem condição negociada.',
+    vigenciaInicio: iso(somarMeses(HOJE, -7)),
+    vigenciaFim: null,
+    status: 'ATIVA',
+    versao: 1,
+    abrangencia: 'GERAL',
+    clienteId: null,
+    contratoId: null,
+    indiceReajuste: 'IPCA',
+    mesesReajuste: 12,
+    itens: MODELOS.map((m, i) => ({
+      id: `tpri-${String(i + 1).padStart(3, '0')}`,
+      categoria: null,
+      modeloId: m.id,
+      valorMensal: m.precoMensal,
+      // Instalação proporcional ao porte do equipamento, arredondada à dezena:
+      // é despesa de logística e configuração, não margem.
+      valorInstalacao: Math.round((m.precoMensal * 0.35) / 10) * 10,
+      valorRetirada: Math.round((m.precoMensal * 0.2) / 10) * 10,
+      prazoMinimoMeses: 12,
+    })),
+  }
+
+  // Condição negociada para os três maiores clientes por parque — é o caso que
+  // a precedência CLIENTE → GERAL existe para atender.
+  const parquePorCliente = new Map<string, number>()
+  for (const e of equipamentos) {
+    if (e.clienteId) parquePorCliente.set(e.clienteId, (parquePorCliente.get(e.clienteId) ?? 0) + 1)
+  }
+  const maiores = [...parquePorCliente.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+
+  const precosCliente: TabelaPreco[] = maiores.map(([clienteId, qtd], i) => {
+    const cliente = clientes.find((c) => c.id === clienteId)!
+    // Desconto de escala: quanto maior o parque, melhor a condição. É a lógica
+    // comercial real do setor, e mantém a massa coerente com o volume.
+    const fator = qtd >= 20 ? 0.82 : qtd >= 12 ? 0.88 : 0.93
+    return {
+      id: `tpr-cli-${i + 1}`,
+      nome: `Condição ${cliente.nomeFantasia}`,
+      descricao: `Negociada por volume: ${qtd} ativos em campo.`,
+      vigenciaInicio: iso(somarMeses(HOJE, -5)),
+      vigenciaFim: null,
+      status: 'ATIVA',
+      versao: 1,
+      abrangencia: 'CLIENTE',
+      clienteId,
+      contratoId: null,
+      indiceReajuste: 'IPCA',
+      mesesReajuste: 12,
+      itens: precoGeral.itens.map((it, j) => ({
+        ...it,
+        id: `tpri-c${i + 1}-${String(j + 1).padStart(3, '0')}`,
+        valorMensal: Number((it.valorMensal * fator).toFixed(2)),
+        valorInstalacao: 0,
+      })),
+    }
+  })
+
+  // Descontos: uma carência que já expirou e uma vigente. A que expirou é a
+  // demonstração de RN-L22 — ela saiu sozinha, sem ninguém lembrar.
+  const descontos: DescontoComercial[] = contratos.slice(0, 2).flatMap((c, i) => [
+    {
+      id: `dsc-${i + 1}`,
+      contratoId: c.id,
+      contratoItemId: null,
+      tipo: 'PERCENTUAL' as const,
+      percentual: i === 0 ? 8 : 5,
+      valor: null,
+      vigenciaInicio: iso(somarMeses(HOJE, -3)),
+      vigenciaFim: i === 0 ? null : iso(somarMeses(HOJE, -1)),
+      motivo: i === 0 ? 'Renovação antecipada com ampliação de parque' : 'Carência de implantação — encerrada',
+    },
+  ])
+
+  const tabelasFranquia = [franquiaPadrao, franquiaAnterior]
+  const tabelasPreco = [precoGeral, ...precosCliente]
+
   /* ----------------------------------------------------------- indicadores */
   const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
@@ -895,6 +1025,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     anexos,
     fornecedores,
     notasFiscais,
+    tabelasFranquia,
+    tabelasPreco,
+    descontos,
     equipamentos,
     tecnicos,
     ordens,

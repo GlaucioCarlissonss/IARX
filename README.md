@@ -90,7 +90,7 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 10 telas, 14 formulários de escrita, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 86 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa e domínio |
+| `apps/web` | Aplicação React + TypeScript: 11 telas, 14 formulários de escrita, simulador comercial, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 97 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa, política comercial e domínio |
 | `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
 | `packages/db` | 12 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente, franquia e preço | `npm run db:test` — 60 assertivas de invariante contra PostgreSQL real |
@@ -120,6 +120,12 @@ franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-fronte
 Mercator, coordenadas reais, agrupamento, zoom e arrasto — e não um botão que abre o Google Maps
 noutra aba. A aba que abre não conhece os filtros, não sabe quem está com crédito bloqueado e não
 volta. Ver [Anexo O](docs/anexos/O-mapa-geografico.md).
+
+**A proposta e a fatura contam a mesma história.** O simulador comercial usa a mesma resolução que
+o faturamento — precedência de tabela, franquia por especificidade, desconto sem acúmulo. Cotar por
+uma regra e faturar por outra faria a divergência aparecer só no primeiro fechamento, na frente do
+cliente e sobre um valor já assinado. E trocar a tabela **não** reprecifica contrato vigente: a
+tabela é a fonte, o item do contrato é a fotografia.
 
 **O ativo nasce da nota.** Valor de aquisição, início da depreciação e prazo de garantia vêm da
 nota fiscal de compra — não são digitados no cadastro do equipamento. O custo do imobilizado é o
