@@ -91,11 +91,11 @@ O repositório deixou de ser apenas documental. O que já existe e está verific
 
 | Pacote | Conteúdo | Verificação |
 | --- | --- | --- |
-| `apps/web` | Aplicação React + TypeScript: 11 telas, 14 formulários de escrita, simulador comercial, mapa geográfico interativo, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 97 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa, política comercial e domínio |
-| `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista e a entrada fiscal de compra | `npm run api:test` — 62 assertivas contra PostgreSQL real |
+| `apps/web` | Aplicação React + TypeScript: 11 telas, 14 formulários de escrita, simulador comercial, mapa geográfico com camada raster e busca de endereço, leitor de XML da NF-e, diálogo acessível, combobox, RBAC e base de teste do domínio de locação de TI | `npm run a11y:dom` — 108 testes de axe, teclado, formulários, permissões, entrada fiscal, mapa, política comercial e domínio · `npm run web:test` — 29 unitários da aritmética de tiles e do parser de geocodificação |
+| `apps/api` | API NestJS sobre PostgreSQL com RLS: contexto de tenant por transação, autorização negada por padrão, `problem+json`, idempotência, concorrência otimista, a entrada fiscal de compra e os locais de operação | `npm run api:test` — 69 assertivas contra PostgreSQL real |
 | `packages/contracts` | Esquemas Zod compartilhados entre API e clientes: primitivos, catálogo de erros, catálogo de permissões, entidades e a chave de acesso da NF-e com dígito verificador | Compilado no CI; consumido pelos dois lados |
-| `packages/db` | 13 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente, franquia e preço, consumo | `npm run db:test` — 69 assertivas de invariante contra PostgreSQL real |
-| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 198/198 verificações |
+| `packages/db` | 14 migrações SQL: fundação, identidade, auditoria, equipamentos, contratos, RLS, outbox, geoespacial, idempotência, nota fiscal de compra, eixo de cliente, franquia e preço, consumo, proveniência da coordenada | `npm run db:test` — 76 assertivas de invariante contra PostgreSQL real, com e sem PostGIS |
+| `packages/tokens` | Tokens de cor, validador de contraste e de daltonismo, gerador de CSS | `npm run a11y:tokens` — 202/202 verificações, inclusive o marcador sobre imagem de satélite |
 | `.github/workflows/ci.yml` | Cinco jobs: tokens, DOM renderizado, invariantes de banco, integração da API, guardas de segurança — inclusive a que reprova política de locatário permissiva | Bloqueiam merge |
 
 ```bash
@@ -103,6 +103,7 @@ npm run dev           # servidor de desenvolvimento da aplicação
 npm run build         # bundle de arquivo único em apps/web/dist/index.html
 npm run tipos         # TypeScript estrito nos três pacotes
 npm run a11y:tokens   # contraste WCAG 2.2 AA + ΔE sob 3 tipos de daltonismo
+npm run web:test      # unitários puros da aplicação, sem navegador e sem rede
 npm run a11y:dom      # axe, teclado, reflow, permissões e domínio, em Chromium real
 npm run db:test       # recria o banco, aplica migrações e roda a suíte de invariantes
 npm run api:test      # sobe o banco, semeia massa e roda a integração da API
@@ -117,10 +118,13 @@ Ver [Anexo J](docs/anexos/J-api-implementacao.md).
 multifuncionais, laser, térmicas, desktops, notebooks, thin clients e nobreaks, com cobrança por
 franquia de páginas e excedente. Ver [Anexo I](docs/anexos/I-refatoracao-frontend.md).
 
-**O mapa é um mapa.** A distribuição geográfica é interativa dentro da aplicação — projeção Web
-Mercator, coordenadas reais, agrupamento, zoom e arrasto — e não um botão que abre o Google Maps
-noutra aba. A aba que abre não conhece os filtros, não sabe quem está com crédito bloqueado e não
-volta. Ver [Anexo O](docs/anexos/O-mapa-geografico.md).
+**O mapa é um mapa.** A distribuição geográfica é interativa dentro da aplicação — imagem de
+satélite ou de ruas, projeção Web Mercator, coordenadas reais, agrupamento, zoom e arrasto — e não
+um botão que abre o Google Maps noutra aba. A aba que abre não conhece os filtros, não sabe quem
+está com crédito bloqueado e não volta. Sem acesso ao servidor de imagens, o mapa cai para as
+fronteiras vetoriais embutidas e **diz que caiu**, em vez de exibir um retângulo cinza. A busca de
+endereço é adição à busca local, nunca substituição: o filtro por cliente, cidade e UF continua
+funcionando sem rede. Ver [Anexo O](docs/anexos/O-mapa-geografico.md).
 
 **A proposta e a fatura contam a mesma história.** O simulador comercial usa a mesma resolução que
 o faturamento — precedência de tabela, franquia por especificidade, desconto sem acúmulo. Cotar por

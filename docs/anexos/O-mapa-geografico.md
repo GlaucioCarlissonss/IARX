@@ -49,15 +49,20 @@ acontece.
 
 **Decisão revista:** fronteiras vetoriais embutidas, projeção Web Mercator.
 
-**O que se perde:** imagem de satélite, nome de rua, ponto de interesse.
-Nenhuma decisão de operação de locação depende disso — o que importa é onde
-está o parque, em que cidade, e o quanto está concentrado.
-
 **O que se preserva:** a porta de saída. A projeção é a mesma do Leaflet, do
 MapLibre e de qualquer tile raster. Acrescentar uma camada de tiles por baixo
-destes polígonos, quando a plataforma estiver hospedada em servidor próprio, é
-uma mudança local em `Mapa.tsx`; as coordenadas dos clientes já estão no
-formato que ela espera, e nenhum marcador precisa ser recalculado.
+destes polígonos é uma mudança local em `Mapa.tsx`; as coordenadas dos clientes
+já estão no formato que ela espera, e nenhum marcador precisa ser recalculado.
+
+> **Atualização — a porta de saída foi usada.** A camada de tiles existe desde
+> a onda seguinte, com satélite como padrão (ver §O.9). O que muda em relação
+> ao texto acima não é a análise, é o papel do vetor: ele deixou de ser *o
+> mapa* e passou a ser **o piso**. A tabela dos quatro ambientes continua
+> valendo linha por linha — nos dois primeiros os tiles seguem não chegando, e
+> é ali que o piso trabalha. A frase que envelheceu é a de que a imagem de
+> satélite não faz falta: ela não muda nenhuma decisão de locação, mas muda o
+> reconhecimento do lugar, e isso tem valor operacional real ao conferir se o
+> ponto caiu no galpão certo.
 
 ### Custo do dado embutido
 
@@ -204,7 +209,132 @@ em 320 px e indicador de foco, que a rota herda da suíte:
 
 | Item | Situação |
 | --- | --- |
-| Camada de tiles raster sob os polígonos | Porta aberta: mesma projeção, muda uma camada em `Mapa.tsx` quando houver hospedagem própria |
-| Geocodificação real do endereço (D-13) | Cliente novo usa a coordenada da praça; ViaCEP → Nominatim → manual, com cache, é o passo seguinte |
+| ~~Camada de tiles raster sob os polígonos~~ | **Feito** — ver §O.9 |
+| ~~Geocodificação real do endereço (D-13)~~ | **Feito** — Nominatim, ver §O.9.4 |
+| Cache das consultas de geocodificação | Hoje cada busca vai ao serviço; um cache por termo normalizado corta a maior parte das repetições |
 | Territórios comerciais e otimização de rota | Módulo próprio — o dado geográfico que eles exigem já existe |
-| Municípios, além dos estados | Custaria ~1 MB embutido; só se compensa quando a operação tiver praça em cidade sem capital próxima |
+| Municípios, além dos estados | Custaria ~1 MB embutido; e agora compensa menos: com tiles, o nome da cidade vem na imagem |
+
+---
+
+## O.9 A camada de tiles
+
+### O.9.1 O que mudou, e o que não
+
+O mapa passou a ter duas camadas. A de baixo é raster, do provedor escolhido;
+a de cima continua sendo tudo o que já existia — marcadores, agrupamento,
+calor, escala, teclado. Nenhuma linha do posicionamento mudou, porque a
+projeção dos tiles sempre foi a mesma dos polígonos: Web Mercator normalizada
+no quadrado unitário. Era exatamente a porta que §O.2 tinha deixado aberta.
+
+O vetor não saiu. Mudou de papel: com imagem, os contornos de UF viram divisa
+de estado em traço fino — que o satélite não desenha e a operação consulta o
+tempo todo; sem imagem, voltam a ser o mapa inteiro.
+
+**Provedores:** satélite (Esri World Imagery, padrão), ruas (CARTO, com
+variante clara e escura conforme o tema), OpenStreetMap clássico, servidor
+próprio configurável, e o vetor embutido. A escolha fica no navegador.
+
+**Por que não Leaflet.** Ele traria a camada pronta e custaria as garantias já
+testadas: os marcadores padrão dele não são `<button>`, não têm nome
+acessível, não respeitam a separação de alvo de toque de WCAG 2.5.8 e não
+conhecem as áreas reservadas dos controles. O que Leaflet economiza é o código
+que menos custa escrever — a aritmética de tile cabe em cem linhas puras.
+
+### O.9.2 Queda para o vetor, declarada
+
+Uma sondagem ao montar carrega um tile de zoom baixo com prazo de 4 s. O prazo
+existe porque o caso pior não é o erro rápido — é o proxy que aceita a conexão
+e nunca responde, que foi o comportamento observado ao sondar os cinco
+provedores deste ambiente de desenvolvimento.
+
+Sem caminho até o servidor, o mapa volta ao vetor e **diz que voltou**, num
+`role="status"`. É o caminho que o artefato publicado percorre sempre, e é bom
+que seja explícito em vez de misterioso. Em nenhum momento existe retângulo
+cinza: enquanto sonda, o vetor já está desenhado.
+
+### O.9.3 Duas correções que a medição impôs
+
+**O véu não resolvia contraste.** A primeira tentativa foi uma camada
+semiopaca sobre a imagem, para prender a luminância do fundo a uma faixa
+conhecida. Medido, o pior par ficava em **1,05:1** — e nenhuma opacidade
+conserta, porque escurecer o véu ajuda o marcador claro e prejudica o escuro,
+e a foto pode ter qualquer luminância. Um único fundo translúcido não limita
+os dois lados ao mesmo tempo.
+
+O que resolve é a técnica que a paleta já usava no anel de foco: **dois anéis
+de luminância oposta**. Fundo claro contrasta com o anel escuro, fundo escuro
+com o claro, e o cinza intermediário contrasta com os dois — 3:1 contra preto
+exige luminância acima de 0,10, e 3:1 contra branco exige abaixo de 0,30, de
+modo que as faixas se sobrepõem em vez de deixar vão. O portão de contraste
+foi de 198 para 202 verificações, e as duas novas medem os anéis contra branco
+e preto puros, e não contra tokens — porque o fundo aqui é uma fotografia.
+
+**Alvo obscurecido.** O seletor de camada, posicionado por conta própria,
+cobria parte do botão de enquadrar num mapa de 300 px de altura — o do cartão
+da tela inicial. Os controles passaram a uma coluna única, onde a sobreposição
+deixa de ser possível em qualquer altura.
+
+### O.9.4 Busca de endereço
+
+Nominatim, restrito a `countrycodes=br`, disparado por **ação explícita** e
+não a cada tecla. A busca por cliente, cidade e UF continua local e
+instantânea; trocá-la por chamada de rede transformaria a operação mais
+frequente da tela na mais frágil.
+
+O parser é puro e separado da chamada, porque é onde mora o risco: o serviço
+devolve coordenada **como texto** e `boundingbox` na ordem `[sul, norte,
+oeste, leste]`, que não é a de nenhuma outra API de mapa. Nada disso lança —
+tudo isso enquadraria o mapa em lugar nenhum.
+
+O resultado escolhido pode virar a coordenada de um cliente, e aí deixa de ser
+navegação e vira cadastro. A migração 0014 impõe as duas regras que isso exige:
+
+| | Regra | Por quê |
+| --- | --- | --- |
+| RN-L35 | Coordenada tem origem declarada | Sem proveniência ninguém sabe se um ponto pode ser corrigido por um palpite — e uma coordenada de rastreio sobrescrita por geocodificação aproximada é perda que não se desfaz |
+| RN-L36 | Latitude e longitude não se trocam | O erro clássico da área e o pior tipo: não lança nada, o ponto cai no oceano Índico, e a única pista é alguém reparar que um cliente sumiu do mapa |
+
+Ambas em gatilho, e a restrição de domínio como `not valid`: uma base
+existente pode ter `geo_precisao` com texto livre desde a 0008, e reprovar o
+histórico derrubaria o deploy por dado que a regra nova nem pretende julgar.
+
+**Sobre depender de serviço público.** A política de uso do Nominatim pede no
+máximo uma requisição por segundo e desaconselha uso pesado; o OpenStreetMap
+diz o equivalente sobre os tiles. O limite está respeitado no código, mas a
+resposta certa quando a plataforma crescer é hospedar o próprio Nominatim ou
+contratar um geocodificador — e a mesma troca vale para os tiles, que já têm
+campo de URL e credencial na interface. **Credencial usada em navegador é
+pública por natureza**: provedores a restringem por domínio, não por segredo,
+e a interface diz isso com todas as letras.
+
+### O.9.5 Como isto foi verificado sem rede
+
+Este é o ponto que mais importa registrar. Os servidores de tile e o Nominatim
+**não respondem** neste ambiente nem na integração contínua — sondei os cinco,
+os cinco falharam. Testar contra a internet real seria trocar um teste por uma
+aposta: passaria ou falharia por motivos alheios ao código, e ainda gastaria a
+cota de um serviço mantido por doação.
+
+A saída é interceptar no navegador. `page.route` responde à requisição do tile
+com um PNG local e à do Nominatim com uma resposta real recortada. Com isso é
+determinístico em CI:
+
+- os tiles pintam, posicionados, com os marcadores por cima;
+- a URL do Esri leva os eixos na ordem dele — asserção ancorada na coordenada
+  constante do tile de sondagem, porque conferir só o formato `\d+/\d+`
+  casaria igual com os eixos trocados (verifiquei que a asserção pega a troca);
+- a atribuição de licença aparece;
+- sem tiles, o mapa cai no vetor e avisa;
+- a camada escolhida sobrevive à recarga e o seletor funciona só pelo teclado;
+- a busca local não emite requisição nenhuma;
+- o serviço de endereço fora do ar não derruba a tela;
+- axe limpo sobre a imagem e com resultados de endereço na tela.
+
+Somam-se 29 testes unitários da aritmética pura — nível de tile, cobertura da
+moldura, volta ao antimeridiano, recorte polar, montagem de URL, parser do
+Nominatim — em `node --test`, que executa TypeScript direto.
+
+O que **não** é verificável aqui, e não deve ser afirmado por nenhum teste: se
+os servidores públicos estão no ar. Isso depende de terceiro e se confirma
+abrindo a aplicação fora do sandbox.

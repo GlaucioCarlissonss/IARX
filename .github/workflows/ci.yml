@@ -65,6 +65,13 @@ jobs:
       - name: Tipos da aplicação
         run: npx tsc -p apps/web/tsconfig.json
 
+      # Aritmética de tiles e parser de geocodificação: puro, sem navegador e
+      # sem rede. Roda antes do build porque falha em segundos e aponta a linha,
+      # enquanto o mesmo defeito visto pelo Playwright aparece como um mapa
+      # torto num screenshot.
+      - name: Unitários puros da aplicação
+        run: npm run web:test
+
       - name: Construir a aplicação
         run: |
           node packages/tokens/scripts/build-css.mjs
