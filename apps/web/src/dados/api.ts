@@ -131,6 +131,8 @@ export const api = {
     executar(() => cmd.concluirChamado(BASE, ordemId, d)),
 
   criarCliente: (d: cmd.DadosCliente) => executar(() => cmd.criarCliente(BASE, d)),
+  definirLocalizacaoCliente: (clienteId: string, d: Parameters<typeof cmd.definirLocalizacaoCliente>[2]) =>
+    executar(() => cmd.definirLocalizacaoCliente(BASE, clienteId, d)),
   definirCredito: (clienteId: string, situacao: 'LIBERADO' | 'OBSERVACAO' | 'BLOQUEADO', motivo: string) =>
     executar(() => cmd.definirCredito(BASE, clienteId, situacao, motivo)),
 

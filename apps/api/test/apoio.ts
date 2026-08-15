@@ -31,6 +31,10 @@ export const NOTA_TENANT_B = '22222222-2222-4222-8222-22222222e001'
 /** Quem lançou a nota semeada — a conferência precisa ser de outra pessoa. */
 export const USUARIO_COMPRADOR = '11111111-1111-4111-8111-111111110002'
 
+export const LOCAL_ALFA = '11111111-1111-4111-8111-11111111b101'
+export const LOCAL_SEM_COORDENADA = '11111111-1111-4111-8111-11111111b102'
+export const LOCAL_TENANT_B = '22222222-2222-4222-8222-22222222b101'
+
 /**
  * Monta uma chave de acesso com dígito verificador correto.
  *

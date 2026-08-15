@@ -68,6 +68,17 @@ insert into public.cliente (id, tenant_id, documento, razao_social, nome_fantasi
   ('22222222-2222-4222-8222-22222222c101', '22222222-2222-4222-8222-222222222222', '55118472000110',
    'BETA CLIENTE LTDA', 'Beta Cliente', 'LIBERADO');
 
+-- Locais de operação. O segundo nasce **sem coordenada** de propósito: é o
+-- caso que o mapa existe para resolver — o cliente cadastrado que não aparece,
+-- e portanto não entra em roteiro de técnico.
+insert into public.local_operacao (id, tenant_id, cliente_id, nome, created_at) values
+  ('11111111-1111-4111-8111-11111111b101', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111c101', 'Matriz Alfa', '2026-01-02T09:00:00-03:00'),
+  ('11111111-1111-4111-8111-11111111b102', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111c102', 'Centro de Distribuição Gama', '2026-01-03T09:00:00-03:00'),
+  ('22222222-2222-4222-8222-22222222b101', '22222222-2222-4222-8222-222222222222',
+   '22222222-2222-4222-8222-22222222c101', 'Sede Beta', '2026-01-04T09:00:00-03:00');
+
 insert into public.contrato
   (id, tenant_id, numero, empresa_id, filial_id, cliente_id, status, data_inicio, data_fim, created_at) values
   ('11111111-1111-4111-8111-1111111170a1', '11111111-1111-4111-8111-111111111111', 'SP-2026-0148',

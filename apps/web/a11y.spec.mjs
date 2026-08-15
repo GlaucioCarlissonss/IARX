@@ -1526,6 +1526,128 @@ test('axe no mapa com a camada de satélite carregada', async ({ page }) => {
   expect(v, `mapa sobre imagem:\n  ${descrever(v)}`).toEqual([])
 })
 
+/* -------------------------------------------------------------------- */
+/* Busca de endereço                                                    */
+/* -------------------------------------------------------------------- */
+
+/**
+ * O que estes testes protegem: a busca local não pode regredir para depender
+ * de rede, e o resultado do geocodificador não pode virar cadastro sem que
+ * alguém diga de onde ele veio.
+ *
+ * O serviço é interceptado, pelo mesmo motivo dos tiles: testar contra o
+ * Nominatim público seria trocar um teste por uma aposta — e ainda gastaria a
+ * cota de um serviço mantido por doação.
+ */
+
+/** Recorte de uma resposta real do Nominatim, com lat/lon como texto. */
+const ENDERECOS = [
+  {
+    place_id: 297876543,
+    lat: '-23.5613',
+    lon: '-46.6565',
+    display_name: 'Avenida Paulista, Bela Vista, São Paulo, SP, Brasil',
+    boundingbox: ['-23.5719', '-23.5551', '-46.6626', '-46.6404'],
+  },
+]
+
+async function servirEnderecos(page, corpo = ENDERECOS) {
+  await page.route('**nominatim.openstreetmap.org/**', (rota) =>
+    rota.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(corpo) }),
+  )
+}
+
+test('a busca por cliente continua local: nada sai do navegador ao digitar', async ({ page }) => {
+  const chamadas = []
+  await page.route('**nominatim.openstreetmap.org/**', (rota) => {
+    chamadas.push(rota.request().url())
+    return rota.abort()
+  })
+  await abrir(page, { hash: '#/mapa' })
+
+  const antes = await page.locator('.mapa-lista button').count()
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Curitiba')
+  await expect.poll(async () => page.locator('.mapa-lista button').count()).toBeLessThan(antes)
+
+  // O filtro local é a operação mais frequente da tela. Se ele passasse a
+  // depender de rede, quebraria justamente onde a conexão é pior.
+  expect(chamadas).toEqual([])
+})
+
+test('endereço fora da base é buscado só quando se pede, e leva o mapa até lá', async ({ page }) => {
+  await servirEnderecos(page)
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Avenida Paulista 1000')
+  await page.getByRole('button', { name: 'Buscar como endereço' }).click()
+
+  await expect(page.getByText('Avenida Paulista, Bela Vista')).toBeVisible()
+  await page.getByRole('button', { name: /Avenida Paulista, Bela Vista/ }).click()
+
+  // O alfinete é a prova de que o enquadramento aconteceu no mapa, e não
+  // apenas na lista de resultados.
+  await expect(page.locator('.mapa__alfinete')).toBeVisible()
+
+  // Enquadrar um endereço aproxima de verdade: a barra de escala tem de sair
+  // da ordem de grandeza do país.
+  await expect(page.locator('.mapa__escala')).not.toContainText('1.000 km')
+})
+
+test('a coordenada só vira cadastro com um cliente escolhido, e registra a origem', async ({ page }) => {
+  await servirEnderecos(page)
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Avenida Paulista 1000')
+  await page.getByRole('button', { name: 'Buscar como endereço' }).click()
+  await page.getByRole('button', { name: /Avenida Paulista, Bela Vista/ }).click()
+
+  // Sem cliente selecionado não há o que gravar — e a tela diz o que falta em
+  // vez de oferecer um botão que falha.
+  await expect(page.getByText(/Selecione um cliente na lista/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Usar como localização de/ })).toHaveCount(0)
+
+  // A seleção de cliente sobrevive ao filtro de texto. Sem isso, escolher o
+  // cliente e depois digitar o endereço para localizá-lo faria o cliente sumir
+  // junto com a ação de gravar a coordenada nele.
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('')
+  await page.getByRole('list', { name: 'Clientes no mapa' }).getByRole('button').first().click()
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Avenida Paulista 1000')
+
+  const gravar = page.getByRole('button', { name: /^Usar como localização de/ })
+  await expect(gravar).toBeVisible()
+  await gravar.click()
+
+  await expect(page.getByText('Coordenada gravada')).toBeVisible()
+  // Proveniência declarada na tela: coordenada sem origem é coordenada que
+  // ninguém sabe se pode corrigir.
+  await expect(page.getByText(/registrada como geocodificação/)).toBeVisible()
+})
+
+test('serviço de endereço fora do ar não derruba a tela nem a busca local', async ({ page }) => {
+  await page.route('**nominatim.openstreetmap.org/**', (rota) => rota.abort())
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Avenida Paulista 1000')
+  await page.getByRole('button', { name: 'Buscar como endereço' }).click()
+
+  await expect(page.getByText(/Não deu para consultar o serviço de endereços/)).toBeVisible()
+  // A frase importa: quem lê precisa saber que o resto continua funcionando.
+  await expect(page.getByText(/busca por cliente, cidade e UF continua funcionando/)).toBeVisible()
+  await expect(page.locator('.mapa__uf').first()).toBeVisible()
+})
+
+test('axe com resultados de endereço na tela', async ({ page }) => {
+  await servirEnderecos(page)
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByPlaceholder('Buscar cliente, cidade ou UF…').fill('Avenida Paulista 1000')
+  await page.getByRole('button', { name: 'Buscar como endereço' }).click()
+  await page.getByRole('button', { name: /Avenida Paulista, Bela Vista/ }).click()
+
+  const v = await violacoes(page)
+  expect(v, `busca de endereço:\n  ${descrever(v)}`).toEqual([])
+})
+
 /* ==================================================================== */
 /* Política comercial — franquia, preço e simulador                     */
 /* ==================================================================== */

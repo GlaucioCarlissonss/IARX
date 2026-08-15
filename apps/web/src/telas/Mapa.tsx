@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { api } from '../dados/api'
 import { regiaoPorId } from '../dados/catalogo'
 import { distanciaKm } from '../dados/geo'
+import { MIN_CARACTERES, buscarEndereco } from '../dados/geocodificacao'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, moeda } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Mapa as MapaGeografico } from '../componentes/ui/Mapa'
 import { Rolagem } from '../componentes/ui/Rolagem'
-import type { PontoMapa } from '../componentes/ui/Mapa'
+import type { AlvoMapa, PontoMapa } from '../componentes/ui/Mapa'
+import type { ResultadoEndereco } from '../dados/geocodificacao'
 import type { Cliente, Equipamento } from '../dados/tipos'
 
 /**
@@ -33,12 +35,21 @@ interface Local {
 
 export function Mapa() {
   const { pode } = useSessao()
-  const { situacao, dado } = useConsulta(() => api.clientes(), [])
+  const { situacao, dado, recarregar } = useConsulta(() => api.clientes(), [])
   const [texto, setTexto] = useState('')
   const [recorte, setRecorte] = useState('')
   const [calor, setCalor] = useState(false)
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [aba, setAba] = useState<'mapa' | 'analises'>('mapa')
+
+  /* ------------------------------------------------------ busca de endereço */
+
+  const [enderecos, setEnderecos] = useState<ResultadoEndereco[] | null>(null)
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false)
+  const [erroEndereco, setErroEndereco] = useState<string | null>(null)
+  const [alvo, setAlvo] = useState<AlvoMapa | null>(null)
+  const [gravacao, setGravacao] = useState<string | null>(null)
+  const abortarRef = useRef<AbortController | null>(null)
 
   const base = api.baseSincrona()
 
@@ -87,8 +98,8 @@ export function Mapa() {
       if (recorte === 'inadimplente' && l.cliente.situacaoCredito === 'LIBERADO') return false
       if (recorte.startsWith('uf:') && praca?.uf !== recorte.slice(3)) return false
       if (t) {
-        const alvo = `${l.cliente.razaoSocial} ${l.cliente.nomeFantasia} ${praca?.cidade ?? ''} ${praca?.uf ?? ''}`
-        if (!alvo.toLowerCase().includes(t)) return false
+        const campos = `${l.cliente.razaoSocial} ${l.cliente.nomeFantasia} ${praca?.cidade ?? ''} ${praca?.uf ?? ''}`
+        if (!campos.toLowerCase().includes(t)) return false
       }
       return true
     })
@@ -128,7 +139,15 @@ export function Mapa() {
   const totalAtivos = filtrados.reduce((s, l) => s + l.equipamentos.length, 0)
   const comParque = filtrados.filter((l) => l.equipamentos.length > 0).length
   const media = filtrados.length === 0 ? 0 : totalAtivos / filtrados.length
-  const escolhido = filtrados.find((l) => l.cliente.id === selecionado) ?? null
+  /*
+   * O cliente escolhido é procurado em `locais`, não em `filtrados`.
+   *
+   * Com `filtrados`, a seleção evaporava assim que o filtro deixava de incluí-la
+   * — e é exatamente o que acontece no fluxo da busca de endereço: escolher o
+   * cliente, digitar o endereço para localizá-lo e ver o cliente sumir junto
+   * com a ação de gravar a coordenada nele.
+   */
+  const escolhido = locais.find((l) => l.cliente.id === selecionado) ?? null
 
   /** Concentração por praça — a leitura que o mapa mostra e a tabela prova. */
   const porPraca = useMemo(() => {
@@ -144,6 +163,68 @@ export function Mapa() {
     }
     return [...mapa.values()].sort((a, b) => b.ativos - a.ativos || a.cidade.localeCompare(b.cidade))
   }, [filtrados])
+
+  /**
+   * Busca o termo digitado como endereço.
+   *
+   * Ação explícita, e não busca a cada tecla. Três razões, na ordem em que
+   * pesam: o filtro local já responde instantaneamente e resolve o caso comum;
+   * a política de uso do serviço público pede parcimônia; e requisição que sai
+   * sozinha do navegador sem o usuário pedir é uma surpresa desagradável numa
+   * ferramenta de trabalho.
+   */
+  async function buscarComoEndereco() {
+    const termo = texto.trim()
+    if (termo.length < MIN_CARACTERES) return
+
+    // Uma busca em voo por vez: a anterior perdeu o valor no instante em que
+    // esta começou, e deixá-la correndo só arrisca ela responder por último.
+    abortarRef.current?.abort()
+    const controle = new AbortController()
+    abortarRef.current = controle
+
+    setBuscandoEndereco(true)
+    setErroEndereco(null)
+    setGravacao(null)
+    try {
+      setEnderecos(await buscarEndereco(termo, controle.signal))
+    } catch (e) {
+      if (controle.signal.aborted) return
+      setEnderecos(null)
+      setErroEndereco(
+        'Não foi possível consultar o serviço de endereços agora. A busca por cliente, cidade e UF continua funcionando.',
+      )
+    } finally {
+      if (!controle.signal.aborted) setBuscandoEndereco(false)
+    }
+  }
+
+  function limparBuscaEndereco() {
+    abortarRef.current?.abort()
+    setEnderecos(null)
+    setErroEndereco(null)
+    setAlvo(null)
+    setGravacao(null)
+  }
+
+  /** Grava a coordenada do alfinete no cadastro do cliente selecionado. */
+  async function usarComoLocalizacao(cliente: Cliente) {
+    if (!alvo) return
+    const r = await api.definirLocalizacaoCliente(cliente.id, {
+      lat: alvo.lat,
+      lon: alvo.lon,
+      precisao: 'GEOCODIFICADO',
+      fonte: `Nominatim · ${alvo.rotulo}`,
+    })
+    if (r.ok) {
+      setGravacao(`Localização de ${cliente.nomeFantasia} atualizada.`)
+      setAlvo(null)
+      setEnderecos(null)
+      recarregar()
+    } else {
+      setErroEndereco(r.erro.mensagem)
+    }
+  }
 
   function exportar() {
     // Ponto e vírgula, e não vírgula: é o separador que o Excel em pt-BR
@@ -243,6 +324,7 @@ export function Mapa() {
                 rotulo="Distribuição geográfica de clientes e equipamentos"
                 pontos={pontos}
                 selecionado={selecionado}
+                alvo={alvo}
                 aoSelecionar={(p) => setSelecionado(p.id)}
                 calor={calor}
                 altura={520}
@@ -311,6 +393,98 @@ export function Mapa() {
               </div>
             )}
 
+            {/*
+              Busca de endereço, como acréscimo à busca local — nunca no lugar
+              dela. O filtro por cliente, cidade e UF continua respondendo na
+              hora e sem rede; isto aqui resolve os dois casos que ele não
+              cobre: chegar a um lugar que ainda não é cliente, e descobrir a
+              coordenada de um cliente cadastrado sem ela, que por isso não
+              aparece no mapa.
+            */}
+            <div className="mapa-endereco">
+              {texto.trim().length >= MIN_CARACTERES && (
+                <p className="linha entre g2">
+                  <span className="texto-atenuado">Não é um cliente cadastrado?</span>
+                  <Botao pequeno onClick={buscarComoEndereco} disabled={buscandoEndereco}>
+                    {buscandoEndereco ? 'Buscando…' : 'Buscar como endereço'}
+                  </Botao>
+                </p>
+              )}
+
+              {erroEndereco && (
+                <Aviso tom="atencao" titulo="Não deu para consultar o serviço de endereços">
+                  {erroEndereco}
+                </Aviso>
+              )}
+
+              {gravacao && (
+                <Aviso tom="ok" titulo="Coordenada gravada">
+                  {gravacao} A origem fica registrada como geocodificação, para quem revisar depois saber de onde
+                  ela veio.
+                </Aviso>
+              )}
+
+              {enderecos && enderecos.length === 0 && (
+                <p className="texto-secundario" role="status">
+                  Nenhum endereço encontrado para “{texto.trim()}”.
+                </p>
+              )}
+
+              {enderecos && enderecos.length > 0 && (
+                <>
+                  <p className="texto-atenuado" role="status">
+                    {enderecos.length} endereço(s) encontrado(s). Escolher um leva o mapa até lá.
+                  </p>
+                  <ul className="mapa-lista mapa-lista--endereco" aria-label="Endereços encontrados">
+                    {enderecos.map((e) => (
+                      <li key={e.id}>
+                        <button
+                          type="button"
+                          aria-current={alvo?.chave === e.id}
+                          onClick={() =>
+                            setAlvo({ chave: e.id, rotulo: e.rotulo, lat: e.lat, lon: e.lon, caixa: e.caixa })
+                          }
+                        >
+                          <span className="mapa-lista__nome">{e.rotulo}</span>
+                          <span className="mapa-lista__local">
+                            {e.lat.toFixed(5)}, {e.lon.toFixed(5)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {alvo && (
+                <div className="aviso aviso--info">
+                  <span aria-hidden="true">⚑</span>
+                  <div className="pilha g2 crescer">
+                    <p className="aviso__titulo">{alvo.rotulo}</p>
+                    {escolhido ? (
+                      <p className="texto-atenuado">
+                        Gravar esta coordenada como sede de {escolhido.cliente.nomeFantasia} substitui a atual.
+                      </p>
+                    ) : (
+                      <p className="texto-atenuado">
+                        Selecione um cliente na lista abaixo para poder usar esta coordenada como a sede dele.
+                      </p>
+                    )}
+                    <span className="linha g2">
+                      {escolhido && (
+                        <Botao pequeno variante="primario" onClick={() => usarComoLocalizacao(escolhido.cliente)}>
+                          Usar como localização de {escolhido.cliente.nomeFantasia}
+                        </Botao>
+                      )}
+                      <Botao pequeno variante="sutil" onClick={limparBuscaEndereco}>
+                        Descartar endereço
+                      </Botao>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {filtrados.length === 0 ? (
               <p className="texto-secundario">
                 Nenhuma localização com esses filtros.{' '}
@@ -326,7 +500,7 @@ export function Mapa() {
                 </Botao>
               </p>
             ) : (
-              <ul className="mapa-lista">
+              <ul className="mapa-lista" aria-label="Clientes no mapa">
                 {filtrados.map((l) => {
                   const praca = regiaoPorId.get(l.cliente.regiaoId)
                   return (

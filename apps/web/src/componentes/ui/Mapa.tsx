@@ -82,11 +82,42 @@ interface Props {
   /** Rodapé sobreposto — contagens. */
   rodape?: ReactNode
   rotulo: string
+  /** Endereço a enquadrar, vindo da busca. Também desenha o alfinete. */
+  alvo?: AlvoMapa | null
 }
 
 /** Zoom 1 = Brasil inteiro na moldura. */
 const ZOOM_MIN = 1
-const ZOOM_MAX = 64
+
+/**
+ * Teto de aproximação — e por que ele não é uma constante só.
+ *
+ * Sem imagem, aproximar além de umas dezenas de vezes não revela nada: as
+ * fronteiras foram simplificadas a ~7 km de tolerância, e o que aparece é o
+ * erro da simplificação. Com imagem, o teto passa a ser o do provedor, e
+ * precisa chegar ao nível de rua — senão a busca por endereço encontra o lugar
+ * certo e para a três quilômetros dele.
+ *
+ * O limite é escrito em escala (pixels de mundo) e convertido em zoom, porque
+ * é a escala que tem significado: `256 · 2^19` é o nível 19 de tile, o teto
+ * dos provedores raster.
+ */
+const ZOOM_MAX_VETOR = 64
+const ESCALA_MAXIMA_IMAGEM = 256 * 2 ** 19
+
+/** Aproximação de bairro para resultado sem caixa envolvente — nível 14. */
+const ESCALA_BAIRRO = 256 * 2 ** 14
+
+/** Endereço que o mapa deve enquadrar. */
+export interface AlvoMapa {
+  /** Identidade do pedido: o mapa reenquadra quando ela muda, e só então. */
+  chave: string
+  rotulo: string
+  lat: number
+  lon: number
+  caixa?: { sul: number; norte: number; oeste: number; leste: number } | null
+}
+
 /**
  * Distância mínima entre marcadores, em pixels de tela.
  *
@@ -109,6 +140,7 @@ export function Mapa({
   sobreposicao,
   rodape,
   rotulo,
+  alvo,
 }: Props) {
   const caixaRef = useRef<HTMLDivElement>(null)
   const cromoRef = useRef<HTMLDivElement>(null)
@@ -199,6 +231,11 @@ export function Mapa({
 
   const escala = escalaBase * vista.zoom
 
+  const zoomMax = useMemo(
+    () => (comImagem && escalaBase > 0 ? ESCALA_MAXIMA_IMAGEM / escalaBase : ZOOM_MAX_VETOR),
+    [comImagem, escalaBase],
+  )
+
   /** Coordenada geográfica → pixel na moldura. */
   const paraTela = useCallback(
     (lon: number, lat: number) => {
@@ -216,7 +253,7 @@ export function Mapa({
   const aplicarZoom = useCallback(
     (fator: number, ancoraX?: number, ancoraY?: number) => {
       setVista((v) => {
-        const novo = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, v.zoom * fator))
+        const novo = Math.max(ZOOM_MIN, Math.min(zoomMax, v.zoom * fator))
         if (novo === v.zoom) return v
         if (ancoraX === undefined || ancoraY === undefined) return { ...v, zoom: novo }
 
@@ -234,8 +271,48 @@ export function Mapa({
         }
       })
     },
-    [escalaBase, dim],
+    [escalaBase, dim, zoomMax],
   )
+
+  /*
+   * Enquadramento de um endereço vindo da busca.
+   *
+   * Depende só de `alvo.chave`, e é de propósito: as medidas entram por
+   * referência. Se `escalaBase` e `dim` fossem dependências, cada
+   * redimensionamento da janela reenquadraria o mapa por conta própria e
+   * desfaria o deslocamento que o usuário acabou de fazer.
+   */
+  const medidasRef = useRef({ escalaBase, dim })
+  medidasRef.current = { escalaBase, dim }
+
+  useEffect(() => {
+    if (!alvo) return
+    const { escalaBase: base, dim: moldura } = medidasRef.current
+    if (base <= 0) return
+
+    const limitar = (z: number) =>
+      Math.max(ZOOM_MIN, Math.min(comImagem ? ESCALA_MAXIMA_IMAGEM / base : ZOOM_MAX_VETOR, z))
+
+    if (alvo.caixa) {
+      const a = projetar(alvo.caixa.oeste, alvo.caixa.norte)
+      const b = projetar(alvo.caixa.leste, alvo.caixa.sul)
+      const largura = Math.abs(b.x - a.x)
+      const alturaCaixa = Math.abs(b.y - a.y)
+      if (largura > 0 && alturaCaixa > 0) {
+        // 0,82 deixa margem: enquadrar a caixa exata encosta o resultado nas
+        // bordas, e o que está em volta é metade da informação.
+        const cabe = Math.min(moldura.largura / largura, moldura.altura / alturaCaixa) * 0.82
+        setVista({ zoom: limitar(cabe / base), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 })
+        return
+      }
+    }
+
+    // Sem caixa, aproximação de bairro. Aproximar mais daria ao resultado uma
+    // aparência de precisão que ele não tem.
+    const p = projetar(alvo.lon, alvo.lat)
+    setVista({ zoom: limitar(ESCALA_BAIRRO / base), cx: p.x, cy: p.y })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alvo?.chave])
 
   useEffect(() => {
     const el = caixaRef.current
@@ -516,6 +593,22 @@ export function Mapa({
               )
             })}
           </ul>
+        )}
+
+        {/* Alfinete do endereço buscado.
+            `aria-hidden` e sem foco: é eco visual de um resultado que a tela já
+            apresenta em texto, com as ações. Um segundo alvo focável repetindo
+            a mesma coisa só alongaria o caminho de teclado. */}
+        {alvo && (
+          <div
+            className="mapa__alfinete"
+            aria-hidden="true"
+            style={{ left: paraTela(alvo.lon, alvo.lat).x, top: paraTela(alvo.lon, alvo.lat).y }}
+          >
+            {/* Rótulo em cima, ponta embaixo: é a ponta que marca a coordenada. */}
+            <span className="mapa__alfinete__rotulo">{alvo.rotulo}</span>
+            <span className="mapa__alfinete__ponto" />
+          </div>
         )}
 
         {/* Balão de detalhe. `aria-hidden` porque o mesmo texto já está no

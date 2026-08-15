@@ -20,6 +20,15 @@ PGDATABASE="$DB" ./scripts/migrate.sh
 echo "== executando suíte de invariantes"
 falhas=0
 for t in tests/*.sql; do
+  # Mesma convenção das migrações: o nome declara a dependência. Um teste de
+  # invariante geográfica não tem o que provar num banco sem PostGIS — as
+  # tabelas que ele checa nem chegaram a ganhar a coluna.
+  if [[ "${SKIP_POSTGIS:-0}" == "1" && "$t" == *postgis* ]]; then
+    echo
+    echo "-- ignorado (SKIP_POSTGIS=1): $t"
+    continue
+  fi
+
   echo
   echo "-- $t"
   if PGDATABASE="$DB" psql -v ON_ERROR_STOP=1 -q --no-psqlrc -f "$t"; then

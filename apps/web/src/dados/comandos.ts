@@ -5,6 +5,7 @@ import type {
   Anexo,
   BaseDados,
   CategoriaAnexo,
+  Cliente,
   Contrato,
   ContratoItem,
   EntidadeAnexo,
@@ -14,6 +15,7 @@ import type {
   NotaFiscalItem,
   OrdemServico,
   Peca,
+  PrecisaoGeo,
 } from './tipos'
 
 /**
@@ -381,6 +383,63 @@ export function definirCredito(
   }
   cliente.situacaoCredito = situacao
   return sucesso(cliente)
+}
+
+/**
+ * Grava a coordenada do cliente a partir de um resultado de busca de endereço.
+ *
+ * Resolve o cliente que foi cadastrado sem coordenada e por isso não aparecia
+ * no mapa — não deixava de existir, deixava de ser visto, que na prática é a
+ * mesma coisa para quem planeja rota de técnico.
+ *
+ * A proveniência é obrigatória, e não um enfeite de auditoria: coordenada sem
+ * origem é coordenada que ninguém sabe se pode corrigir. Uma vinda de rastreio
+ * de equipamento não deve ser sobrescrita por um palpite de endereço, e sem
+ * registrar a origem não há como saber qual é qual.
+ */
+export function definirLocalizacaoCliente(
+  base: BaseDados,
+  clienteId: string,
+  dados: { lat: number; lon: number; precisao: PrecisaoGeo; fonte: string },
+): Resultado<Cliente> {
+  const cliente = base.clientes.find((c) => c.id === clienteId)
+  if (!cliente) return falha('NAO_ENCONTRADO', 'Cliente não encontrado.')
+
+  if (!Number.isFinite(dados.lat) || !Number.isFinite(dados.lon)) {
+    return falha('REGRA_DE_NEGOCIO', 'Coordenada inválida.', { campo: 'lat' })
+  }
+
+  /*
+   * Recusa coordenada fora do território brasileiro.
+   *
+   * A busca de endereço já restringe o país, então um ponto fora daqui não é
+   * um caso de uso: é sintoma de eixo trocado — latitude no lugar da longitude
+   * inverte o Brasil para o meio da Somália, e sem esta checagem o cliente
+   * simplesmente sumiria do mapa sem nenhum erro.
+   */
+  if (!dentroDoBrasil(dados.lat, dados.lon)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      'A coordenada cai fora do território brasileiro. Confira se latitude e longitude não estão trocadas.',
+      { campo: 'lat' },
+    )
+  }
+
+  if (dados.fonte.trim() === '') {
+    return falha('REGRA_DE_NEGOCIO', 'Informe a origem da coordenada.', { campo: 'fonte' })
+  }
+
+  cliente.lat = dados.lat
+  cliente.lon = dados.lon
+  cliente.geoPrecisao = dados.precisao
+  cliente.geoFonte = dados.fonte.trim()
+  cliente.geoAtualizadoEm = new Date().toISOString()
+  return sucesso(cliente)
+}
+
+/** Envelope do território, com folga para a margem e as ilhas próximas. */
+function dentroDoBrasil(lat: number, lon: number): boolean {
+  return lat >= -34.5 && lat <= 6 && lon >= -74.5 && lon <= -33.5
 }
 
 /* ============================================================= contratos === */

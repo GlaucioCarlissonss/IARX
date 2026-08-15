@@ -2074,6 +2074,47 @@ textarea {
   color: inherit;
 }
 
+/*
+ * Alfinete do endereço buscado.
+ *
+ * Deliberadamente diferente dos marcadores de cliente: forma de gota, não
+ * disco, e cor neutra. Ele representa outra coisa — um lugar que a busca
+ * encontrou, não um ativo em campo — e confundir os dois faria alguém ler um
+ * endereço avulso como parque instalado.
+ */
+.mapa__alfinete {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  pointer-events: none;
+  z-index: 4;
+}
+.mapa__alfinete__ponto {
+  width: 14px;
+  height: 14px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--cor-text-primary);
+  /* Anel claro por dentro, como nos marcadores: sobre fotografia o limite tem
+     de existir independentemente do que estiver embaixo. */
+  border: 2px solid var(--cor-focus-ring-inset);
+  box-shadow: 0 0 0 1px var(--cor-focus-ring);
+}
+.mapa__alfinete__rotulo {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-12);
+  color: var(--cor-text-primary);
+  background: var(--cor-surface);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  padding: 1px var(--e2);
+}
+
 .mapa__aviso {
   display: inline-flex;
   gap: var(--e1);
@@ -2099,6 +2140,18 @@ textarea {
 }
 .mapa__contagem strong {
   font-variant-numeric: tabular-nums;
+}
+
+/* Bloco da busca de endereço, dentro do painel de localizações. Separado por
+   uma régua porque é outra coisa: resultados que ainda não são cadastro. */
+.mapa-endereco {
+  display: grid;
+  gap: var(--e3);
+}
+.mapa-endereco:not(:empty) {
+  margin-block-end: var(--e3);
+  padding-block-end: var(--e3);
+  border-block-end: 1px solid var(--cor-border);
 }
 
 /* -------------------------------------------------- painel lateral da tela */

@@ -133,7 +133,20 @@ export interface Cliente {
   /** Sede do cliente. Deriva da praça, com deslocamento próprio do endereço. */
   lat: number
   lon: number
+  /**
+   * Proveniência da coordenada.
+   *
+   * Sem ela, ninguém sabe se um ponto veio do cadastro à mão, da praça do
+   * cliente ou de uma busca de endereço — e portanto ninguém sabe se pode
+   * corrigi-lo. É a diferença entre uma coordenada que se confia para despachar
+   * técnico e uma que se confere antes.
+   */
+  geoPrecisao?: PrecisaoGeo
+  geoFonte?: string
+  geoAtualizadoEm?: string
 }
+
+export type PrecisaoGeo = 'DECLARADA' | 'GEOCODIFICADO' | 'RASTREADA' | 'APROXIMADA'
 
 export interface LocalOperacao {
   id: string
