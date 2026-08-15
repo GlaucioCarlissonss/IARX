@@ -1803,6 +1803,69 @@ textarea {
   opacity: 0.5;
 }
 
+/* ---------------------------------------------------------- camada raster */
+
+.mapa__camada {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+/* Cor sob os tiles enquanto eles não chegam. Sem ela, um basemap escuro pisca
+   branco a cada passo de zoom — desconfortável, e em tela grande chega a
+   ofuscar. */
+.mapa__camada[data-fundo='escuro'] {
+  background: #10131a;
+}
+.mapa__camada[data-fundo='claro'] {
+  background: var(--cor-surface-sunken);
+}
+
+.mapa__camada__nivel {
+  position: absolute;
+  inset: 0;
+}
+.mapa__camada__nivel img {
+  position: absolute;
+  max-width: none; /* a regra global de imagem responsiva encolheria o tile */
+  /* O tile já vem no tamanho pedido; sem isto o navegador reamostra na troca de
+     nível e a imagem "respira" durante o zoom. */
+  image-rendering: auto;
+}
+
+/*
+ * Marcador sobre fotografia: anel duplo, claro por dentro e escuro por fora.
+ *
+ * A primeira tentativa foi um véu semiopaco sobre a imagem, para prender a
+ * luminância do fundo a uma faixa conhecida. A medição derrubou a ideia: o pior
+ * par ficava em 1,05:1, e **nenhuma opacidade resolve** — escurecer o véu ajuda
+ * o marcador claro e prejudica o escuro, e a foto pode ter qualquer luminância.
+ * Um único fundo translúcido não limita os dois lados ao mesmo tempo.
+ *
+ * O que resolve é a técnica que a paleta já usa no anel de foco: dois anéis de
+ * luminância oposta. Fundo claro contrasta com o anel escuro, fundo escuro com
+ * o claro, e o cinza médio contrasta com os dois. A cobertura é total e não
+ * depende de que imagem está embaixo — verificado no gate de contraste, que
+ * mede os anéis contra branco e preto puros.
+ */
+.mapa[data-imagem] .mapa__marcador {
+  border-color: var(--cor-focus-ring-inset);
+  box-shadow:
+    0 0 0 2px var(--cor-focus-ring),
+    0 1px 5px rgb(0 0 0 / 0.5);
+}
+
+/* Sobre a imagem o contorno muda de papel: deixa de ser o mapa e vira a divisa
+   de estado, que o satélite não desenha e a operação consulta o tempo todo.
+   Branco fixo, e não token: o que está embaixo é uma fotografia, que não muda
+   com o tema — uma divisa que escurecesse junto com a interface sumiria sobre
+   a imagem de satélite exatamente no tema escuro. */
+.mapa__uf[data-sobre-imagem] {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1;
+  stroke-opacity: 0.6;
+}
+
 /* ------------------------------------------------------------ marcadores */
 
 .mapa__marcadores {
@@ -1900,14 +1963,24 @@ textarea {
   display: none;
 }
 
-.mapa__zoom {
+/* Coluna única de controles à direita.
+   Enquanto o seletor de camada e o zoom se posicionavam sozinhos, um cobria
+   parte do outro em mapa de 300 px — alvo obscurecido reprova WCAG 2.5.8.
+   Empilhados no mesmo fluxo, a sobreposição deixa de ser possível. */
+.mapa__controles {
   position: absolute;
   inset-block-start: 50%;
   inset-inline-end: var(--e3);
   transform: translateY(-50%);
   display: grid;
-  gap: 1px;
+  gap: var(--e2);
+  justify-items: end;
   z-index: 5;
+}
+
+.mapa__zoom {
+  display: grid;
+  gap: 1px;
   border-radius: var(--raio-1);
   overflow: hidden;
   border: 1px solid var(--cor-border-strong);
@@ -1955,6 +2028,62 @@ textarea {
   height: 3px;
   background: var(--cor-text-secondary);
   border-radius: 2px;
+}
+
+/* Sobre fotografia, nada de fundo translúcido: a legibilidade passaria a
+   depender do que estivesse embaixo, que muda a cada arrasto. */
+.mapa[data-imagem] .mapa__escala {
+  background: var(--cor-surface);
+}
+
+/* --------------------------------------------------- seletor de camada */
+
+.mapa__camadas {
+  display: flex;
+  gap: var(--e2);
+  align-items: center;
+  background: var(--cor-surface);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  padding: var(--e1) var(--e2);
+}
+.mapa__camadas select {
+  /* Estreito o bastante para caber a 320 px sem empurrar o zoom para fora. */
+  max-width: 9.5rem;
+}
+
+/*
+ * Crédito de licença.
+ *
+ * ODbL (OpenStreetMap) e os termos da Esri exigem crédito visível. Fundo sólido
+ * pelo mesmo motivo da escala: texto pequeno diretamente sobre foto é ilegível
+ * em metade dos enquadramentos.
+ */
+.mapa__credito {
+  font-size: var(--t-11);
+  color: var(--cor-text-secondary);
+  background: var(--cor-surface);
+  padding: 2px var(--e2);
+  border-radius: var(--raio-1);
+  max-width: 42ch;
+}
+.mapa__credito:empty {
+  display: none;
+}
+.mapa__credito a {
+  color: inherit;
+}
+
+.mapa__aviso {
+  display: inline-flex;
+  gap: var(--e1);
+  align-items: center;
+  font-size: var(--t-12);
+  color: var(--cor-text);
+  background: var(--cor-atencao-subtle-bg);
+  border: 1px solid var(--cor-border-strong);
+  border-radius: var(--raio-1);
+  padding: 2px var(--e2);
 }
 
 /* Contagens sobre o mapa, no padrão do exemplo de referência. */

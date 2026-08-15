@@ -15,7 +15,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    // Os testes unitários rodam em `node --test`, que executa TypeScript direto
+    // apagando os tipos — e, para isso, exige a extensão no import. Só os
+    // arquivos de teste usam `.ts` no especificador; o código da aplicação
+    // continua sem extensão, resolvido pelo Vite.
+    "allowImportingTsExtensions": true,
+    "types": ["vite/client", "node"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts"]
 }

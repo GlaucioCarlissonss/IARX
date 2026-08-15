@@ -95,6 +95,53 @@ function regrasContraste(tema) {
   add('focus-ring-inset / primary', 'focus-ring-inset', 'primary', componente_ui, 'WCAG 2.4.13 anel interno sobre botão primário')
   add('focus-ring-inset / focus-ring', 'focus-ring-inset', 'focus-ring', componente_ui, 'WCAG 2.4.13 anel duplo distinguível')
 
+  /*
+   * Marcador do mapa sobre fotografia de satélite.
+   *
+   * Aqui o fundo não é um token: é uma imagem aérea, que pode ter qualquer
+   * luminância em qualquer pixel. Nenhum par token/token descreve esse caso, e
+   * a primeira tentativa — um véu semiopaco sobre a imagem, para prender o
+   * fundo a uma faixa conhecida — foi medida e reprovada: o pior par ficava em
+   * 1,05:1, e nenhuma opacidade resolve, porque escurecer o véu ajuda o
+   * marcador claro e prejudica o escuro.
+   *
+   * O que o marcador usa é a técnica do anel de foco: dois anéis de luminância
+   * oposta. As três verificações abaixo, juntas, provam que o limite do
+   * marcador é visível sobre **qualquer** imagem:
+   *
+   *   · os dois anéis se distinguem um do outro (já coberto acima);
+   *   · o anel escuro alcança 3:1 contra branco puro — cobre todo fundo claro;
+   *   · o anel claro alcança 3:1 contra preto puro — cobre todo fundo escuro.
+   *
+   * O cinza intermediário fica coberto pelos dois: 3:1 contra preto exige
+   * luminância acima de 0,10, e 3:1 contra branco exige abaixo de 0,30, de modo
+   * que as duas faixas se sobrepõem em vez de deixar vão.
+   *
+   * Qual dos dois tokens é o escuro inverte entre os temas, então a regra é
+   * escrita sem supor: ordena pela luminância medida.
+   */
+  {
+    const anelA = t('focus-ring')
+    const anelB = t('focus-ring-inset')
+    const [claro, escuro] = contrast(anelA, '#000000') >= contrast(anelB, '#000000')
+      ? [anelA, anelB]
+      : [anelB, anelA]
+    pares.push({
+      rotulo: 'anel escuro do marcador / imagem clara',
+      fgHex: escuro,
+      bgHex: '#ffffff',
+      min: componente_ui,
+      criterio: 'WCAG 1.4.11 marcador sobre imagem de satélite',
+    })
+    pares.push({
+      rotulo: 'anel claro do marcador / imagem escura',
+      fgHex: claro,
+      bgHex: '#000000',
+      min: componente_ui,
+      criterio: 'WCAG 1.4.11 marcador sobre imagem de satélite',
+    })
+  }
+
   // Marcas de gráfico precisam ser legíveis contra o fundo do painel
   for (const i of SERIES) {
     add(`serie-${i} / bg`, `serie-${i}`, 'bg', componente_ui, 'WCAG 1.4.11 marca de gráfico')

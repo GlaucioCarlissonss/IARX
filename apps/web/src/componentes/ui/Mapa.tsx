@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ENVELOPE, ESTADOS, UFS, desprojetar, projetar } from '../../dados/geo'
+import { CamadaTiles, useTilesDisponiveis } from './CamadaTiles'
+import { Dialogo } from './Dialogo'
+import { Botao, Entrada, Selecao } from './primitivos'
+import {
+  PROVEDORES,
+  gravarPreferencia,
+  lerPreferencia,
+  modeloDe,
+  modeloValido,
+  provedorPorId,
+} from '../../dados/tiles'
+import type { PreferenciaMapa } from '../../dados/tiles'
 import type { ReactNode } from 'react'
 
 /**
@@ -11,10 +23,19 @@ import type { ReactNode } from 'react'
  * da aplicação para ver onde está o parque quebra o fluxo justamente no momento
  * em que a pessoa está decidindo de onde despachar um técnico.
  *
- * Desenhado em SVG a partir de polígonos embutidos (ver `dados/geo.ts`) pela
- * razão explicada lá: o build é um arquivo único e tiles raster de host externo
- * não carregariam. O que se perde é imagem de satélite e nome de rua; o que se
- * mantém é tudo de que a operação depende — onde, quanto, e o quão concentrado.
+ * Duas camadas, e a ordem entre elas é a decisão de projeto:
+ *
+ *  · **imagem raster** do provedor escolhido — satélite por padrão, ruas e OSM
+ *    à disposição, servidor próprio configurável;
+ *  · **vetor embutido** (`dados/geo.ts`), que sobe para contorno de estado
+ *    quando há imagem e vira o mapa inteiro quando não há.
+ *
+ * O vetor não é o plano B envergonhado: é o piso. O build é um arquivo único e
+ * o artefato publicado roda sob política que bloqueia host externo — ali os
+ * tiles nunca chegam, e a alternativa a ter um piso seria exibir um retângulo
+ * cinza, que é pior do que não ter mapa. Quando há rede, a imagem entra por
+ * baixo sem recalcular a posição de um marcador sequer, porque a projeção dos
+ * tiles sempre foi a mesma dos polígonos.
  *
  * Acessibilidade tratada como requisito, não como acréscimo:
  *
@@ -102,6 +123,22 @@ export function Mapa({
   const [vista, setVista] = useState(VISTA_INICIAL)
   const [foco, setFoco] = useState<string | null>(null)
   const arrasto = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
+
+  /* ---------------------------------------------------------------- camada */
+
+  const [pref, setPref] = useState<PreferenciaMapa>(lerPreferencia)
+  const [configurando, setConfigurando] = useState(false)
+  const escuro = useTemaEscuro()
+
+  const provedor = provedorPorId(pref.provedor)
+  const modelo = modeloDe(provedor, escuro, pref.modeloProprio)
+  const estadoTiles = useTilesDisponiveis(provedor.precisaRede ? modelo : '', pref.chavePropria)
+  const comImagem = provedor.precisaRede && estadoTiles === 'ok' && modelo !== ''
+
+  function trocarPreferencia(nova: PreferenciaMapa) {
+    setPref(nova)
+    gravarPreferencia(nova)
+  }
 
   /* --------------------------------------------------------------- medidas */
 
@@ -354,7 +391,7 @@ export function Mapa({
   const escalaKm = escalaDeDistancia(escala, vista)
 
   return (
-    <div className="mapa" ref={caixaRef} style={{ height: altura }}>
+    <div className="mapa" ref={caixaRef} style={{ height: altura }} data-imagem={comImagem || undefined}>
       <div
         className="mapa__tela"
         role="application"
@@ -366,6 +403,18 @@ export function Mapa({
         onPointerUp={encerrarArrasto}
         onPointerCancel={encerrarArrasto}
       >
+        {comImagem && (
+          <CamadaTiles
+            modelo={modelo}
+            chave={pref.chavePropria}
+            escala={escala}
+            centro={{ cx: vista.cx, cy: vista.cy }}
+            dim={dim}
+            zoomMax={provedor.zoomMax}
+            fundo={provedor.fundo}
+          />
+        )}
+
         <svg width={dim.largura} height={dim.altura} aria-hidden="true" focusable="false">
           <defs>
             <radialGradient id="mapa-calor">
@@ -375,16 +424,18 @@ export function Mapa({
             </radialGradient>
           </defs>
 
-          <rect width={dim.largura} height={dim.altura} className="mapa__agua" />
+          {!comImagem && <rect width={dim.largura} height={dim.altura} className="mapa__agua" />}
 
           {/* Paralelos e meridianos a cada 5°: dão noção de escala e de
-              deformação da projeção sem competir com os dados. */}
-          <g className="mapa__grade">
-            {gradeGeografica(paraTela, dim)}
-          </g>
+              deformação da projeção sem competir com os dados. Sobre imagem
+              seriam ruído — a foto já dá a referência. */}
+          {!comImagem && <g className="mapa__grade">{gradeGeografica(paraTela, dim)}</g>}
 
+          {/* Os contornos ficam nas duas camadas, mudando de papel: preenchidos
+              são o mapa; sobre a imagem viram divisa de estado em traço fino,
+              que o satélite não mostra e a operação usa o tempo todo. */}
           {caminhos.map((c) => (
-            <path key={c.uf} d={c.d} className="mapa__uf" />
+            <path key={c.uf} d={c.d} className="mapa__uf" data-sobre-imagem={comImagem || undefined} />
           ))}
 
           {calor &&
@@ -485,24 +536,73 @@ export function Mapa({
           {sobreposicao}
         </div>
 
-        <div className="mapa__zoom" data-reserva>
-          <button type="button" onClick={() => aplicarZoom(1.5)} aria-label="Aproximar o mapa">
-            <span aria-hidden="true">+</span>
-          </button>
-          <button type="button" onClick={() => aplicarZoom(1 / 1.5)} aria-label="Afastar o mapa">
-            <span aria-hidden="true">−</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setVista(VISTA_INICIAL)}
-            aria-label="Enquadrar o Brasil inteiro"
-          >
-            <span aria-hidden="true">⤢</span>
-          </button>
+        {/* Seletor de camada e zoom numa coluna só.
+            Enquanto foram dois blocos posicionados de forma independente, o
+            seletor cobria parcialmente o botão de enquadrar num mapa de 300 px
+            de altura — alvo obscurecido reprova WCAG 2.5.8, e foi o que o axe
+            acusou no cartão da tela inicial. Empilhados no mesmo fluxo, não há
+            sobreposição possível em nenhuma altura. */}
+        <div className="mapa__controles" data-reserva>
+          <div className="mapa__camadas">
+            <Selecao
+              rotulo="Camada do mapa"
+              rotuloOculto
+              value={pref.provedor}
+              onChange={(e) => trocarPreferencia({ ...pref, provedor: e.target.value as PreferenciaMapa['provedor'] })}
+              opcoes={PROVEDORES.map((p) => ({ valor: p.id, texto: p.nome }))}
+            />
+            {pref.provedor === 'proprio' && (
+              <Botao pequeno variante="sutil" onClick={() => setConfigurando(true)}>
+                Configurar
+              </Botao>
+            )}
+          </div>
+
+          <div className="mapa__zoom">
+            <button type="button" onClick={() => aplicarZoom(1.5)} aria-label="Aproximar o mapa">
+              <span aria-hidden="true">+</span>
+            </button>
+            <button type="button" onClick={() => aplicarZoom(1 / 1.5)} aria-label="Afastar o mapa">
+              <span aria-hidden="true">−</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVista(VISTA_INICIAL)}
+              aria-label="Enquadrar o Brasil inteiro"
+            >
+              <span aria-hidden="true">⤢</span>
+            </button>
+          </div>
         </div>
 
         <div className="mapa__rodape">
           <span data-reserva>{rodape}</span>
+
+          {/* Aviso de queda.
+              `role="status"` porque a troca acontece sozinha, segundos depois de
+              a tela abrir: sem anúncio, quem não vê a imagem não tem como saber
+              que está olhando outra coisa. */}
+          {provedor.precisaRede && estadoTiles === 'indisponivel' && (
+            <span className="mapa__aviso" data-reserva role="status">
+              <span aria-hidden="true">◍</span>{' '}
+              {modelo === ''
+                ? 'Servidor de tiles não configurado — exibindo o mapa vetorial embutido.'
+                : 'Sem acesso ao servidor de imagens — exibindo o mapa vetorial embutido.'}
+            </span>
+          )}
+
+          {/* Crédito exigido por licença (ODbL, no caso do OSM), não enfeite.
+              Fundo sólido para o texto nunca cair direto sobre a fotografia. */}
+          <span className="mapa__credito" data-reserva>
+            {provedor.atribuicaoHref && comImagem ? (
+              <a href={provedor.atribuicaoHref} target="_blank" rel="noreferrer noopener">
+                {provedor.atribuicao}
+              </a>
+            ) : (
+              comImagem && provedor.atribuicao
+            )}
+          </span>
+
           <span className="mapa__escala" data-reserva aria-hidden="true">
             <span className="mapa__escala__barra" style={{ width: escalaKm.pixels }} />
             {escalaKm.rotulo}
@@ -510,11 +610,115 @@ export function Mapa({
         </div>
         </div>
       </div>
+
+      {configurando && (
+        <ConfigurarProvedor
+          pref={pref}
+          aoFechar={() => setConfigurando(false)}
+          aoGravar={(nova) => {
+            trocarPreferencia(nova)
+            setConfigurando(false)
+          }}
+        />
+      )}
     </div>
   )
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Configuração do servidor de tiles próprio.
+ *
+ * Existe porque a política de uso do OpenStreetMap desaconselha uso comercial
+ * pesado dos servidores públicos, e a plataforma vai crescer para isso. Trocar
+ * por MapTiler, Mapbox, Google ou um servidor da casa passa a ser configuração,
+ * não alteração de código.
+ */
+function ConfigurarProvedor({
+  pref,
+  aoFechar,
+  aoGravar,
+}: {
+  pref: PreferenciaMapa
+  aoFechar: () => void
+  aoGravar: (p: PreferenciaMapa) => void
+}) {
+  const [modelo, setModelo] = useState(pref.modeloProprio)
+  const [chave, setChave] = useState(pref.chavePropria)
+
+  const tocado = modelo.trim() !== ''
+  const invalido = tocado && !modeloValido(modelo)
+
+  return (
+    <Dialogo
+      titulo="Servidor de tiles próprio"
+      descricao="Endereço no padrão XYZ. A aplicação substitui {z}, {x} e {y} a cada tile, e {chave} pela credencial."
+      aoFechar={aoFechar}
+      acoes={
+        <>
+          <Botao variante="sutil" onClick={aoFechar}>
+            Cancelar
+          </Botao>
+          <Botao
+            variante="primario"
+            disabled={!modeloValido(modelo)}
+            motivoDesabilitado="Informe um endereço https com {z}, {x} e {y}"
+            onClick={() => aoGravar({ ...pref, modeloProprio: modelo.trim(), chavePropria: chave.trim() })}
+          >
+            Usar este servidor
+          </Botao>
+        </>
+      }
+    >
+      <div className="pilha g3">
+        <Entrada
+          rotulo="Endereço do tile"
+          value={modelo}
+          onChange={(e) => setModelo(e.target.value)}
+          placeholder="https://tiles.exemplo.com.br/{z}/{x}/{y}.png"
+          erro={invalido ? 'Precisa começar com https e conter {z}, {x} e {y}.' : undefined}
+          dica="https é obrigatório: servida por HTTPS, a aplicação teria a imagem bloqueada por conteúdo misto — e o sintoma seria um mapa cinza, sem erro visível."
+        />
+        <Entrada
+          rotulo="Credencial (opcional)"
+          value={chave}
+          onChange={(e) => setChave(e.target.value)}
+          placeholder="chave de API do provedor"
+          dica="Fica guardada neste navegador e viaja em cada requisição de tile. Credencial usada em navegador é pública por natureza — restrinja-a por domínio no painel do provedor."
+        />
+      </div>
+    </Dialogo>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Tema em vigor, para escolher a variante do basemap.
+ *
+ * A aplicação não tem seletor de tema: ela segue `prefers-color-scheme` só por
+ * CSS. Aqui, porém, a escolha precisa chegar ao JavaScript — a variante clara e
+ * a escura do provedor de ruas são **URLs diferentes**, não cores diferentes.
+ */
+function useTemaEscuro(): boolean {
+  const consultar = () =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false
+
+  const [escuro, setEscuro] = useState(consultar)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const consulta = window.matchMedia('(prefers-color-scheme: dark)')
+    const ouvir = (e: MediaQueryListEvent) => setEscuro(e.matches)
+    consulta.addEventListener('change', ouvir)
+    return () => consulta.removeEventListener('change', ouvir)
+  }, [])
+
+  return escuro
+}
 
 /** Centro na média dos membros: com a semente, o marcador salta ao entrar um vizinho. */
 function montarGrupo(membros: { p: PontoMapa; tela: { x: number; y: number } }[]): Agrupamento {

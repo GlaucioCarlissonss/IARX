@@ -1388,6 +1388,144 @@ test('axe no mapa com marcadores, calor e análises', async ({ page }) => {
   expect(v, `aba de análises:\n  ${descrever(v)}`).toEqual([])
 })
 
+/* -------------------------------------------------------------------- */
+/* Camada raster                                                        */
+/* -------------------------------------------------------------------- */
+
+/**
+ * O que estes testes resolvem: provar que os tiles funcionam **sem rede**.
+ *
+ * Os servidores de tile são de terceiros e não respondem em integração
+ * contínua — este ambiente bloqueia todos eles. Testar contra a internet real
+ * seria trocar um teste por uma aposta: passaria ou falharia por motivos que
+ * nada têm a ver com o código.
+ *
+ * A saída é interceptar no navegador. `page.route` responde à requisição do
+ * tile com um PNG local, e tudo o que é nosso — o nível escolhido, a ordem dos
+ * eixos na URL, o posicionamento, a atribuição, a queda para o vetor — passa a
+ * ser verificável de forma determinística. O que fica de fora é apenas se o
+ * servidor público está no ar, que nenhum teste deveria afirmar.
+ */
+
+/** PNG 1×1 transparente — o conteúdo não importa, só que o `onload` dispare. */
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+const HOSTS_TILE = ['**server.arcgisonline.com/**', '**basemaps.cartocdn.com/**', '**tile.openstreetmap.org/**']
+
+/** Serve todo tile localmente. Precisa vir antes do `goto`. */
+async function servirTiles(page, coletor) {
+  for (const padrao of HOSTS_TILE) {
+    await page.route(padrao, (rota) => {
+      coletor?.push(rota.request().url())
+      return rota.fulfill({ status: 200, contentType: 'image/png', body: PIXEL })
+    })
+  }
+}
+
+/** Recusa todo tile. Torna a queda determinística mesmo onde houver rede. */
+async function recusarTiles(page) {
+  for (const padrao of HOSTS_TILE) await page.route(padrao, (rota) => rota.abort())
+}
+
+test('com o servidor de imagens no ar, o mapa pinta tiles de verdade', async ({ page }) => {
+  const pedidos = []
+  await servirTiles(page, pedidos)
+  await abrir(page, { hash: '#/mapa' })
+
+  const tiles = page.locator('.mapa__camada img')
+  await expect(tiles.first()).toBeVisible()
+  expect(await tiles.count()).toBeGreaterThan(1)
+
+  // A camada cobre a moldura: os tiles são posicionados, não empilhados no
+  // canto. Dois deles têm de estar em colunas diferentes da tela.
+  const esquerdas = await tiles.evaluateAll((n) => n.map((i) => i.getBoundingClientRect().left))
+  expect(new Set(esquerdas.map(Math.round)).size).toBeGreaterThan(1)
+
+  // Com imagem, o contorno de estado deixa de ser o mapa e vira divisa — mas
+  // continua desenhado, que é o que o satélite não mostra.
+  await expect(page.locator('.mapa__uf[data-sobre-imagem]').first()).toBeAttached()
+  await expect(page.locator('.mapa__marcador').first()).toBeVisible()
+})
+
+test('o padrão é satélite, e a URL do Esri leva os eixos na ordem dele', async ({ page }) => {
+  const pedidos = []
+  await servirTiles(page, pedidos)
+  await abrir(page, { hash: '#/mapa' })
+  await expect(page.locator('.mapa__camada img').first()).toBeVisible()
+
+  expect(pedidos.length).toBeGreaterThan(0)
+  expect(pedidos.every((u) => u.includes('server.arcgisonline.com'))).toBe(true)
+
+  for (const url of pedidos) {
+    expect(url).toMatch(/\/MapServer\/tile\/\d+\/\d+\/\d+$/)
+  }
+
+  // `/tile/{z}/{y}/{x}` — trocar os dois últimos carregaria imagem de outro
+  // lugar do planeta sem nenhum erro, que é o defeito mais caro desta camada.
+  //
+  // A asserção se ancora no tile de sondagem, cuja coordenada é constante
+  // (z 4, x 5, y 8 — sobre o Centro-Oeste). Conferir só o formato `\d+/\d+`
+  // não serviria: casa igual com os eixos trocados.
+  expect(pedidos.some((u) => u.endsWith('/MapServer/tile/4/8/5'))).toBe(true)
+  expect(pedidos.some((u) => u.endsWith('/MapServer/tile/4/5/8'))).toBe(false)
+})
+
+test('a licença dos tiles é creditada na tela', async ({ page }) => {
+  await servirTiles(page)
+  await abrir(page, { hash: '#/mapa' })
+  await expect(page.locator('.mapa__camada img').first()).toBeVisible()
+
+  // ODbL e os termos da Esri exigem crédito visível. Sem esta asserção, a
+  // atribuição sumiria numa refatoração de layout sem ninguém perceber.
+  await expect(page.locator('.mapa__credito')).toContainText(/Esri/)
+})
+
+test('sem acesso ao servidor de imagens, o mapa cai no vetor e avisa', async ({ page }) => {
+  await recusarTiles(page)
+  await abrir(page, { hash: '#/mapa' })
+
+  // É o caminho que o artefato publicado percorre sempre: a política de
+  // conteúdo bloqueia host externo. O resultado não pode ser retângulo cinza.
+  await expect(page.getByRole('status').filter({ hasText: /vetorial embutido/ })).toBeVisible({
+    timeout: 15000,
+  })
+  await expect(page.locator('.mapa__camada')).toHaveCount(0)
+  await expect(page.locator('.mapa__uf').first()).toBeVisible()
+  await expect(page.locator('.mapa__marcador').first()).toBeVisible()
+})
+
+test('a camada escolhida é lembrada e o seletor funciona só pelo teclado', async ({ page }) => {
+  const pedidos = []
+  await servirTiles(page, pedidos)
+  await abrir(page, { hash: '#/mapa' })
+  await expect(page.locator('.mapa__camada img').first()).toBeVisible()
+
+  const seletor = page.locator('.mapa__camadas select').first()
+  await seletor.focus()
+  await seletor.selectOption('osm')
+
+  await expect
+    .poll(() => pedidos.some((u) => u.includes('tile.openstreetmap.org')))
+    .toBe(true)
+
+  // Recarregar mantém a escolha: preferência de camada é do usuário, não da
+  // sessão.
+  await page.reload()
+  await expect(page.locator('.mapa__camadas select').first()).toHaveValue('osm')
+})
+
+test('axe no mapa com a camada de satélite carregada', async ({ page }) => {
+  await servirTiles(page)
+  await abrir(page, { hash: '#/mapa' })
+  await expect(page.locator('.mapa__camada img').first()).toBeVisible()
+
+  const v = await violacoes(page)
+  expect(v, `mapa sobre imagem:\n  ${descrever(v)}`).toEqual([])
+})
+
 /* ==================================================================== */
 /* Política comercial — franquia, preço e simulador                     */
 /* ==================================================================== */
