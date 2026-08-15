@@ -982,9 +982,10 @@ export function anexosDe(base: BaseDados, entidade: EntidadeAnexo, entidadeId: s
  * operador que não consegue anexar o comprovante que o cliente mandou.
  *
  * A segurança vem de outro lugar, e é o que torna a permissividade defensável:
- * o conteúdo nunca é executado nem renderizado como HTML, e o download é
- * sempre forçado com o atributo `download` — nunca navegação para o arquivo.
- * Um `.html` anexado baixa; não abre no contexto da aplicação.
+ * o conteúdo nunca é executado nem renderizado como HTML, e a entrega é sempre
+ * um salvamento — `download` no link, ou o salvamento mediado do visualizador
+ * de artefato — nunca navegação para o arquivo. Um `.html` anexado baixa; não
+ * abre no contexto da aplicação, em nenhum dos dois caminhos.
  *
  * Valida tudo antes de gravar qualquer coisa: um lote parcialmente aceito
  * deixa o operador sem saber o que subiu e o que não subiu.

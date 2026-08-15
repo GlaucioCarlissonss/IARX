@@ -1374,6 +1374,99 @@ test('exportar entrega o CSV das coordenadas', async ({ page }) => {
   expect(arquivo.suggestedFilename()).toBe('distribuicao-geografica.csv')
 })
 
+/* -------------------------------------------------------------------- */
+/* Entrega de arquivo no visualizador de artefato                       */
+/* -------------------------------------------------------------------- */
+
+/**
+ * O que estes testes protegem: o botão de exportar entregando alguma coisa.
+ *
+ * Dentro do visualizador de artefato, download iniciado pela própria página
+ * não acontece — link `download`, `blob:`, `data:`, tudo inerte, e **sem
+ * erro**. O botão parecia funcionar e não entregava nada, que é a pior forma
+ * de falhar: nem o usuário nem o log sabem que houve problema.
+ *
+ * Ali a entrega passa por `claude.downloads.save`. Como o Playwright não roda
+ * dentro do visualizador, a ponte é injetada antes do carregamento — o mesmo
+ * princípio dos tiles: o que é nosso fica verificável sem depender do
+ * ambiente que não temos aqui.
+ */
+
+/** Injeta a ponte do visualizador, com o roteiro de falhas desejado. */
+async function pontearVisualizador(page, roteiro = []) {
+  await page.addInitScript((codigos) => {
+    window.__salvos = []
+    let i = 0
+    const downloads = {
+      save: async ({ filename, data }) => {
+        const texto = typeof data === 'string' ? data : await data.text()
+        window.__salvos.push({ filename, texto })
+        const codigo = codigos[i++] ?? null
+        if (codigo === null) return { status: 'saved' }
+        throw { code: codigo, message: codigo }
+      },
+    }
+    window.claude = { use: async (nome) => (nome === 'downloads' ? downloads : null) }
+  }, roteiro)
+}
+
+test('no visualizador, exportar entrega o arquivo pela ponte, não por link inerte', async ({ page }) => {
+  await pontearVisualizador(page)
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByRole('button', { name: 'Exportar CSV' }).click()
+
+  const salvos = await page.evaluate(() => window.__salvos)
+  expect(salvos).toHaveLength(1)
+  expect(salvos[0].filename).toBe('distribuicao-geografica.csv')
+  // BOM e ponto e vírgula: é o que faz o Excel em pt-BR abrir sem assistente.
+  expect(salvos[0].texto.startsWith('﻿')).toBe(true)
+  expect(salvos[0].texto).toContain(';')
+
+  // Sucesso não vira aviso: só o que o usuário precisa fazer algo a respeito.
+  await expect(page.getByRole('status').filter({ hasText: /prévia/ })).toHaveCount(0)
+})
+
+test('extensão não habilitada salva como .txt e conta a troca', async ({ page }) => {
+  await pontearVisualizador(page, ['extension_not_enabled'])
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByRole('button', { name: 'Exportar CSV' }).click()
+
+  const salvos = await page.evaluate(() => window.__salvos)
+  // Perder a exportação por causa de três letras no nome do arquivo seria
+  // absurdo: o conteúdo é o mesmo.
+  expect(salvos.map((s) => s.filename)).toEqual([
+    'distribuicao-geografica.csv',
+    'distribuicao-geografica.txt',
+  ])
+  expect(salvos[0].texto).toBe(salvos[1].texto)
+
+  await expect(page.getByRole('status').filter({ hasText: /distribuicao-geografica\.txt/ })).toBeVisible()
+})
+
+test('recusa do serviço vira frase acionável, não clique sem efeito', async ({ page }) => {
+  await pontearVisualizador(page, ['unavailable', 'unavailable'])
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByRole('button', { name: 'Exportar CSV' }).click()
+
+  // É a correção do defeito original: falhar em silêncio deixava o usuário
+  // clicando de novo sem saber por quê.
+  await expect(page.getByRole('status').filter({ hasText: /hospedada/ })).toBeVisible()
+})
+
+test('cancelamento do usuário não vira mensagem', async ({ page }) => {
+  await pontearVisualizador(page, ['declined'])
+  await abrir(page, { hash: '#/mapa' })
+
+  await page.getByRole('button', { name: 'Exportar CSV' }).click()
+  await page.waitForFunction(() => window.__salvos.length === 1)
+
+  // Ele sabe o que fez. Avisar seria a interface discutindo a decisão dele.
+  await expect(page.getByRole('status').filter({ hasText: /prévia|hospedada/ })).toHaveCount(0)
+})
+
 test('axe no mapa com marcadores, calor e análises', async ({ page }) => {
   await abrir(page, { hash: '#/mapa' })
   let v = await violacoes(page)

@@ -3,6 +3,7 @@ import { api } from '../dados/api'
 import { regiaoPorId } from '../dados/catalogo'
 import { distanciaKm } from '../dados/geo'
 import { MIN_CARACTERES, buscarEndereco } from '../dados/geocodificacao'
+import { baixar } from '../lib/baixar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, moeda } from '../lib/formato'
@@ -49,6 +50,7 @@ export function Mapa() {
   const [erroEndereco, setErroEndereco] = useState<string | null>(null)
   const [alvo, setAlvo] = useState<AlvoMapa | null>(null)
   const [gravacao, setGravacao] = useState<string | null>(null)
+  const [exportacao, setExportacao] = useState<string | null>(null)
   const abortarRef = useRef<AbortController | null>(null)
 
   const base = api.baseSincrona()
@@ -226,7 +228,7 @@ export function Mapa() {
     }
   }
 
-  function exportar() {
+  async function exportar() {
     // Ponto e vírgula, e não vírgula: é o separador que o Excel em pt-BR
     // reconhece sem passar pelo assistente de importação. BOM pelo mesmo
     // motivo — sem ele, acento vira caractere trocado.
@@ -248,15 +250,12 @@ export function Mapa() {
       }),
     ]
     const csv = '﻿' + linhas.map((l) => l.map((c) => `"${c.replace(/"/g, '""')}"`).join(';')).join('\r\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'distribuicao-geografica.csv'
-    link.rel = 'noopener'
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+
+    // A alternativa em `.txt` não é capricho: no visualizador de artefato o
+    // `csv` pode não estar habilitado, e perder a exportação por causa de três
+    // letras no nome do arquivo seria absurdo — o conteúdo é o mesmo.
+    const r = await baixar('distribuicao-geografica.csv', csv, 'distribuicao-geografica.txt')
+    setExportacao(r.situacao === 'cancelado' ? null : (r.aviso ?? null))
   }
 
   return (
@@ -273,6 +272,19 @@ export function Mapa() {
           Exportar CSV
         </Botao>
       </div>
+
+      {/* O resultado da exportação precisa aparecer.
+          A falha original era silenciosa — no visualizador de artefato o clique
+          não entregava nada e nada dizia por quê, que é a pior forma de falhar.
+          Cancelamento do usuário não entra aqui: ele sabe o que fez. */}
+      {exportacao && (
+        <div className="aviso aviso--atencao" role="status">
+          <span aria-hidden="true">▲</span>
+          <div className="crescer">
+            <p className="aviso__corpo">{exportacao}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grade grade--metricas">
         <Cartao compacto>

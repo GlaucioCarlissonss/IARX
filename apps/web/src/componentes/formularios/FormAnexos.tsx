@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../dados/api'
 import { CATEGORIAS_ANEXO, formatarBytes, LIMITE_TOTAL_BYTES, ROTULO_CATEGORIA } from '../../dados/comandos'
+import { baixar } from '../../lib/baixar'
 import { useFormulario } from '../../lib/useFormulario'
 import { useToast } from '../../lib/contexto'
 import { data } from '../../lib/formato'
@@ -18,9 +19,11 @@ import type { Anexo, CategoriaAnexo, EntidadeAnexo } from '../../dados/tipos'
  * quase sempre quer conferir o que já existe **antes** de decidir o que enviar
  * — é assim que se evita a terceira cópia do mesmo contrato social.
  *
- * O download é sempre forçado (`download` no link), nunca navegação para o
- * arquivo. É o que torna seguro aceitar qualquer tipo: um `.html` anexado baixa
- * em vez de executar no contexto da aplicação.
+ * O download é sempre um salvamento, nunca navegação para o arquivo — seja pelo
+ * atributo `download` no navegador comum, seja pelo salvamento mediado do
+ * visualizador de artefato (ver `lib/baixar`). É o que torna seguro aceitar
+ * qualquer tipo: um `.html` anexado baixa em vez de executar no contexto da
+ * aplicação, e nenhum dos dois caminhos abre o conteúdo.
  */
 
 interface Props {
@@ -272,15 +275,19 @@ export function FormAnexos({ entidade, entidadeId, titulo, aoFechar }: Props) {
 /**
  * Baixar o anexo.
  *
- * A URL do blob é criada no clique e revogada logo depois: mantê-la viva para
- * cada linha da tabela seguraria todos os arquivos em memória enquanto o
- * diálogo estivesse aberto.
+ * A entrega em si vive em `lib/baixar`, que escolhe entre o caminho nativo do
+ * navegador e o do visualizador de artefato — onde download iniciado pela
+ * própria página simplesmente não acontece, sem erro. O que fica aqui é a parte
+ * que só esta tela sabe: mostrar ao usuário o que aconteceu, ao lado do arquivo
+ * que ele tentou baixar.
  *
- * `download` no link é o que impede a navegação para o conteúdo — é por isso
- * que aceitar qualquer tipo é seguro aqui.
+ * Anexo aceita qualquer tipo, e o visualizador não: um PDF é recusado lá. Por
+ * isso a recusa vira frase, e não um clique sem efeito.
  */
 function BotaoBaixar({ anexo }: { anexo: Anexo }) {
+  const [aviso, setAviso] = useState<string | null>(null)
   const conteudo = anexo.conteudo
+
   if (!conteudo) {
     return (
       <Botao
@@ -294,21 +301,23 @@ function BotaoBaixar({ anexo }: { anexo: Anexo }) {
   }
 
   return (
-    <Botao
-      pequeno
-      onClick={() => {
-        const url = URL.createObjectURL(conteudo)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = anexo.nome
-        link.rel = 'noopener'
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-        URL.revokeObjectURL(url)
-      }}
-    >
-      Baixar<span className="so-leitor"> {anexo.nome}</span>
-    </Botao>
+    <div className="pilha g1">
+      <Botao
+        pequeno
+        onClick={async () => {
+          setAviso(null)
+          const r = await baixar(anexo.nome, conteudo)
+          // Cancelamento não vira mensagem: foi decisão do usuário.
+          if (r.situacao !== 'cancelado') setAviso(r.aviso ?? null)
+        }}
+      >
+        Baixar<span className="so-leitor"> {anexo.nome}</span>
+      </Botao>
+      {aviso && (
+        <p className="texto-atenuado" role="status">
+          {aviso}
+        </p>
+      )}
+    </div>
   )
 }
