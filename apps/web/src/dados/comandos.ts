@@ -15,7 +15,9 @@ import type {
   NotaFiscalItem,
   OrdemServico,
   Peca,
+  PerfilGravado,
   PrecisaoGeo,
+  Usuario,
 } from './tipos'
 
 /**
@@ -440,6 +442,243 @@ export function definirLocalizacaoCliente(
 /** Envelope do território, com folga para a margem e as ilhas próximas. */
 function dentroDoBrasil(lat: number, lon: number): boolean {
   return lat >= -34.5 && lat <= 6 && lon >= -74.5 && lon <= -33.5
+}
+
+/* ========================================== usuários e perfis de acesso === */
+
+/**
+ * O último administrador ativo não se desativa.
+ *
+ * RN-L39, espelhada do gatilho da migração 0015. Aqui a checagem existe para a
+ * interface poder **explicar** antes de tentar — no servidor ela existe porque
+ * é lá que a regra precisa valer mesmo que ninguém pergunte. As duas não são
+ * redundância: uma evita o erro, a outra o torna impossível.
+ *
+ * Vale para desativar e para revogar o perfil administrativo, porque as duas
+ * portas levam ao mesmo locatário órfão — sem ninguém capaz de conceder acesso
+ * a ninguém, e sem caminho de volta pela própria aplicação.
+ */
+function ehAdministrador(base: BaseDados, u: Usuario): boolean {
+  return u.perfilIds.some((id) => {
+    const p = base.perfis.find((x) => x.id === id)
+    return p?.tipo === 'INTERNO' && p.permissoes.includes('usuario:gerenciar')
+  })
+}
+
+function outroAdministradorAtivo(base: BaseDados, excetoId: string): boolean {
+  return base.usuarios.some(
+    (u) => u.id !== excetoId && u.status === 'ATIVO' && ehAdministrador(base, u),
+  )
+}
+
+export interface DadosConvite {
+  nome: string
+  email: string
+  tipo: 'INTERNO' | 'CLIENTE'
+  clienteId: string | null
+  perfilId: string
+  filiaisIds: string[]
+}
+
+/**
+ * Convida — nunca "cria com senha".
+ *
+ * O administrador não define a senha de ninguém. Senha definida por terceiro é
+ * senha compartilhada: quem a criou continua sabendo, e o dono não tem como
+ * provar que não foi ele. O convidado define a própria no primeiro acesso.
+ */
+export function convidarUsuario(base: BaseDados, dados: DadosConvite): Resultado<Usuario> {
+  const nome = dados.nome.trim()
+  const email = dados.email.trim().toLowerCase()
+
+  if (nome.length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o nome completo.', { campo: 'nome' })
+  }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe um e-mail válido.', { campo: 'email' })
+  }
+  if (base.usuarios.some((u) => u.email.toLowerCase() === email)) {
+    return falha('REGRA_DE_NEGOCIO', 'Já existe um usuário com este e-mail.', { campo: 'email' })
+  }
+
+  const perfil = base.perfis.find((p) => p.id === dados.perfilId)
+  if (!perfil) return falha('NAO_ENCONTRADO', 'Perfil não encontrado.', { campo: 'perfilId' })
+
+  // O tipo do perfil e o do usuário têm de casar. Um usuário de cliente com
+  // perfil interno enxergaria a operação inteira da locadora (RN-L25).
+  if (perfil.tipo !== dados.tipo) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O perfil "${perfil.nome}" é do tipo ${perfil.tipo.toLowerCase()} e não pode ser atribuído a um usuário ${dados.tipo.toLowerCase()}.`,
+      { campo: 'perfilId' },
+    )
+  }
+  if (dados.tipo === 'CLIENTE' && !dados.clienteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Usuário de cliente precisa estar vinculado a um cliente.', {
+      campo: 'clienteId',
+    })
+  }
+
+  const usuario: Usuario = {
+    id: `usr-${email.split('@')[0]!.replace(/[^a-z0-9]+/g, '-')}-${base.usuarios.length + 1}`,
+    nome,
+    email,
+    tipo: dados.tipo,
+    clienteId: dados.tipo === 'CLIENTE' ? dados.clienteId : null,
+    status: 'ATIVO',
+    perfilIds: [perfil.id],
+    filiaisIds: dados.filiaisIds,
+    ultimoAcesso: null,
+    criadoEm: HOJE.toISOString().slice(0, 10),
+    // Convite pendente: existe, e não entra. É um estado legítimo, não um
+    // cadastro incompleto.
+    conviteAceito: false,
+  }
+  base.usuarios.push(usuario)
+  return sucesso(usuario)
+}
+
+export function atribuirPerfil(base: BaseDados, usuarioId: string, perfilId: string): Resultado<Usuario> {
+  const u = base.usuarios.find((x) => x.id === usuarioId)
+  if (!u) return falha('NAO_ENCONTRADO', 'Usuário não encontrado.')
+
+  const perfil = base.perfis.find((p) => p.id === perfilId)
+  if (!perfil) return falha('NAO_ENCONTRADO', 'Perfil não encontrado.', { campo: 'perfilId' })
+
+  if (perfil.tipo !== u.tipo) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Perfil de tipo ${perfil.tipo.toLowerCase()} não se aplica a usuário ${u.tipo.toLowerCase()}.`,
+      { campo: 'perfilId' },
+    )
+  }
+  if (u.perfilIds.includes(perfilId)) {
+    return falha('REGRA_DE_NEGOCIO', 'Este usuário já tem o perfil.', { campo: 'perfilId' })
+  }
+
+  u.perfilIds = [...u.perfilIds, perfilId]
+  return sucesso(u)
+}
+
+export function revogarPerfil(base: BaseDados, usuarioId: string, perfilId: string): Resultado<Usuario> {
+  const u = base.usuarios.find((x) => x.id === usuarioId)
+  if (!u) return falha('NAO_ENCONTRADO', 'Usuário não encontrado.')
+  if (!u.perfilIds.includes(perfilId)) {
+    return falha('REGRA_DE_NEGOCIO', 'O usuário não tem este perfil.')
+  }
+  if (u.perfilIds.length === 1) {
+    return falha('REGRA_DE_NEGOCIO', 'Um usuário precisa de ao menos um perfil. Atribua outro antes de revogar este.')
+  }
+
+  const restantes = u.perfilIds.filter((id) => id !== perfilId)
+  const aindaAdmin = restantes.some((id) => {
+    const p = base.perfis.find((x) => x.id === id)
+    return p?.tipo === 'INTERNO' && p.permissoes.includes('usuario:gerenciar')
+  })
+
+  if (ehAdministrador(base, u) && !aindaAdmin && u.status === 'ATIVO' && !outroAdministradorAtivo(base, u.id)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      'Revogar este perfil deixaria o ambiente sem administrador. Conceda o perfil administrativo a outro usuário antes.',
+    )
+  }
+
+  u.perfilIds = restantes
+  return sucesso(u)
+}
+
+export function desativarUsuario(base: BaseDados, usuarioId: string, motivo: string): Resultado<Usuario> {
+  const u = base.usuarios.find((x) => x.id === usuarioId)
+  if (!u) return falha('NAO_ENCONTRADO', 'Usuário não encontrado.')
+  if (u.status !== 'ATIVO') return falha('REGRA_DE_NEGOCIO', 'O usuário já está inativo.')
+
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva o motivo — a desativação é auditada.', { campo: 'motivo' })
+  }
+
+  if (ehAdministrador(base, u) && !outroAdministradorAtivo(base, u.id)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      'Este é o último administrador ativo. Conceda o perfil administrativo a outro usuário antes de desativá-lo.',
+    )
+  }
+
+  // Desativar preserva o histórico: o registro de auditoria referencia o autor,
+  // e apagar a conta deixaria a trilha apontando para ninguém (RN-L30).
+  u.status = 'INATIVO'
+  return sucesso(u)
+}
+
+export function ativarUsuario(base: BaseDados, usuarioId: string): Resultado<Usuario> {
+  const u = base.usuarios.find((x) => x.id === usuarioId)
+  if (!u) return falha('NAO_ENCONTRADO', 'Usuário não encontrado.')
+  if (u.status === 'ATIVO') return falha('REGRA_DE_NEGOCIO', 'O usuário já está ativo.')
+  u.status = 'ATIVO'
+  return sucesso(u)
+}
+
+export interface DadosPerfil {
+  nome: string
+  descricao: string
+  tipo: 'INTERNO' | 'CLIENTE'
+  permissoes: string[]
+}
+
+/**
+ * Cria ou altera um perfil.
+ *
+ * Perfil de sistema é recusado: ele é estrutural, e alterá-lo mudaria o acesso
+ * de todo mundo que o tem, inclusive de quem nunca foi consultado. Quem precisa
+ * de variação duplica e edita a cópia — o que a tela oferece como ação própria.
+ */
+export function salvarPerfil(
+  base: BaseDados,
+  perfilId: string | null,
+  dados: DadosPerfil,
+): Resultado<PerfilGravado> {
+  const nome = dados.nome.trim()
+  if (nome.length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o nome do perfil.', { campo: 'nome' })
+  }
+  if (dados.permissoes.length === 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Um perfil sem nenhuma permissão não dá acesso a nada. Marque ao menos uma.', {
+      campo: 'permissoes',
+    })
+  }
+
+  const duplicado = base.perfis.find((p) => p.nome.toLowerCase() === nome.toLowerCase() && p.id !== perfilId)
+  if (duplicado) return falha('REGRA_DE_NEGOCIO', 'Já existe um perfil com este nome.', { campo: 'nome' })
+
+  if (perfilId) {
+    const p = base.perfis.find((x) => x.id === perfilId)
+    if (!p) return falha('NAO_ENCONTRADO', 'Perfil não encontrado.')
+    if (p.isSistema) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        'Perfil de sistema não é editável. Duplique-o para criar uma variação.',
+      )
+    }
+    p.nome = nome
+    p.descricao = dados.descricao.trim()
+    p.permissoes = [...dados.permissoes].sort()
+    return sucesso(p)
+  }
+
+  const novo: PerfilGravado = {
+    id: `perf-${nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')}`,
+    nome,
+    descricao: dados.descricao.trim(),
+    tipo: dados.tipo,
+    isSistema: false,
+    permissoes: [...dados.permissoes].sort(),
+  }
+  base.perfis.push(novo)
+  return sucesso(novo)
+}
+
+/** Quantos usuários ativos usam este perfil — a tela precisa avisar antes de mudar. */
+export function usuariosComPerfil(base: BaseDados, perfilId: string): number {
+  return base.usuarios.filter((u) => u.perfilIds.includes(perfilId) && u.status === 'ATIVO').length
 }
 
 /* ============================================================= contratos === */

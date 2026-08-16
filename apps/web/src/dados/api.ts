@@ -111,6 +111,8 @@ export const api = {
   faturas: () => responder(() => [...BASE.faturas]),
   tecnicos: () => responder(() => [...BASE.tecnicos]),
   fornecedores: () => responder(() => [...BASE.fornecedores]),
+  usuarios: () => responder(() => [...BASE.usuarios]),
+  perfis: () => responder(() => [...BASE.perfis]),
   notasFiscais: () => responder(() => [...BASE.notasFiscais]),
   anexos: (entidade: EntidadeAnexo, entidadeId: string) =>
     responder(() => cmd.anexosDe(BASE, entidade, entidadeId)),
@@ -131,6 +133,17 @@ export const api = {
     executar(() => cmd.concluirChamado(BASE, ordemId, d)),
 
   criarCliente: (d: cmd.DadosCliente) => executar(() => cmd.criarCliente(BASE, d)),
+
+  convidarUsuario: (d: cmd.DadosConvite) => executar(() => cmd.convidarUsuario(BASE, d)),
+  atribuirPerfil: (usuarioId: string, perfilId: string) =>
+    executar(() => cmd.atribuirPerfil(BASE, usuarioId, perfilId)),
+  revogarPerfil: (usuarioId: string, perfilId: string) =>
+    executar(() => cmd.revogarPerfil(BASE, usuarioId, perfilId)),
+  desativarUsuario: (usuarioId: string, motivo: string) =>
+    executar(() => cmd.desativarUsuario(BASE, usuarioId, motivo)),
+  ativarUsuario: (usuarioId: string) => executar(() => cmd.ativarUsuario(BASE, usuarioId)),
+  salvarPerfil: (perfilId: string | null, d: cmd.DadosPerfil) =>
+    executar(() => cmd.salvarPerfil(BASE, perfilId, d)),
   definirLocalizacaoCliente: (clienteId: string, d: Parameters<typeof cmd.definirLocalizacaoCliente>[2]) =>
     executar(() => cmd.definirLocalizacaoCliente(BASE, clienteId, d)),
   definirCredito: (clienteId: string, situacao: 'LIBERADO' | 'OBSERVACAO' | 'BLOQUEADO', motivo: string) =>

@@ -322,6 +322,55 @@ export interface Tecnico {
   cargaAtual: number
 }
 
+/* ------------------------------------------------ usuários e acesso */
+
+export type StatusUsuario = 'ATIVO' | 'INATIVO' | 'BLOQUEADO'
+
+export interface Usuario {
+  id: string
+  nome: string
+  email: string
+  /**
+   * Interno é gente da locadora; cliente é gente do locatário.
+   *
+   * A distinção não é cosmética: usuário de cliente nunca recebe permissão de
+   * escrita de cadastro (RN-L25), e o eixo `clienteId` é o que a RLS usa para
+   * recortar o que ele enxerga.
+   */
+  tipo: 'INTERNO' | 'CLIENTE'
+  clienteId: string | null
+  status: StatusUsuario
+  perfilIds: string[]
+  /** Vazio significa "todas" — o escopo do perfil é quem restringe de fato. */
+  filiaisIds: string[]
+  ultimoAcesso: string | null
+  criadoEm: string
+  /**
+   * Convite aceito define a senha; até lá o usuário existe e não entra.
+   *
+   * É por isso que não há campo de senha aqui: o administrador **nunca** a
+   * define. Senha definida por terceiro é senha compartilhada.
+   */
+  conviteAceito: boolean
+}
+
+/**
+ * Perfil editável.
+ *
+ * Distinto de `Perfil` em `lib/permissoes.ts`, que é a lista fixa usada pelo
+ * seletor de demonstração: este é o registro que a tela de perfis cria e
+ * altera, espelhando `public.perfil` do banco.
+ */
+export interface PerfilGravado {
+  id: string
+  nome: string
+  descricao: string
+  tipo: 'INTERNO' | 'CLIENTE'
+  /** Perfil de sistema é estrutural: atribuível, nunca editável (RN-L13). */
+  isSistema: boolean
+  permissoes: string[]
+}
+
 export interface OrdemServico {
   id: string
   numero: string
@@ -504,6 +553,8 @@ export interface BaseDados {
   descontos: DescontoComercial[]
   equipamentos: Equipamento[]
   tecnicos: Tecnico[]
+  usuarios: Usuario[]
+  perfis: PerfilGravado[]
   ordens: OrdemServico[]
   pecas: Peca[]
   faturas: Fatura[]

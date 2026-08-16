@@ -9,6 +9,8 @@ import {
   regiaoPorId,
 } from './catalogo'
 import { gerarFornecedores, gerarNotas } from './gerar-notas'
+import { PERMISSOES } from '@iarx/contracts/catalogo-permissoes'
+import { perfilPorId } from '../lib/permissoes'
 import type {
   Anexo,
   BaseDados,
@@ -29,6 +31,8 @@ import type {
   TabelaFranquia,
   TabelaPreco,
   Tecnico,
+  PerfilGravado,
+  Usuario,
 } from './tipos'
 
 /**
@@ -402,6 +406,109 @@ export function gerarBase(semente = 20260730): BaseDados {
     regiaoId: s.um(REGIOES).id,
     cargaAtual: s.int(0, 7),
   }))
+
+  /* ------------------------------------------------- usuários e perfis */
+
+  /*
+   * Perfis e contas da demonstração, derivados de quem **já existe** na base.
+   *
+   * Nenhuma pessoa nova é inventada: as contas são os técnicos já gerados, mais
+   * uma conta administrativa e uma de cliente. É a mesma regra que rege o resto
+   * do gerador — a massa sai do que o domínio já tem, não de nomes plausíveis
+   * escritos à mão.
+   *
+   * Os perfis espelham os do banco (`app.provisionar_perfis_cliente`, migração
+   * 0011): três internos e um de cliente, todos de sistema. Perfil de sistema é
+   * estrutural — atribuível, nunca editável — e a tela precisa de pelo menos um
+   * editável para o caso de uso principal existir, daí o quinto.
+   */
+  const perfis: PerfilGravado[] = [
+    {
+      id: 'perf-admin',
+      nome: 'Administrador da Plataforma',
+      descricao: 'Acesso completo ao ambiente do locatário.',
+      tipo: 'INTERNO',
+      isSistema: true,
+      permissoes: [...PERMISSOES],
+    },
+    {
+      id: 'perf-operacao',
+      nome: 'Operador Administrativo',
+      descricao: 'Cadastro, contratos e lançamento de nota fiscal.',
+      tipo: 'INTERNO',
+      isSistema: true,
+      permissoes: perfilPorId('operacao').permissoes,
+    },
+    {
+      id: 'perf-financeiro',
+      nome: 'Analista Financeiro',
+      descricao: 'Faturamento, integração de nota e política comercial.',
+      tipo: 'INTERNO',
+      isSistema: true,
+      permissoes: perfilPorId('financeiro').permissoes,
+    },
+    {
+      id: 'perf-cliente',
+      nome: 'Visualizador do Cliente',
+      descricao: 'Somente leitura sobre os próprios contratos e consumo.',
+      tipo: 'CLIENTE',
+      isSistema: true,
+      // Subconjunto restrito, sem nenhuma escrita de cadastro (RN-L25).
+      permissoes: ['contrato:ler', 'equipamento:ler', 'fatura:ler', 'medicao:ler', 'os:ler', 'os:criar', 'mapa:ler'],
+    },
+    {
+      id: 'perf-suporte',
+      nome: 'Supervisor de Suporte',
+      descricao: 'Perfil derivado, editável — criado a partir do modelo técnico.',
+      tipo: 'INTERNO',
+      isSistema: false,
+      permissoes: perfilPorId('suporte').permissoes,
+    },
+  ]
+
+  const usuarios: Usuario[] = [
+    {
+      id: 'usr-admin',
+      nome: 'Operação IARX',
+      email: 'operacao@iarx.app',
+      tipo: 'INTERNO',
+      clienteId: null,
+      status: 'ATIVO',
+      perfilIds: ['perf-admin'],
+      filiaisIds: [],
+      ultimoAcesso: iso(HOJE),
+      criadoEm: iso(somarMeses(HOJE, -18)),
+      conviteAceito: true,
+    },
+    ...tecnicos.slice(0, 6).map((t, i) => ({
+      id: `usr-${t.id}`,
+      nome: t.nome,
+      email: `${t.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]+/g, '.')}@iarx.app`,
+      tipo: 'INTERNO' as const,
+      clienteId: null,
+      // Um inativo e um sem convite aceito: os dois estados que a tela precisa
+      // saber exibir e que uma massa só de contas felizes esconderia.
+      status: (i === 4 ? 'INATIVO' : 'ATIVO') as Usuario['status'],
+      perfilIds: [i % 2 === 0 ? 'perf-suporte' : 'perf-operacao'],
+      filiaisIds: i < 3 ? [] : [FILIAIS[i % FILIAIS.length]!.id],
+      ultimoAcesso: i === 5 ? null : iso(somarDias(HOJE, -s.int(0, 20))),
+      criadoEm: iso(somarMeses(HOJE, -s.int(2, 14))),
+      conviteAceito: i !== 5,
+    })),
+    {
+      id: 'usr-cliente',
+      nome: clientes[0]!.contato.nome,
+      email: clientes[0]!.contato.email,
+      tipo: 'CLIENTE',
+      clienteId: clientes[0]!.id,
+      status: 'ATIVO',
+      perfilIds: ['perf-cliente'],
+      filiaisIds: [],
+      ultimoAcesso: iso(somarDias(HOJE, -2)),
+      criadoEm: iso(somarMeses(HOJE, -6)),
+      conviteAceito: true,
+    },
+  ]
 
   /* ---------------------------------------------------- equipamentos e frota */
   const equipamentos: Equipamento[] = []
@@ -1030,6 +1137,8 @@ export function gerarBase(semente = 20260730): BaseDados {
     descontos,
     equipamentos,
     tecnicos,
+    usuarios,
+    perfis,
     ordens,
     pecas,
     faturas,
