@@ -11,6 +11,7 @@
 export * from './primitivos.js'
 export * from './erros.js'
 export * from './permissoes.js'
+export * from './arvore-permissoes.js'
 export * from './equipamento.js'
 export * from './contrato.js'
 export * from './nota-fiscal.js'
