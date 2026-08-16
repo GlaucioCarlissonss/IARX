@@ -8,8 +8,14 @@
  * request.
  *
  * A regra é simples e sem exceção implícita: cada `@Get/@Post/@Put/@Patch/
- * @Delete` precisa ter, no mesmo bloco de decoradores, `@ExigePermissao(...)`
- * ou `@Publico()`. Abrir uma rota passa a ser um ato explícito e revisável.
+ * @Delete` precisa ter, no mesmo bloco de decoradores, `@ExigePermissao(...)`,
+ * `@Publico()` ou `@EscopoProprio()`. Abrir uma rota passa a ser um ato
+ * explícito e revisável.
+ *
+ * `@EscopoProprio()` entrou para o caso de trocar a própria senha, que não tem
+ * permissão de catálogo cabível — a mais próxima seria a de administrar outros
+ * usuários. Ele **não** dispensa autenticação: a guarda continua exigindo
+ * token, e o handler opera sobre `claims.usuario_id`.
  *
  * Análise textual, não AST, deliberadamente: a checagem precisa ser óbvia de
  * ler e rodar sem toolchain. O custo é exigir que os decoradores fiquem
@@ -20,7 +26,7 @@ import { join } from 'node:path'
 
 const RAIZ = new URL('../src', import.meta.url).pathname
 const METODOS = /^\s*@(Get|Post|Put|Patch|Delete|All)\s*\(/
-const AUTORIZA = /^\s*@(ExigePermissao|Publico)\s*\(/
+const AUTORIZA = /^\s*@(ExigePermissao|Publico|EscopoProprio)\s*\(/
 const FIM_DECORADORES = /^\s*(public |private |protected |async |[A-Za-z_$][\w$]*\s*\()/
 
 function arquivos(dir) {

@@ -75,6 +75,8 @@ export async function token(opcoes: {
   usuario?: string
   permissoes?: Permissao[]
   expirado?: boolean
+  /** Claims adicionais — `cliente_id`, `sessao_id`. */
+  extras?: Record<string, unknown>
 }): Promise<string> {
   const agora = Math.floor(Date.now() / 1000)
   return new SignJWT({
@@ -82,6 +84,7 @@ export async function token(opcoes: {
     usuario_id: opcoes.usuario ?? USUARIO_A,
     permissoes: opcoes.permissoes ?? [],
     escopos: [{ tipo: 'TENANT', id: null }],
+    ...opcoes.extras,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(opcoes.usuario ?? USUARIO_A)

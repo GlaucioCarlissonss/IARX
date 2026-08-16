@@ -1,7 +1,7 @@
 import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { possuiPermissao, type Permissao } from '@iarx/contracts'
-import { CHAVE_PERMISSAO, CHAVE_PUBLICO } from './decoradores.js'
+import { CHAVE_ESCOPO_PROPRIO, CHAVE_PERMISSAO, CHAVE_PUBLICO } from './decoradores.js'
 import { contextoAtual } from './contexto.js'
 import { ErroDominio } from './erros.js'
 
@@ -29,6 +29,18 @@ export class PermissaoGuard implements CanActivate {
       contexto.getClass(),
     ])
     if (publico) return true
+
+    const claimsProprio = contextoAtual()?.claims
+    const escopoProprio = this.reflector.getAllAndOverride<boolean>(CHAVE_ESCOPO_PROPRIO, [
+      contexto.getHandler(),
+      contexto.getClass(),
+    ])
+    if (escopoProprio) {
+      // Autenticação continua exigida; o que se dispensa é a permissão de
+      // catálogo, não a identidade. Quem opera é sempre `claims.usuario_id`.
+      if (!claimsProprio) throw new ErroDominio('NAO_AUTENTICADO', 'Autenticação obrigatória')
+      return true
+    }
 
     const exigida = this.reflector.getAllAndOverride<Permissao | undefined>(CHAVE_PERMISSAO, [
       contexto.getHandler(),

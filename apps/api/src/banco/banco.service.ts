@@ -89,12 +89,24 @@ export class BancoService implements OnModuleDestroy {
                 set_config('idle_in_transaction_session_timeout',  $2, true)`,
         [String(this.config.statementTimeoutMs), String(this.config.transacaoOciosaTimeoutMs)],
       )
+      /*
+       * `app.cliente_id` fecha o eixo que a migração 0011 criou e que nenhum
+       * caminho da API vinha preenchendo.
+       *
+       * String vazia, e não nulo, quando quem entra é interno: é o que
+       * `app.cliente_atual()` espera para devolver nulo e a política
+       * restritiva de cliente deixar de recortar. O valor vem do token e de
+       * nenhum outro lugar — mesma regra que já vale para `tenant_id`
+       * (RN-028), porque aceitá-lo por query ou cabeçalho entregaria ao
+       * chamador o parâmetro que atravessa o isolamento.
+       */
       await cliente.query(
         `select set_config('app.tenant_id',  $1, true),
                 set_config('app.usuario_id', $2, true),
-                set_config('app.request_id', $3, true),
-                set_config('app.origem',     $4, true)`,
-        [claims.tenant_id, claims.usuario_id, ctx.requestId, 'API'],
+                set_config('app.cliente_id', $3, true),
+                set_config('app.request_id', $4, true),
+                set_config('app.origem',     $5, true)`,
+        [claims.tenant_id, claims.usuario_id, claims.cliente_id ?? '', ctx.requestId, 'API'],
       )
 
       ctx.db = cliente
@@ -145,6 +157,41 @@ export class BancoService implements OnModuleDestroy {
   }
 
   /**
+   * Transação **sem** contexto de tenant, para a autenticação.
+   *
+   * É a única operação do sistema que precisa acontecer antes de existir
+   * contexto: o tenant é justamente o que o login descobre. Sem esta porta, a
+   * consulta de login cairia na política restritiva `tenant_id =
+   * app.tenant_atual()` — nulo, portanto falso, portanto nenhuma linha.
+   *
+   * O que impede isso de ser um buraco no isolamento: o papel continua sendo
+   * `iarx_app`, sujeito a RLS como sempre. O que roda aqui só enxerga alguma
+   * coisa porque chama as funções `app.auth_*` da migração 0016, que são
+   * `security definer`, fechadas e enumeráveis (RN-L41). Um `select` comum
+   * feito nesta transação não devolve linha nenhuma — e é assim que se quer:
+   * a porta existe, mas só uma chave nomeada abre.
+   */
+  async semContexto<T>(fn: (db: Executor) => Promise<T>): Promise<T> {
+    const cliente = await this.pool.connect()
+    try {
+      await cliente.query('begin')
+      await cliente.query(
+        `select set_config('statement_timeout', $1, true),
+                set_config('app.origem',        $2, true)`,
+        [String(this.config.statementTimeoutMs), 'AUTH'],
+      )
+      const r = await fn(envolver(cliente))
+      await cliente.query('commit')
+      return r
+    } catch (e) {
+      await cliente.query('rollback').catch(() => undefined)
+      throw this.traduzir(e)
+    } finally {
+      cliente.release()
+    }
+  }
+
+  /**
    * Escrita curta em transação própria, isolada da transação de negócio.
    *
    * Usada pelo controle de idempotência, e o isolamento é o ponto inteiro: se o
@@ -162,12 +209,24 @@ export class BancoService implements OnModuleDestroy {
     try {
       await cliente.query('begin')
       await cliente.query(`select set_config('statement_timeout', '3000', true)`)
+      /*
+       * `app.cliente_id` fecha o eixo que a migração 0011 criou e que nenhum
+       * caminho da API vinha preenchendo.
+       *
+       * String vazia, e não nulo, quando quem entra é interno: é o que
+       * `app.cliente_atual()` espera para devolver nulo e a política
+       * restritiva de cliente deixar de recortar. O valor vem do token e de
+       * nenhum outro lugar — mesma regra que já vale para `tenant_id`
+       * (RN-028), porque aceitá-lo por query ou cabeçalho entregaria ao
+       * chamador o parâmetro que atravessa o isolamento.
+       */
       await cliente.query(
         `select set_config('app.tenant_id',  $1, true),
                 set_config('app.usuario_id', $2, true),
-                set_config('app.request_id', $3, true),
-                set_config('app.origem',     $4, true)`,
-        [claims.tenant_id, claims.usuario_id, ctx.requestId, 'API'],
+                set_config('app.cliente_id', $3, true),
+                set_config('app.request_id', $4, true),
+                set_config('app.origem',     $5, true)`,
+        [claims.tenant_id, claims.usuario_id, claims.cliente_id ?? '', ctx.requestId, 'API'],
       )
       const r = await fn(envolver(cliente))
       await cliente.query('commit')

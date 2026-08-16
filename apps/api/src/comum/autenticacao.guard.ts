@@ -1,4 +1,4 @@
-import { Injectable, Logger, type CanActivate, type ExecutionContext } from '@nestjs/common'
+import { Inject, Injectable, Logger, forwardRef, type CanActivate, type ExecutionContext } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { Claims } from '@iarx/contracts'
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
@@ -6,6 +6,7 @@ import type { Request } from 'express'
 import { CHAVE_PUBLICO } from './decoradores.js'
 import { exigirContexto } from './contexto.js'
 import { ErroDominio } from './erros.js'
+import { BancoService } from '../banco/banco.service.js'
 
 /**
  * Autenticação por access token (OIDC).
@@ -32,7 +33,10 @@ export class AutenticacaoGuard implements CanActivate {
   private readonly emissor = process.env['IARX_JWT_ISSUER']
   private readonly audiencia = process.env['IARX_JWT_AUDIENCE']
 
-  constructor(private readonly reflector: Reflector) {
+  constructor(
+    private readonly reflector: Reflector,
+    @Inject(forwardRef(() => BancoService)) private readonly banco: BancoService,
+  ) {
     const urlJwks = process.env['IARX_JWKS_URL']
     const segredo = process.env['IARX_JWT_SEGREDO']
 
@@ -87,6 +91,31 @@ export class AutenticacaoGuard implements CanActivate {
       throw new ErroDominio('TOKEN_INVALIDO', 'Token sem as claims exigidas', {
         detail: 'O token precisa conter tenant_id, usuario_id e permissoes.',
       })
+    }
+
+    /*
+     * Sessão viva.
+     *
+     * Sem esta checagem, `revogada_em` seria uma coluna decorativa: o token
+     * continuaria valendo até expirar, e desativar um usuário demitido às 9h
+     * deixaria o acesso dele funcionando por horas. É uma consulta a mais por
+     * requisição, e é o preço de poder encerrar acesso.
+     *
+     * Token sem `sessao_id` passa: é o caso da conta de serviço (Anexo C.7),
+     * que não tem sessão de usuário atrás. Ela é revogada girando a chave, não
+     * encerrando sessão.
+     */
+    const sessaoId = analisado.data.sessao_id
+    if (sessaoId) {
+      const viva = await this.banco.semContexto((db) =>
+        db.consultarUm<{ auth_sessao_viva: string | null }>(`select app.auth_sessao_viva($1)`, [sessaoId]),
+      )
+      if (!viva?.auth_sessao_viva) {
+        // Mesma resposta de token inválido, de propósito: dizer "sua sessão foi
+        // revogada" informa a quem roubou o token que alguém percebeu.
+        this.log.warn(`sessão ${sessaoId} não está viva`)
+        throw new ErroDominio('TOKEN_INVALIDO', 'Token inválido ou expirado')
+      }
     }
 
     exigirContexto().claims = analisado.data

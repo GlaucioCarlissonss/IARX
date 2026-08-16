@@ -130,6 +130,37 @@ insert into public.usuario (id, tenant_id, nome, email) values
   ('22222222-2222-4222-8222-222222220001', '22222222-2222-4222-8222-222222222222',
    'Operador Beta', 'operador@beta.local');
 
+/*
+ * Senha de teste, para exercitar o login de verdade.
+ *
+ * O hash é Argon2id do texto 'senha-de-teste-12345', gerado uma vez e fixado
+ * aqui — recalculá-lo a cada semeadura custaria ~50 ms por usuário e tornaria
+ * a suíte mais lenta sem provar nada a mais. O que importa é que ele passe
+ * pelo CHECK da RN-L37, e ele passa.
+ *
+ * Um usuário fica **sem** senha, de propósito: é o estado legítimo de quem foi
+ * convidado e ainda não aceitou, e o login precisa recusá-lo pelo mesmo
+ * caminho de qualquer outra credencial inválida.
+ */
+update public.usuario
+   set senha_hash = '$argon2id$v=19$m=19456,t=2,p=1$aiYDpfchAeJsuHm+Wgrs7A$tfzI9H7VjyerE3bEJGm58EKE1Chqx9Ea8ooO1XtgaMM',
+       senha_alterada_em = now()
+ where id in (
+   '11111111-1111-4111-8111-111111110001',
+   '22222222-2222-4222-8222-222222220001'
+ );
+
+-- Perfil com a permissão de administrar usuários, para a RN-L39 ter o que
+-- proteger e o teste de último administrador ter cenário.
+insert into public.perfil (id, tenant_id, nome, tipo, is_sistema, permissoes) values
+  ('11111111-1111-4111-8111-1111111150a1', '11111111-1111-4111-8111-111111111111',
+   'Administrador da Plataforma', 'INTERNO', true,
+   array['usuario:gerenciar', 'perfil:gerenciar', 'contrato:ler', 'equipamento:ler']);
+
+insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110001',
+   '11111111-1111-4111-8111-1111111150a1', 'TENANT');
+
 insert into public.fornecedor (id, tenant_id, documento, razao_social, nome_fantasia, uf) values
   ('11111111-1111-4111-8111-11111111f001', '11111111-1111-4111-8111-111111111111',
    '11444777000161', 'PRINTECH DISTRIBUICAO LTDA', 'Printech', 'SP'),
