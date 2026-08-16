@@ -131,6 +131,16 @@ export const PERMISSOES = [
   'financeiro:rentabilidade_ler',
   'financeiro:exportar',
 
+  // Política comercial — tabela de franquia, tabela de preço, simulador
+  //
+  // Acrescentadas ao reconciliar os vocabulários: o módulo comercial foi
+  // construído (Anexo P) com permissões declaradas **apenas** no front-end, e
+  // o catálogo compartilhado nunca soube que a tela existia. Enquanto os dois
+  // vocabulários eram separados, isso não doía; ao unificá-los, a ausência
+  // apagaria a tela do menu e do roteador.
+  'comercial:ler',
+  'comercial:gerenciar',
+
   // Mapa, relatórios e administração
   'mapa:ler',
   'mapa:filtro_compartilhar',

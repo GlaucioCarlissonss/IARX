@@ -14,6 +14,10 @@
     "./catalogo-permissoes": {
       "types": "./dist/catalogo-permissoes.d.ts",
       "default": "./dist/catalogo-permissoes.js"
+    },
+    "./arvore-permissoes": {
+      "types": "./dist/arvore-permissoes.d.ts",
+      "default": "./dist/arvore-permissoes.js"
     }
   },
   "scripts": {

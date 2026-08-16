@@ -18,7 +18,7 @@
     "db:migrate": "packages/db/scripts/migrate.sh",
     "db:test": "packages/db/scripts/test.sh",
     "dev": "vite apps/web",
-    "build": "node packages/tokens/scripts/build-css.mjs && vite build apps/web",
+    "build": "npm run contratos:build && node packages/tokens/scripts/build-css.mjs && vite build apps/web",
     "tipos": "tsc -p packages/contracts/tsconfig.json && tsc -p apps/api/tsconfig.json && tsc -p apps/web/tsconfig.json",
     "a11y:dom": "playwright test apps/web",
     "web:test": "npm run contratos:build && node --test \"apps/web/test/*.test.ts\"",

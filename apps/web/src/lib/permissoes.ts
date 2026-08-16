@@ -1,27 +1,25 @@
+import { PERMISSOES } from '@iarx/contracts/catalogo-permissoes'
+import type { Permissao } from '@iarx/contracts/catalogo-permissoes'
+
 /**
  * Modelo de permissões do front-end.
  *
- * Espelha o Anexo C: permissão no formato `recurso:ação` e escopo
- * organizacional. Aqui ele serve para renderizar apenas o que o usuário pode
- * operar — mas a decisão de autorização é sempre do servidor. O front esconde
- * para reduzir ruído, nunca para proteger.
+ * O tipo `Permissao` **vem do catálogo compartilhado**, o mesmo que a API
+ * compara na guarda e que o banco valida por gatilho. Antes ele era declarado
+ * aqui, com 33 nomes, enquanto o catálogo tinha 113 — dois vocabulários
+ * paralelos que ninguém reconciliava, e que o Anexo I descrevia como se fossem
+ * um só.
+ *
+ * A divergência não era teórica: uma árvore de configuração construída sobre o
+ * catálogo produziria permissões que este arquivo não reconhecia. O perfil
+ * gravaria `pagar:aprovar` e o botão continuaria escondido, sem erro em lugar
+ * nenhum — exatamente o defeito que o catálogo diz existir para evitar.
+ *
+ * A decisão de autorização continua sendo do servidor. O front esconde para
+ * reduzir ruído, **nunca** para proteger.
  */
 
-export type Permissao =
-  | 'contrato:ler' | 'contrato:criar' | 'contrato:aprovar' | 'contrato:renovar'
-  | 'equipamento:ler' | 'equipamento:criar' | 'equipamento:movimentar' | 'equipamento:desbloquear'
-  | 'os:ler' | 'os:criar' | 'os:triar' | 'os:executar' | 'os:validar'
-  | 'peca:ler' | 'estoque:movimentar' | 'estoque:ajustar'
-  | 'fatura:ler' | 'prefatura:aprovar' | 'fatura:emitir'
-  | 'financeiro:painel_executivo' | 'financeiro:rentabilidade_ler'
-  | 'cliente:ler' | 'cliente:criar'
-  // Segregação de funções (RN-027): registrar, conferir e integrar são
-  // permissões distintas de propósito. Quem lança a nota não a confere.
-  | 'nota_fiscal:ler' | 'nota_fiscal:criar' | 'nota_fiscal:conferir'
-  | 'nota_fiscal:integrar' | 'nota_fiscal:cancelar'
-  | 'mapa:ler'
-  | 'comercial:ler' | 'comercial:gerenciar'
-  | 'usuario:gerenciar' | 'auditoria:consultar'
+export type { Permissao }
 
 export interface Perfil {
   id: string
@@ -29,20 +27,15 @@ export interface Perfil {
   permissoes: Permissao[]
 }
 
-const TODAS: Permissao[] = [
-  'contrato:ler', 'contrato:criar', 'contrato:aprovar', 'contrato:renovar',
-  'equipamento:ler', 'equipamento:criar', 'equipamento:movimentar', 'equipamento:desbloquear',
-  'os:ler', 'os:criar', 'os:triar', 'os:executar', 'os:validar',
-  'peca:ler', 'estoque:movimentar', 'estoque:ajustar',
-  'fatura:ler', 'prefatura:aprovar', 'fatura:emitir',
-  'financeiro:painel_executivo', 'financeiro:rentabilidade_ler',
-  'cliente:ler', 'cliente:criar',
-  'nota_fiscal:ler', 'nota_fiscal:criar', 'nota_fiscal:conferir',
-  'nota_fiscal:integrar', 'nota_fiscal:cancelar',
-  'mapa:ler',
-  'comercial:ler', 'comercial:gerenciar',
-  'usuario:gerenciar', 'auditoria:consultar',
-]
+/**
+ * Perfis da demonstração.
+ *
+ * Massa de exemplo, não configuração de produção: no ambiente real eles vêm de
+ * `public.perfil`, provisionados por tenant. Ficam aqui porque a aplicação
+ * ainda opera sobre base em memória — ver Anexo I, "Preparação para
+ * autenticação e API real".
+ */
+const TODAS: Permissao[] = [...PERMISSOES]
 
 export const PERFIS: Perfil[] = [
   { id: 'admin', nome: 'Administrador', permissoes: TODAS },
