@@ -575,7 +575,19 @@ Permissões: `tabela_preco:ler` · `:gerenciar` · `:ativar` ·
 ## MÓDULO 4: Usuários e Permissões
 
 ### Status
-- [x] Melhoria sobre existente — **com bloqueio estrutural**
+- [x] Melhoria sobre existente — **desbloqueado; falta a interface**
+
+> **Atualização.** Esta seção foi escrita antes das decisões D-01/D-02, na
+> época em que elas ainda bloqueavam o módulo inteiro. As duas foram tomadas
+> (Anexo M) e **implementadas** na migração `0011_eixo_cliente.sql`: o escopo
+> `CLIENTE` existe, `usuario.tipo`/`cliente_id` existem, a RLS restritiva por
+> cliente existe, `app.provisionar_perfis_cliente` semeia os três perfis de
+> cliente na criação do tenant. O texto original abaixo é mantido como registro
+> — o nome real de uma tabela (`usuario_local_cliente`, não
+> `usuario_filial_cliente`) e o do segundo valor de escopo (`LOCAL_CLIENTE`,
+> não `FILIAL_CLIENTE`) divergem do rascunho por decisão tomada durante a
+> implementação. **O que falta agora não é o modelo — é a tela e a API que o
+> operam**, detalhado em §4.1 e §4.2 abaixo.
 
 ### Descrição
 
@@ -586,17 +598,21 @@ compartilhado entre API e front (`packages/contracts`), guarda que nega rota
 sem permissão declarada, e verificador que reprova o CI se algum handler
 esquecer o decorador.
 
-O que **não existe**: a interface de gestão, a autenticação por senha com
-recuperação, e — o ponto crítico — **qualquer noção de usuário do cliente.**
+O que **não existe** — confirmado por busca no repositório, não suposição:
+nenhum controlador em `apps/api/src/modulos` para usuário, perfil ou
+autenticação; nenhuma rota `/auth/*`; o front (`lib/contexto.tsx`) simula a
+sessão com um **seletor de perfil local**, sem login real. `pode()` já existe e
+já é o que qualquer `<Can>` faria — o que falta é ele ler de uma sessão de
+verdade, não de um `useState` de demonstração.
 
-### O bloqueio
+### O bloqueio (histórico)
 
 `app.escopo_tipo` = `TENANT · EMPRESA · FILIAL · REGIAO · PROPRIO`. Todos do
 locador. Os três perfis de cliente pedidos (Admin Cliente, Gestor de Filial,
-Visualizador) não têm como ser expressos: não há escopo `CLIENTE`, a RLS não
-filtra por `cliente_id`, e o token não carrega esse eixo.
+Visualizador) não tinham como ser expressos: não havia escopo `CLIENTE`, a RLS
+não filtrava por `cliente_id`, e o token não carregava esse eixo.
 
-**Nada dos módulos 4 e 5 deve ser construído antes da decisão D-01.**
+Resolvido — ver a atualização acima.
 
 ### Modelagem de Dados
 
@@ -728,6 +744,64 @@ GET    /api/v1/auditoria/acessos            → ?usuario_id=&evento=&periodo=
 Permissões: `usuario:gerenciar`, `perfil:gerenciar`, `auditoria:consultar` —
 **as três já existem no catálogo.**
 
+### 4.1 Interface administrativa de permissões (acréscimo)
+
+O catálogo (`packages/contracts/src/catalogo-permissoes.ts`) já é granular —
+106 permissões `recurso:ação`, agrupadas por comentário em oito blocos
+("Contratos e clientes", "Equipamentos", "Manutenção", …). O que esse formato
+**não** tem é os dois últimos níveis do pedido — módulo → tela → botão como
+estrutura navegável — porque hoje o agrupamento é um comentário para quem lê o
+código-fonte, não um dado que a interface possa desenhar em árvore.
+
+Fechar essa lacuna não pede tabela nova: pede **metadado sobre o catálogo que
+já existe**.
+
+```
+// packages/contracts/src/catalogo-permissoes.ts — acréscimo
+export interface DescritorPermissao {
+  permissao: Permissao
+  modulo: string   // "Financeiro", "Contratos", "Equipamentos", …
+  tela: string     // "Contas a Pagar", "Fluxo de Caixa", …
+  acao: string      // rótulo curto para o botão: "Aprovar", "Exportar", …
+}
+export const DESCRITORES: DescritorPermissao[] = [ /* uma linha por permissão */ ]
+```
+
+A árvore da tela de permissões é `agrupar(DESCRITORES, 'modulo', 'tela')` — três
+`Object.groupBy` encadeados, sem estado novo no banco. Perfil custom continua
+sendo `perfil.permissoes text[]`; a árvore só decide **quais valores** essa
+lista pode conter, e a validação de formato (`recurso:ação`) já existe em
+`app.validar_permissoes()`.
+
+**Herança módulo → tela → botão**, como o pedido exige: é uma regra de
+**renderização**, não de dado. Marcar/desmarcar o nó "Financeiro" na árvore
+marca/desmarca todos os descendentes no array enviado — o `perfil.permissoes`
+resultante já sai sem o módulo, e a RLS/guarda nem precisa saber que existiu
+uma árvore. Não existe "módulo sem tela" nem "tela sem botão" fora da árvore:
+a permissão sempre foi atômica (`RN-026`), a árvore é só a forma de
+apresentá-la sem obrigar quem configura a marcar 106 caixas soltas.
+
+### 4.2 Autenticação, sessão e o front que hoje é encenação
+
+O que falta, em ordem de bloqueio:
+
+1. `POST /api/v1/auth/login` — verifica `senha_hash` (coluna já existe),
+   incrementa `tentativas_falhas`, aplica `bloqueado_ate` após o limite
+   configurável, emite o JWT com `permissoes` resolvidas
+   (`perfil.permissoes` do(s) perfil(is) do usuário, unidos) e `escopos`
+   (de `usuario_perfil`) — **o mesmo formato que `apps/api/test/apoio.ts` já
+   assina para teste.** Produção passa a assinar o token real; o formato não
+   muda.
+2. `lib/contexto.tsx` troca o seletor de perfil local pela sessão vinda do
+   login. `pode()` não muda de assinatura — só passa a ler permissão de rede,
+   não de `useState`.
+3. Telas de usuário (`GET/POST /api/v1/usuarios`, `.../perfis`,
+   `.../convites`) e de perfil (árvore de §4.1), no padrão de
+   `apps/api/src/modulos/notas-fiscais`.
+4. Recuperação de senha (`token_recuperacao` já existe) e expiração periódica
+   configurável — precisa de `tenant.politica_senha jsonb` ou equivalente;
+   **decisão pendente, ver D-15**.
+
 ### Dependências
 - **Depende de:** decisão **D-01** (eixo de cliente na RLS) e **D-02** (filial
   do cliente). Sem elas, os três perfis de cliente não são implementáveis
@@ -745,22 +819,36 @@ Permissões: `usuario:gerenciar`, `perfil:gerenciar`, `auditoria:consultar` —
 - [ ] Revogar sessões encerra o acesso em menos de 60 segundos
 
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-01 · BLOQUEANTE]** Como isolar o cliente? Recomendação:
-  **escopo adicional na RLS** (`app.cliente_id` por transação, políticas
-  extras), mantendo um único banco e uma única API. As alternativas — tenant
-  por cliente, ou filtro só na aplicação — ou multiplicam a operação por N
-  clientes, ou dependem de nenhum desenvolvedor esquecer um `where`.
-- **[DECISÃO D-02 · BLOQUEANTE]** Modelo organizacional do cliente. Recomendação:
-  `grupo_economico 1:N cliente 1:N filial_cliente`, promovendo `local_operacao`
-  a `filial_cliente`. Alternativa mais barata: usar `local_operacao` como está e
-  não ter grupo econômico — mas o requisito de "visão consolidada por grupo"
-  deixa de ser atendível.
+- ~~**[DECISÃO D-01 · BLOQUEANTE]**~~ **Resolvida** (Anexo M) — escopo `CLIENTE`
+  adicional na RLS, `SET LOCAL app.cliente_id`, implementado em 0011.
+- ~~**[DECISÃO D-02 · BLOQUEANTE]**~~ **Resolvida** (Anexo M) — `grupo_economico
+  → cliente → local_operacao`, implementado em 0011. O nome ficou
+  `local_operacao` mesmo (não `filial_cliente`): o dado já existia com esse
+  nome desde a 0005, e criar um segundo conceito para a mesma linha teria sido
+  duplicação, não modelagem.
 - **[DECISÃO D-07]** Autenticação: Supabase Auth (coerente com o Anexo H, traz
   recuperação, MFA e rotação prontos) ou implementação própria com Argon2id?
   Recomendação: Supabase Auth; `usuario.subject_oidc` já existe para isso.
+  **Ainda pendente** — nenhum dos dois foi construído; é o item que bloqueia
+  §4.2 item 1.
 - **[DECISÃO D-08]** SSO corporativo (SAML/OIDC) para clientes grandes entra
   agora ou depois?
+- **[DECISÃO D-15 · NOVA]** Política de senha é **configurável por tenant**
+  (expiração em N dias, limite de tentativas antes do bloqueio, quais perfis
+  ela alcança) ou **fixa no sistema**? O pedido que originou esta seção supõe
+  que diretor/executivo poderiam ficar isentos de expiração — isso só é
+  possível com política por perfil, que é mais estrutura do que política única
+  por tenant. Recomendação: política única por tenant no lançamento (um campo
+  `tenant.politica_senha jsonb`), isenção por perfil como extensão do mesmo
+  campo quando houver pedido real — adicionar a exceção depois é compatível
+  para trás; supor a exceção sem pedido é a lacuna de "regra que ninguém testa
+  porque ninguém usa".
 - **[LACUNA]** MFA: a coluna `mfa_habilitado` existe, o fluxo não.
+- **[LACUNA]** Bloqueio após tentativas inválidas: a coluna `tentativas_falhas`
+  e `bloqueado_ate` existem (0011), o **limite de tentativas** e a **duração do
+  bloqueio** não estão parametrizados em lugar nenhum — hoje seriam constantes
+  no código do futuro `POST /auth/login`. Mesma recomendação de D-15: campo de
+  configuração por tenant, não constante.
 
 ---
 
@@ -1133,106 +1221,1155 @@ Permissões: `mapa:ler`, `mapa:filtro_compartilhar` — **já existem.**
 - [ ] Endereços sem coordenada aparecem em fila de pendência, não somem
 
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-12]** Provedor de mapa. Recomendação: **MapLibre GL + tiles
-  OpenStreetMap** — sem custo por carregamento, sem chave, licença permissiva, e
-  o dado geográfico permanece no nosso banco. Google Maps traz melhor qualidade
-  de endereço no Brasil ao custo de cobrança por carregamento e de vínculo
-  contratual. Mapbox fica no meio. **A decisão afeta o custo recorrente.**
-- **[DECISÃO D-13]** Provedor de geocodificação, que pode ser diferente do de
-  tiles. Nominatim (gratuito, limite de 1 req/s, proibido uso em massa),
-  Google Geocoding (pago, melhor cobertura no Brasil) ou base dos Correios.
+- ~~**[DECISÃO D-12]**~~ **Resolvida, revista** (Anexo O) — vetor embutido como
+  piso, com camada de tiles acrescentada depois (satélite Esri por padrão,
+  ruas CARTO, OSM, servidor próprio configurável). A revisão em relação ao
+  texto original: nenhum provedor de tile é obrigatório, porque o build é um
+  arquivo único que precisa funcionar sem rede nenhuma — algo que não estava em
+  jogo quando esta decisão foi escrita.
+- ~~**[DECISÃO D-13]**~~ **Resolvida** (Anexo O §O.9.4) — Nominatim, respeitando
+  a política de uso (1 req/s, `countrycodes=br`), disparado por ação explícita
+  e não a cada tecla. Campo de servidor de tiles próprio já previsto para
+  quando o volume justificar sair do serviço público.
 - **[LACUNA]** Não há política de retenção da posição histórica do equipamento —
   rastrear onde cada ativo esteve é útil e tem implicação de privacidade.
 
 ---
 
+## MÓDULO 8: Centros de Custo
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Nenhuma tabela de centro de custo existe hoje. É a peça que faltava para os
+outros seis módulos financeiros terem onde ratear despesa e receita — sem ela,
+"análise por área" fica restrita a filial, que é uma dimensão só e já
+insuficiente (duas equipes na mesma filial não se distinguem).
+
+### Modelagem de Dados
+
+```
+centro_custo
+  id            uuid PK
+  tenant_id     uuid FK → tenant
+  empresa_id    uuid FK → empresa NULL       -- NULL = centro global do tenant
+  codigo        text NOT NULL                -- curto, para rateio e relatório
+  nome          text NOT NULL
+  descricao     text
+  centro_pai_id uuid FK → centro_custo NULL   -- até 3 níveis (RN abaixo)
+  ativo         boolean NOT NULL DEFAULT true
+  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by, delete_reason
+  UNIQUE (tenant_id, codigo) WHERE deleted_at IS NULL
+
+-- Rateio: um título (a pagar ou a receber, módulos 10/11) distribuído entre
+-- vários centros. Vive junto do título, não aqui — ver Módulos 10/11.
+```
+
+**Índices:** `(tenant_id, centro_pai_id)` para montar a árvore sem varrer a
+tabela inteira a cada nível.
+
+**RLS:** política restritiva de tenant, no padrão de toda tabela de negócio
+(`0006`). Sem eixo de cliente — centro de custo é estrutura do locador, o
+cliente nunca precisa vê-la.
+
+### Regras de Negócio
+
+1. **Profundidade máxima 3.** Imposta por gatilho, contando `centro_pai_id` até
+   a raiz — `CHECK` não alcança recursão. Acima de 3 níveis a árvore vira
+   difícil de ler numa tela e nenhuma operação de locação pediu mais que isso.
+2. **Ciclo é impossível por construção**, não por checagem: o gatilho que
+   valida a profundidade já percorre a cadeia de pais e recusa se encontrar o
+   próprio id no caminho.
+3. **Inativar um centro com filho ativo é recusado.** Inativar em cascata seria
+   uma ação destrutiva silenciosa; o operador inativa a folha primeiro.
+4. **Centro com título lançado não pode ser excluído**, só inativado — a
+   mesma regra de soft delete que rege o resto do banco, aqui com um motivo
+   extra: apagar romperia a FK de todo título já rateado nele.
+
+### Fluxo de Usuário
+
+1. **Configurações → Centros de Custo.** Árvore com indentação por nível,
+   botão "Novo subcentro" em cada nó.
+2. Cadastro: código, nome, empresa (ou "global"), centro pai (opcional).
+3. Cada título a pagar/receber ganha um campo de centro de custo — obrigatório
+   por padrão, com exceção configurável por tenant (ver Módulo 10, RN de
+   rateio).
+
+### Endpoints de API
+
+```
+GET    /api/v1/centros-custo              → árvore ou lista plana (?arvore=true)
+POST   /api/v1/centros-custo              → cria                [Idempotency-Key]
+PATCH  /api/v1/centros-custo/{id}         → edita                [If-Match]
+POST   /api/v1/centros-custo/{id}/inativar
+```
+
+Permissão: `financeiro:centro_custo_gerenciar` — **já existe no catálogo**
+desde antes deste levantamento, o que sugere que este módulo sempre esteve
+previsto e só não tinha sido modelado.
+
+### Dependências
+- **Depende de:** nada — pode ser construído isoladamente
+- **Habilita:** Módulos 10, 11, 12, 13, 14 (todos ratcam ou filtram por centro
+  de custo)
+
+### Critérios de Aceite
+- [ ] Quarto nível de centro de custo é recusado, citando a profundidade
+- [ ] Centro pai apontando para o próprio descendente é recusado (ciclo)
+- [ ] Inativar centro com filho ativo é recusado
+- [ ] Centro com título lançado não aceita exclusão física
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-16]** O rateio de um título entre centros aceita **percentual**,
+  **valor fixo**, ou os dois? Percentual fecha sozinho em 100% e sobrevive a
+  reajuste de valor sem reabrir o rateio; valor fixo é mais direto quando as
+  partes já são conhecidas em reais. Recomendação: **percentual como regra**,
+  valor fixo como caso especial resolvido no momento do lançamento (o valor
+  fixo vira percentual calculado na hora e gravado como tal) — um único
+  formato de armazenamento, duas formas de digitar.
+
+---
+
+## MÓDULO 9: Contas Bancárias
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Registro das contas da operação e de suas movimentações, com saldo derivado
+(não digitado) e conciliação contra os títulos dos Módulos 10/11.
+
+### Modelagem de Dados
+
+```
+conta_bancaria
+  id             uuid PK
+  tenant_id      uuid FK → tenant
+  empresa_id     uuid FK → empresa NOT NULL   -- toda conta pertence a uma PJ
+  banco_codigo   text NOT NULL                -- código FEBRABAN, ex. '341'
+  agencia        text NOT NULL
+  numero         text NOT NULL
+  tipo           text NOT NULL CHECK (tipo IN ('CORRENTE','POUPANCA','PAGAMENTO'))
+  apelido        text NOT NULL                -- "Operação", "Investimento", "Folha"
+  saldo_inicial  numeric(15,4) NOT NULL DEFAULT 0
+  data_saldo_inicial date NOT NULL
+  limite_credito numeric(15,4)
+  status         text NOT NULL DEFAULT 'ATIVA' CHECK (status IN ('ATIVA','INATIVA','BLOQUEADA'))
+  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by, delete_reason
+  UNIQUE (tenant_id, empresa_id, banco_codigo, agencia, numero) WHERE deleted_at IS NULL
+
+movimentacao_bancaria
+  id              uuid PK
+  tenant_id       uuid FK → tenant
+  conta_id        uuid FK → conta_bancaria
+  tipo            text NOT NULL CHECK (tipo IN ('ENTRADA','SAIDA','TRANSFERENCIA_ENTRADA','TRANSFERENCIA_SAIDA','TAXA'))
+  valor           numeric(15,4) NOT NULL CHECK (valor > 0)
+  data_movimento  date NOT NULL
+  descricao       text NOT NULL
+  titulo_pagar_id    uuid FK → titulo_pagar NULL     -- Módulo 10, quando é baixa
+  titulo_receber_id  uuid FK → titulo_receber NULL   -- Módulo 11, idem
+  transferencia_par_id uuid FK → movimentacao_bancaria NULL  -- a outra ponta da transferência
+  conciliado      boolean NOT NULL DEFAULT false
+  conciliado_em   timestamptz
+  origem_extrato  text                              -- linha do OFX/CSV importado, para auditoria
+  created_at, created_by
+```
+
+**Saldo é view, não coluna.** `saldo_atual = saldo_inicial + Σ(entrada) −
+Σ(saída)`, calculado por função (`app.saldo_conta(id, ate_data)`), no mesmo
+espírito de `custo_aquisicao` na nota fiscal (Anexo N): nenhum caminho de
+escrita direta em saldo, então nenhum saldo pode divergir do que a soma das
+movimentações prova.
+
+**Transferência entre contas é dupla entrada**, sempre as duas linhas na mesma
+transação, uma apontando para a outra via `transferencia_par_id` — o mesmo
+padrão de par que a nota fiscal usa entre item e série, adaptado.
+
+**Índices:** `(tenant_id, conta_id, data_movimento desc)` para extrato;
+`(tenant_id, conta_id) WHERE NOT conciliado` para a fila de conciliação.
+
+**RLS:** restritiva de tenant. Nenhum eixo de cliente — conta bancária é
+estrutura interna, nunca exposta ao portal.
+
+### Regras de Negócio
+
+1. **Movimentação não se edita nem se apaga.** Estorno é lançamento contrário,
+   com motivo — a mesma filosofia de `app.auditar()`: histórico nunca é
+   reescrito.
+2. **Transferência gera as duas pontas na mesma transação** ou nenhuma —
+   nunca uma perna órfã.
+3. **Conta bloqueada não aceita nova movimentação manual**, só as automáticas
+   de baixa de título já em andamento (para não travar uma baixa em curso por
+   um bloqueio decidido no meio do processo).
+4. **Conciliação automática por correspondência exata** — valor, data (±2 dias
+   de tolerância configurável) e, quando disponível, o número do documento do
+   extrato batendo com o do título. Sobrando ambiguidade, cai para conciliação
+   manual: o sistema nunca escolhe entre dois candidatos igualmente prováveis.
+
+### Fluxo de Usuário
+
+1. **Financeiro → Contas Bancárias.** Cartão por conta, com saldo atual e
+   selo de status.
+2. **Extrato**: lista cronológica, filtro por período/tipo, exportação.
+3. **Conciliação**: importar arquivo → sistema propõe pares (movimentação ↔
+   título) → operador confirma em lote ou individualmente os que ficaram
+   ambíguos.
+4. **Transferência**: formulário com conta de origem, destino, valor, data —
+   gera as duas movimentações.
+
+### Endpoints de API
+
+```
+GET    /api/v1/contas-bancarias                      → lista, com saldo atual calculado
+POST   /api/v1/contas-bancarias                       [Idempotency-Key]
+PATCH  /api/v1/contas-bancarias/{id}                  [If-Match]
+GET    /api/v1/contas-bancarias/{id}/extrato          → ?de=&ate=&tipo=
+POST   /api/v1/contas-bancarias/transferencias         [Idempotency-Key]
+POST   /api/v1/contas-bancarias/{id}/movimentacoes    → manual  [Idempotency-Key]
+POST   /api/v1/contas-bancarias/{id}/importar-extrato → 202 + job_id
+GET    /api/v1/contas-bancarias/importacoes/{id}      → propostas de conciliação
+POST   /api/v1/contas-bancarias/conciliacoes          → confirma pares  [Idempotency-Key]
+```
+
+Permissão: `conciliacao:executar` já existe; `conta_bancaria:gerenciar` e
+`conta_bancaria:ler` são **novas** — não havia recurso "conta bancária" no
+catálogo porque a tabela não existia.
+
+### Dependências
+- **Depende de:** Módulo 8 (opcionalmente, para relatório cruzado); nenhuma
+  dependência dura
+- **Habilita:** Módulos 10, 11 (toda baixa referencia uma conta), Módulo 13
+  (fluxo de caixa parte do saldo real)
+
+### Critérios de Aceite
+- [ ] Saldo nunca é gravável diretamente — só a função de leitura existe
+- [ ] Transferência sem par gerado não fica sozinha: teste força a falha da
+      segunda perna e confirma que a primeira também não persiste
+- [ ] Movimentação conciliada não some do extrato nem perde o vínculo com o
+      título ao ser reconciliada
+- [ ] Conta bloqueada recusa movimentação manual nova
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-17]** Formato de importação de extrato: **OFX**, **CSV** (com
+  layout próprio) ou **CNAB 240/400**? OFX é o mais universal para conta
+  corrente comum; CNAB é o formato de retorno de banco para cobrança
+  registrada (boletos emitidos pela própria operação), que é um caso diferente
+  de "conciliar o que já saiu da conta". Recomendação: **OFX primeiro**
+  (cobre a maioria dos bancos brasileiros sem acordo prévio com o banco);
+  CNAB entra se e quando a operação emitir boleto registrado via convênio.
+- **[LACUNA]** Limite de crédito/cheque especial existe como campo, mas não há
+  regra descrita de o que acontece quando o saldo projetado o ultrapassa —
+  fica para o Módulo 13 (Fluxo de Caixa), que é quem tem a visão projetada.
+
+---
+
+## MÓDULO 10: Contas a Pagar
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Títulos de despesa, com aprovação por alçada de valor — o módulo que consome
+diretamente o `alcada.tipo = 'APROVACAO_PAGAMENTO'`, que **já existe no banco
+desde a migração 0002** sem nunca ter tido o que aprovar. É o módulo que
+alimenta o Controle de Despesas (Módulo 14): toda despesa fixa, variável ou
+investimento nasce aqui.
+
+### Modelagem de Dados
+
+```
+titulo_pagar
+  id                uuid PK
+  tenant_id         uuid FK → tenant
+  empresa_id        uuid FK → empresa
+  filial_id         uuid FK → filial NULL
+  fornecedor_id     uuid FK → fornecedor NULL       -- reaproveita a tabela do Anexo N
+  descricao         text NOT NULL
+  classificacao     text NOT NULL CHECK (classificacao IN ('DESPESA_FIXA','DESPESA_VARIAVEL','INVESTIMENTO'))
+  categoria_id      uuid FK → categoria_despesa NULL  -- Módulo 14
+  contrato_fornecedor_ref text NULL                  -- livre até existir contrato de fornecedor formal
+  valor_original    numeric(15,4) NOT NULL CHECK (valor_original > 0)
+  valor_ajustado    numeric(15,4) NOT NULL DEFAULT valor_original  -- multa, juro, desconto negociado
+  data_emissao      date NOT NULL
+  data_vencimento   date NOT NULL
+  status            text NOT NULL DEFAULT 'PENDENTE' CHECK (status IN (
+                      'PENDENTE','EM_APROVACAO','APROVADO','AGENDADO',
+                      'PAGO_PARCIAL','PAGO','CANCELADO','EM_DISPUTA'
+                    ))
+  titulo_pai_id     uuid FK → titulo_pagar NULL       -- parcela filha aponta pro título pai
+  parcela_numero    integer                          -- 1, 2, 3… quando é filha
+  parcela_total     integer
+  recorrencia_id    uuid FK → recorrencia_pagar NULL  -- Módulo 12
+  version           integer NOT NULL DEFAULT 1
+  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by, delete_reason
+
+titulo_pagar_rateio
+  id              uuid PK
+  tenant_id       uuid FK → tenant
+  titulo_id       uuid FK → titulo_pagar
+  centro_custo_id uuid FK → centro_custo
+  percentual      numeric(5,2) NOT NULL CHECK (percentual > 0 AND percentual <= 100)
+  UNIQUE (titulo_id, centro_custo_id)
+  -- CHECK cross-row (soma = 100) é gatilho, como em qualquer soma que a linha
+  -- sozinha não prova — mesmo motivo do RN-L29 no rateio de nota fiscal.
+
+titulo_pagar_aprovacao
+  id            uuid PK
+  tenant_id     uuid FK → tenant
+  titulo_id     uuid FK → titulo_pagar
+  nivel         integer NOT NULL            -- 1, 2, 3
+  aprovador_id  uuid FK → usuario NULL      -- NULL até ser decidido
+  decisao       text CHECK (decisao IN ('APROVADO','REJEITADO'))
+  decidido_em   timestamptz
+  justificativa text                        -- obrigatória em REJEITADO
+  delegado_de   uuid FK → usuario NULL      -- se decidiu por delegação (ver RN abaixo)
+  created_at    timestamptz NOT NULL DEFAULT now()
+
+titulo_pagar_pagamento
+  id               uuid PK
+  tenant_id        uuid FK → tenant
+  titulo_id        uuid FK → titulo_pagar
+  valor_pago       numeric(15,4) NOT NULL CHECK (valor_pago > 0)
+  data_pagamento   date NOT NULL
+  conta_id         uuid FK → conta_bancaria
+  forma            text NOT NULL CHECK (forma IN ('TRANSFERENCIA','BOLETO','PIX','CHEQUE'))
+  estornado_em     timestamptz
+  estorno_motivo   text
+  movimentacao_id  uuid FK → movimentacao_bancaria
+  created_at, created_by
+
+delegacao_aprovacao
+  id           uuid PK
+  tenant_id    uuid FK → tenant
+  delegante_id uuid FK → usuario
+  delegado_id  uuid FK → usuario
+  nivel        integer NOT NULL             -- delega o quê: qual nível de alçada
+  inicio       date NOT NULL
+  fim          date NOT NULL
+  motivo       text NOT NULL
+  CHECK (fim >= inicio)
+```
+
+### Regras de Negócio
+
+1. **RN-F01 — Faixa de valor decide o número de níveis, resolvida por
+   `alcada`.** `alcada.tipo = 'APROVACAO_PAGAMENTO'` já existe, por perfil, com
+   `limite_valor`. Ao criar o título, o sistema busca o menor `limite_valor`
+   que **não** cobre o valor do título entre os perfis do tenant, em ordem, e
+   monta uma linha em `titulo_pagar_aprovacao` por nível necessário. Abaixo do
+   menor limite configurado, zero linhas — aprovação automática, sem
+   intervenção humana, que é literalmente "não criar linha nenhuma".
+2. **RN-F02 — Aprovação é sequencial, nunca paralela.** Nível 2 só fica visível
+   ao respectivo aprovador depois que o nível 1 decide `APROVADO`. Uma
+   rejeição em qualquer nível encerra o fluxo em `REJEITADO`; não avança.
+3. **RN-F03 — Rejeição exige justificativa** (`titulo_pagar_aprovacao.justificativa
+   NOT NULL WHERE decisao = 'REJEITADO'`, gatilho) e devolve o título a
+   `PENDENTE` para o solicitante corrigir e reenviar — reenviar cria uma nova
+   rodada de aprovação, não reaproveita a antiga.
+4. **RN-F04 — Segregação de funções.** Quem cria o título (`created_by`) não
+   pode ser o aprovador de nenhum nível dele — a mesma classe de restrição do
+   RN-027 (nota fiscal). Quem cadastra o fornecedor não aprova pagamento a
+   esse fornecedor (Anexo C.6, já documentado — este módulo é quem finalmente
+   o impõe em código).
+5. **RN-F05 — Delegação é por período e por nível**, nunca "delega tudo para
+   sempre". Fora do período de `delegacao_aprovacao`, a aprovação volta para o
+   titular, mesmo que a delegação não tenha sido revogada manualmente — a
+   data faz o trabalho, ninguém precisa lembrar de desfazer.
+6. **RN-F06 — Pagamento parcial recalcula saldo, não status binário.** Status
+   vira `PAGO_PARCIAL` enquanto `Σ(valor_pago) < valor_ajustado`; `PAGO`
+   quando fecha; nunca abaixo de zero — pagamento que exceda o saldo é
+   recusado, não vira crédito solto.
+7. **RN-F07 — Estorno é lançamento contrário com motivo**, nunca exclusão do
+   pagamento original (mesma regra de conta bancária, Módulo 9).
+8. **RN-F08 — Parcelamento: título pai nunca recebe pagamento diretamente.**
+   Só as parcelas filhas pagam; o pai existe para o relatório e para o
+   cancelamento em lote (cancelar o pai propõe cancelar as filhas ainda
+   pendentes, com confirmação — não cancela silenciosamente uma parcela já
+   paga).
+9. **RN-F09 — Rateio soma exatamente 100%** ou não existe (título sem rateio é
+   100% do próprio centro de custo, um valor implícito, não uma linha).
+
+### Fluxos de Aprovação
+
+1. Operador financeiro cria o título → sistema calcula os níveis (RN-F01) →
+   status `PENDENTE` se zero níveis (some direto para `APROVADO`) ou
+   `EM_APROVACAO`.
+2. Aprovador nível 1 vê o título na fila (`titulo_pagar_aprovacao` onde
+   `nivel = 1 AND decisao IS NULL`) → aprova ou rejeita com justificativa.
+3. Se aprovado e houver nível 2, ele aparece na fila do aprovador seguinte —
+   nunca antes.
+4. Ao decidir o último nível como `APROVADO`, o título vira `APROVADO` e fica
+   disponível para agendamento/pagamento.
+5. Notificação (via `outbox_evento`, que já existe desde a 0007 — este módulo
+   é o primeiro consumidor real dele) a cada mudança de status, para
+   solicitante e para o próximo aprovador da fila.
+
+### Automações
+
+- Ao alcançar `data_vencimento` sem pagamento, o título não muda de status
+  sozinho (pagamento é ação humana), mas passa a contar para o indicador de
+  atraso e para o alerta de fluxo de caixa (Módulo 13).
+- Geração de parcelas: ao criar um título com `parcela_total > 1`, o sistema
+  cria o pai e as N filhas na mesma transação, com vencimentos mensais a
+  partir da data informada — nunca uma parcela sem as demais.
+
+### Fluxo de Usuário
+
+1. **Financeiro → Contas a Pagar → Novo título.** Fornecedor, categoria,
+   classificação (despesa/investimento), valor, vencimento, centro(s) de
+   custo, anexos.
+2. Ao salvar, a tela mostra os níveis de aprovação calculados **antes** de
+   confirmar — o operador vê o que vai acontecer, não é surpreendido depois.
+3. Fila de aprovação: cada aprovador vê só os títulos no próprio nível.
+4. Pagamento: baixa com conta de origem, forma, data — gera a movimentação
+   bancária (Módulo 9) na mesma transação.
+
+### Endpoints de API
+
+```
+GET    /api/v1/contas-pagar                      → ?status=&fornecedor_id=&vencimento_de=&vencimento_ate=
+POST   /api/v1/contas-pagar                        [Idempotency-Key]
+GET    /api/v1/contas-pagar/{id}
+PATCH  /api/v1/contas-pagar/{id}                   [If-Match] — só em PENDENTE
+POST   /api/v1/contas-pagar/{id}/enviar-aprovacao
+POST   /api/v1/contas-pagar/{id}/aprovacoes/{nivel}/decidir  → {decisao, justificativa?}
+POST   /api/v1/contas-pagar/{id}/pagamentos         [Idempotency-Key]
+POST   /api/v1/contas-pagar/{id}/pagamentos/{pid}/estornar
+POST   /api/v1/contas-pagar/{id}/cancelar
+GET    /api/v1/delegacoes-aprovacao                → ?ativas=true
+POST   /api/v1/delegacoes-aprovacao                 [Idempotency-Key]
+```
+
+Permissões: `pagar:ler` · `pagar:criar` · `pagar:aprovar` · `pagar:baixar` —
+**as quatro já existem no catálogo.** `pagar:cancelar` e
+`alcada:definir` (já existe) para configurar as faixas por perfil.
+
+### Dependências
+- **Depende de:** Módulo 8 (centro de custo), Módulo 9 (conta bancária,
+  fornecedor já existe desde o Anexo N)
+- **Habilita:** Módulo 12 (lançamentos futuros de despesa), Módulo 13 (fluxo
+  de caixa), Módulo 14 (controle de despesas)
+
+### Critérios de Aceite
+- [ ] Título abaixo do menor limite de alçada não gera linha de aprovação
+- [ ] Nível 2 fica invisível ao respectivo aprovador enquanto o nível 1 não
+      decidir
+- [ ] Rejeição sem justificativa é recusada pelo banco
+- [ ] Criador do título não aparece como aprovador possível de nenhum nível
+      dele, nem mesmo por escopo de perfil coincidente
+- [ ] Delegação fora do período não desvia a aprovação
+- [ ] Pagamento que excede o saldo em aberto é recusado
+- [ ] Estorno gera lançamento contrário; o pagamento original nunca é apagado
+- [ ] Cancelar o título pai propõe cancelamento das filhas pendentes e
+      preserva as já pagas
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-18]** As faixas de valor por nível são **configuráveis pelo
+  admin do cliente** (via `alcada`, que já é uma tabela por tenant) ou
+  **fixas no sistema**? A tabela `alcada` já é por tenant desde a 0002 — ela
+  não teria sido desenhada assim se a intenção fosse valor fixo global.
+  Recomendação: **configurável**, é o que a tabela já é; a pergunta que resta
+  é só de interface (tela de configuração de alçada, que hoje não existe).
+- **[DECISÃO D-19]** Notificação por e-mail depende de um provedor de envio
+  (SES, SendGrid, SMTP próprio) que este levantamento não escolhe — é
+  infraestrutura, não modelagem. O `outbox_evento` grava a intenção; o worker
+  que consome e efetivamente envia é lacuna de infraestrutura, não de dado.
+- **[LACUNA]** "Vínculo com contrato de fornecedor" pressupõe contrato de
+  fornecedor como entidade — hoje só existe `fornecedor` (cadastro) e
+  `contrato` (com cliente, não com fornecedor). Ficou como referência livre
+  (`contrato_fornecedor_ref text`) até que exista demanda real de um contrato
+  de fornecedor formal com vigência e cláusulas — modelar isso sem um caso de
+  uso concreto seria a "lacuna que ninguém testa porque ninguém usa".
+
+---
+
+## MÓDULO 11: Contas a Receber
+
+### Status
+- [ ] Novo — **unifica com a persistência de fatura, que também não existe**
+
+### Descrição
+
+Aqui mora a decisão arquitetural mais importante deste bloco. Buscando no
+repositório: **não existe tabela `fatura`.** O que existe é
+`consumo_competencia` (Anexo P, migração 0013) — a consolidação de leitura
+por período — e uma tela de "Faturamento" inteiramente simulada em memória no
+front-end (`apps/web/src/dados`). O motor de preço (Anexo E, `app.resolver_preco`
+e `app.resolver_franquia`) calcula o valor; nada grava o título.
+
+O pedido original trata "Contas a Receber" como módulo novo, mas construí-lo
+como uma segunda tabela paralela à fatura duplicaria o conceito de "cobrança
+ao cliente" em dois lugares que inevitavelmente divergem — exatamente o
+defeito que o Anexo P dedicou uma seção inteira a evitar no rateio de
+franquia. A recomendação é **uma tabela só**, `titulo_receber`, com um
+discriminador de origem: `CONTRATUAL` (gerado a partir de contrato + consumo,
+o que hoje seria chamado de "fatura") e `AVULSO` (lançamento manual, o caso
+que o pedido original chama de "contas a receber" propriamente dito).
+
+### Modelagem de Dados
+
+```
+titulo_receber
+  id                uuid PK
+  tenant_id         uuid FK → tenant
+  cliente_id        uuid FK → cliente
+  filial_id         uuid FK → filial NULL
+  contrato_id       uuid FK → contrato NULL      -- presente quando origem = CONTRATUAL
+  competencia       text NULL                    -- 'AAAA-MM', presente quando CONTRATUAL
+  origem            text NOT NULL CHECK (origem IN ('CONTRATUAL','AVULSO'))
+  descricao         text NOT NULL
+  valor_original    numeric(15,4) NOT NULL CHECK (valor_original > 0)
+  desconto          numeric(15,4) NOT NULL DEFAULT 0 CHECK (desconto >= 0)
+  valor_liquido     numeric(15,4) GENERATED ALWAYS AS (valor_original - desconto) STORED
+  data_emissao      date NOT NULL
+  data_vencimento   date NOT NULL
+  status            text NOT NULL DEFAULT 'PENDENTE_APROVACAO' CHECK (status IN (
+                      'PENDENTE_APROVACAO','PENDENTE','APROVADO',
+                      'RECEBIDO_PARCIAL','RECEBIDO','CANCELADO','EM_DISPUTA','BAIXADO'
+                    ))
+  titulo_pai_id     uuid FK → titulo_receber NULL
+  parcela_numero    integer
+  parcela_total     integer
+  recorrencia_id    uuid FK → recorrencia_receber NULL  -- Módulo 12
+  version           integer NOT NULL DEFAULT 1
+  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by, delete_reason
+
+  CHECK ((origem = 'CONTRATUAL') = (contrato_id IS NOT NULL AND competencia IS NOT NULL))
+
+titulo_receber_rateio      -- mesma forma de titulo_pagar_rateio (Módulo 10)
+titulo_receber_aprovacao   -- mesma forma; alcada.tipo = 'DESCONTO' já cobre o caso de desconto,
+                            -- falta 'EMISSAO_TITULO_RECEBER' para o título em si (D-20)
+titulo_receber_recebimento
+  id               uuid PK
+  tenant_id        uuid FK → tenant
+  titulo_id        uuid FK → titulo_receber
+  valor_recebido   numeric(15,4) NOT NULL CHECK (valor_recebido > 0)
+  data_recebimento date NOT NULL
+  conta_id         uuid FK → conta_bancaria
+  forma            text NOT NULL CHECK (forma IN ('TRANSFERENCIA','BOLETO','PIX','CHEQUE'))
+  movimentacao_id  uuid FK → movimentacao_bancaria
+  created_at, created_by
+```
+
+`consumo_competencia` (0013) não muda: continua sendo a fonte do valor
+CONTRATUAL. O que muda é que, ao fechar a competência
+(`app.fechar_competencia`, já existente), em vez de o front-end simular uma
+fatura, o banco passa a **gerar a linha em `titulo_receber`** com
+`origem = 'CONTRATUAL'`.
+
+### Regras de Negócio
+
+1. **RN-F10 — Título contratual nasce `PENDENTE_APROVACAO`.** Ninguém emite
+   cobrança direto do cálculo automático sem um humano validar — é o
+   equivalente ao que o pedido original chamou de "aprovação de títulos
+   gerados por contrato antes de efetivar".
+2. **RN-F11 — Vigência é checada na geração, não depois.** Se o contrato foi
+   suspenso ou encerrado entre o fechamento da competência e a geração do
+   título, o título nasce com uma exceção sinalizada (`EM_DISPUTA`), nunca
+   silenciosamente com o valor do contrato morto.
+3. **RN-F12 — Desconto acima da alçada do perfil exige aprovação adicional**,
+   mesmo em título já aprovado por outro motivo — reaproveita
+   `alcada.tipo = 'DESCONTO'`, que já existe.
+4. **RN-F13 — Baixa parcial recalcula saldo**, espelhando RN-F06 do contas a
+   pagar.
+5. **RN-F14 — `BAIXADO` é diferente de `RECEBIDO`.** Recebido é dinheiro que
+   entrou; baixado é título encerrado sem entrada de caixa (perda reconhecida,
+   renegociação que zerou o saldo por outro instrumento) — confundir os dois
+   inflaria a receita realizada.
+
+### Fluxos de Aprovação
+
+Mesma forma do Módulo 10 (níveis sequenciais, rejeição com justificativa,
+segregação de funções — quem gera a pré-cobrança pode aprovar, quem cancela
+título de valor relevante precisa de alçada distinta, exatamente como o
+Anexo C.6 já documentava para fatura).
+
+### Automações
+
+- **Fechamento de competência → título contratual.** Consumidor de
+  `consumo_competencia` fechada: para cada contrato com competência fechada e
+  sem título já gerado, cria `titulo_receber` com `origem='CONTRATUAL'`.
+  Idempotente por natureza (chave única `contrato_id + competencia`) — fechar
+  a mesma competência duas vezes não duplica título.
+
+### Fluxo de Usuário
+
+1. Ao fechar a competência (tela já existente do Módulo 6/Anexo P), a lista
+   de títulos gerados aparece para aprovação, não para emissão direta.
+2. **Financeiro → Contas a Receber → Novo título avulso**, para o caso
+   `AVULSO` — mesma tela, campos comuns, sem contrato/competência.
+3. Baixa: recebimento com conta de destino, forma, data.
+
+### Endpoints de API
+
+```
+GET    /api/v1/contas-receber                      → ?status=&cliente_id=&origem=&vencimento_de=&vencimento_ate=
+POST   /api/v1/contas-receber                       [Idempotency-Key]  -- origem AVULSO
+GET    /api/v1/contas-receber/{id}
+POST   /api/v1/contas-receber/{id}/aprovacoes/{nivel}/decidir
+POST   /api/v1/contas-receber/{id}/recebimentos     [Idempotency-Key]
+POST   /api/v1/contas-receber/{id}/baixar-sem-recebimento  → BAIXADO, com motivo
+POST   /api/v1/contas-receber/{id}/cancelar
+```
+
+Permissões: `receber:ler` · `receber:baixar` · `receber:negociar` — **já
+existem.** `receber:criar` e `receber:aprovar` são **novas**, no mesmo padrão
+de `pagar:*`.
+
+### Dependências
+- **Depende de:** Módulo 6/Anexo P (`consumo_competencia`, `app.resolver_preco`),
+  Módulo 8, Módulo 9
+- **Habilita:** Módulo 12, Módulo 13, Módulo 14 (receita, para comparar com
+  despesa), Módulo 5 — Portal do Cliente (que hoje lê `fatura:ler` sobre uma
+  tabela inexistente; passa a ler `titulo_receber` filtrado por
+  `origem='CONTRATUAL'`)
+
+### Critérios de Aceite
+- [ ] Fechar a mesma competência duas vezes não duplica título
+- [ ] Título de contrato suspenso entre fechamento e geração nasce em disputa,
+      nunca com o valor de um contrato morto
+- [ ] Desconto acima da alçada do perfil é barrado mesmo com o título já
+      aprovado por outro motivo
+- [ ] `BAIXADO` e `RECEBIDO` nunca são contados juntos como receita realizada
+      num mesmo indicador
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-20 · a mais importante deste módulo]** Confirmar a unificação
+  proposta (`titulo_receber` único, com discriminador `origem`) em vez de duas
+  tabelas paralelas (`fatura` de um lado, `contas_a_receber` de outro). A
+  alternativa mais barata — manter fatura simulada no front e criar
+  `contas_a_receber` só para o caso avulso — deixa duas fontes de verdade
+  sobre "quanto o cliente deve", que é precisamente o defeito que o Anexo P
+  evitou ao tratar franquia como tabela única com histórico, e não como
+  "tabela nova + o que já existia continua igual".
+- **[DECISÃO D-21]** O índice de reajuste (IPCA/IGPM) é **consultado
+  automaticamente** de fonte externa (IBGE tem API pública para IPCA; IGPM é
+  da FGV, sem API pública gratuita) ou **cadastro manual mensal**? A tabela
+  `contrato.indice_reajuste` e `periodicidade_reajuste_meses` já existem
+  desde a 0005 sem motor nenhum atrás — este é o mesmo débito técnico já
+  listado antes deste levantamento, e continua sem dono. Recomendação:
+  **cadastro manual do índice do mês** no lançamento — consultar API externa
+  é uma dependência de rede num motor que hoje roda inteiramente dentro do
+  banco, e o índice publicado tem defasagem de divulgação que precisaria de
+  tratamento de qualquer forma.
+- **[DECISÃO D-22]** Geração automática de título contratual ocorre **ao
+  fechar a competência** (proposto acima, reaproveita o gatilho que já existe)
+  ou em **ciclo mensal separado, X dias antes do vencimento**? Recomendação:
+  ao fechar a competência — criar um segundo agendador só para isso duplicaria
+  o conceito de "quando processar o mês" que o fechamento já resolve.
+
+---
+
+## MÓDULO 12: Lançamentos Futuros
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Camada de intenção: despesa/receita programada que ainda não é título. Existe
+separada de `titulo_pagar`/`titulo_receber` porque um compromisso futuro pode
+ser editado ou cancelado livremente até a conversão — um título já criado
+carrega workflow de aprovação e rateio, que não deveriam ser reabertos por
+uma edição de planejamento.
+
+### Modelagem de Dados
+
+```
+lancamento_futuro
+  id                 uuid PK
+  tenant_id          uuid FK → tenant
+  tipo               text NOT NULL CHECK (tipo IN (
+                       'DESPESA_RECORRENTE','RECEITA_RECORRENTE',
+                       'DESPESA_PARCELADA','RECEITA_PARCELADA','PROVISAO'
+                     ))
+  descricao          text NOT NULL
+  valor_previsto     numeric(15,4) NOT NULL CHECK (valor_previsto > 0)
+  data_prevista      date NOT NULL
+  centro_custo_id    uuid FK → centro_custo NULL
+  contrato_id        uuid FK → contrato NULL       -- quando vinculado a contrato (RN abaixo)
+  fornecedor_id      uuid FK → fornecedor NULL
+  cliente_id         uuid FK → cliente NULL
+  status             text NOT NULL DEFAULT 'PROGRAMADO' CHECK (status IN (
+                       'PROGRAMADO','CONVERTIDO','CANCELADO'
+                     ))
+  titulo_gerado_id   uuid                            -- aponta pra titulo_pagar OU titulo_receber; ver nota
+  titulo_gerado_tipo text CHECK (titulo_gerado_tipo IN ('PAGAR','RECEBER'))
+  convertido_em      timestamptz
+  created_at, created_by, updated_at, updated_by, deleted_at, deleted_by, delete_reason
+
+recorrencia_pagar / recorrencia_receber
+  id              uuid PK
+  tenant_id       uuid FK → tenant
+  periodicidade   text NOT NULL CHECK (periodicidade IN ('MENSAL','TRIMESTRAL','SEMESTRAL','ANUAL'))
+  dia_vencimento  integer NOT NULL CHECK (dia_vencimento BETWEEN 1 AND 28)  -- 28 evita mês sem o dia
+  valor_base      numeric(15,4) NOT NULL
+  proxima_geracao date NOT NULL
+  ativo           boolean NOT NULL DEFAULT true
+  -- referenciada por titulo_pagar.recorrencia_id / titulo_receber.recorrencia_id
+```
+
+`titulo_gerado_id` **sem FK declarada** é deliberado, não descuido: aponta
+para uma de duas tabelas conforme `titulo_gerado_tipo`, e Postgres não tem FK
+polimórfica. A integridade é garantida por gatilho (checa a existência na
+tabela indicada por `titulo_gerado_tipo`), o mesmo mecanismo que outras bases
+poliformas do sistema já usam quando duas entidades se alternam.
+
+### Regras de Negócio
+
+1. **RN-F15 — Conversão só ocorre uma vez.** `status='PROGRAMADO' AND
+   data_prevista <= hoje` é a condição de elegibilidade; a conversão muda
+   para `CONVERTIDO` na mesma transação que cria o título — nunca duas
+   transações separadas, que abririam janela para duplicar em execução
+   concorrente do agendador.
+2. **RN-F16 — Vinculado a contrato, valida vigência antes de converter.**
+   Se `contrato_id` aponta para contrato não mais `ATIVO`, a conversão não
+   ocorre; o lançamento futuro fica `PROGRAMADO` e aparece numa fila de
+   exceção — não gera título de contrato morto (mesma lógica de RN-F11).
+3. **RN-F17 — Editar ou cancelar só é possível em `PROGRAMADO`.** Uma vez
+   convertido, a edição é do título gerado, não do lançamento futuro — que
+   vira só um registro histórico de "isso foi previsto e virou aquilo".
+4. **RN-F18 — Recorrência gera o próximo lançamento futuro ao converter o
+   atual**, avançando `proxima_geracao` pela periodicidade — nunca todos de
+   uma vez (evita gerar anos de lançamentos futuros no primeiro clique).
+
+### Automações
+
+- **Job diário de conversão** (usa `job_execucao`, que já existe desde 0007):
+  varre `lancamento_futuro` elegível, converte em título (Módulo 10 ou 11
+  conforme o tipo), avança a recorrência quando houver.
+- **Job de geração de recorrência**: para cada `recorrencia_*` ativa com
+  `proxima_geracao <= hoje + N dias` (N configurável — antecedência para
+  aparecer no planejamento antes de vencer), cria o próximo
+  `lancamento_futuro`.
+
+### Fluxo de Usuário
+
+1. **Financeiro → Lançamentos Futuros → Dashboard.** Fluxo de caixa projetado
+   em 30/60/90/180 dias (consumido pelo Módulo 13, calculado aqui e lá).
+2. Criar/editar/cancelar lançamento futuro, enquanto `PROGRAMADO`.
+3. Fila de exceção: lançamentos que não converteram por contrato inválido.
+
+### Endpoints de API
+
+```
+GET    /api/v1/lancamentos-futuros           → ?tipo=&status=&de=&ate=
+POST   /api/v1/lancamentos-futuros            [Idempotency-Key]
+PATCH  /api/v1/lancamentos-futuros/{id}       [If-Match] — só em PROGRAMADO
+POST   /api/v1/lancamentos-futuros/{id}/cancelar
+GET    /api/v1/lancamentos-futuros/projecao   → ?dias=30|60|90|180
+```
+
+Permissões: reaproveita `pagar:criar`/`receber:criar` para o lançamento que
+vai gerar cada tipo; `financeiro:lancamento_manual` (já existe) para o
+avulso/provisão.
+
+### Dependências
+- **Depende de:** Módulo 10 e 11 (é o que ele converte para)
+- **Habilita:** Módulo 13 (fluxo de caixa projetado)
+
+### Critérios de Aceite
+- [ ] Dois disparos concorrentes do job de conversão não duplicam o título
+      do mesmo lançamento
+- [ ] Lançamento vinculado a contrato suspenso não converte; aparece na fila
+      de exceção
+- [ ] Lançamento convertido não aceita mais edição
+- [ ] Recorrência gera exatamente o próximo lançamento, nunca o lote inteiro
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-23]** A conversão deve **notificar** o responsável financeiro
+  (pedido original faz essa pergunta explicitamente)? Recomendação: sim, via
+  `outbox_evento` — mesmo mecanismo do Módulo 10; o custo marginal de incluir
+  é baixo porque o outbox já existe, e não notificar geração automática de
+  título é o tipo de silêncio que só aparece como problema no fechamento do
+  mês.
+
+---
+
+## MÓDULO 13: Fluxo de Caixa
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Camada de leitura, não de escrita — nenhuma tabela própria além de parâmetros
+de cenário. Consolida saldo real (Módulo 9) com o previsto (Módulos 10, 11,
+12) numa projeção.
+
+### Modelagem de Dados
+
+```
+parametro_cenario_caixa
+  id                    uuid PK
+  tenant_id             uuid FK → tenant
+  nome                  text NOT NULL      -- 'Realista', 'Otimista', 'Pessimista'
+  percentual_inadimplencia numeric(5,2) NOT NULL DEFAULT 0  -- aplicado sobre titulo_receber previsto
+  padrao                boolean NOT NULL DEFAULT false
+  UNIQUE (tenant_id, nome)
+```
+
+Não há tabela de "posição diária de caixa": ela é **computada**, por função
+(`app.fluxo_caixa_projetado(tenant_id, conta_id?, filial_id?, centro_custo_id?,
+de, ate, cenario_id)`), somando saldo atual (Módulo 9) com títulos a
+pagar/receber em aberto no período, aplicando o percentual de inadimplência do
+cenário sobre a parcela de recebíveis. Gravar uma posição diária seria dado
+derivado armazenado — o defeito que `custo_aquisicao` (coluna gerada, Anexo N)
+existe para evitar em outro lugar do sistema.
+
+### Regras de Negócio
+
+1. **RN-F19 — Projeção nunca inclui título já `CANCELADO` ou `BAIXADO`.**
+2. **RN-F20 — Cenário "pessimista" aplica inadimplência só sobre recebíveis**,
+   nunca sobre pagáveis — a operação não fica mais otimista sobre a própria
+   dívida por causa de um cenário de estresse.
+3. **RN-F21 — Alerta de saldo negativo projetado** dispara quando, em algum
+   dia da janela, `saldo_acumulado < 0` no cenário realista — não espera o
+   pessimista, que é para planejamento, não para alarme do dia a dia.
+4. **RN-F22 — Concentração de pagamentos** é sinalizada quando um único dia
+   concentra mais que um percentual configurável (padrão sugerido: 40%) do
+   total de saídas previstas na janela — útil para renegociar vencimento antes
+   que o dia chegue.
+
+### Fluxo de Usuário
+
+1. **Financeiro → Fluxo de Caixa.** Seletor de conta/filial/centro de
+   custo/cenário, janela de 30/60/90/180 dias.
+2. Gráfico de linha (saldo projetado), barras (entradas × saídas por
+   dia/semana/mês), área (acumulado) — reaproveitando os componentes de
+   gráfico já existentes em `componentes/ui/graficos.tsx`.
+3. Lista de alertas: saldo negativo, concentração, inadimplência acima da
+   média histórica do tenant.
+
+### Endpoints de API
+
+```
+GET /api/v1/fluxo-caixa/projecao   → ?conta_id=&filial_id=&centro_custo_id=&de=&ate=&cenario=
+GET /api/v1/fluxo-caixa/alertas    → ?de=&ate=
+GET /api/v1/cenarios-caixa
+POST /api/v1/cenarios-caixa         [Idempotency-Key]
+```
+
+Permissão: `financeiro:painel_executivo` (já existe) para a visão consolidada;
+`pagar:ler` + `receber:ler` (já existem) bastam para a projeção básica.
+
+### Dependências
+- **Depende de:** Módulos 9, 10, 11, 12 — é o topo da pirâmide, não a base
+- **Habilita:** nada abaixo; alimenta o painel executivo
+
+### Critérios de Aceite
+- [ ] Título cancelado ou baixado nunca aparece na soma projetada
+- [ ] Cenário pessimista não altera o valor de nenhum título a pagar
+- [ ] Alerta de saldo negativo dispara no cenário realista, sem precisar do
+      pessimista
+- [ ] Projeção de 90 dias muda de forma coerente ao registrar um pagamento
+      antecipado (o dia do pagamento sai da soma futura)
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-24]** Integração com ERP ou API bancária externa para o saldo
+  real, ou o fluxo de caixa é alimentado **só pelos títulos internos**
+  (recomendação, dado que Módulo 9 já é a fonte de saldo real via
+  movimentação bancária — abrir integração com banco por Open Finance é
+  módulo à parte, com custo de credenciamento e homologação que este
+  levantamento não tem base para dimensionar).
+
+---
+
+## MÓDULO 14: Controle de Despesas — Orçamento e Indicadores
+
+### Status
+- [ ] Novo
+
+### Descrição
+
+Camada analítica sobre o Módulo 10 (contas a pagar): não introduz uma segunda
+forma de lançar despesa, lê o que já foi lançado e compara contra um
+orçamento. "Módulo alimentado automaticamente pelo financeiro" é a descrição
+correta do pedido original — a única tabela nova de fato é o orçamento em si;
+categorização e indicadores são leitura sobre `titulo_pagar`.
+
+### Modelagem de Dados
+
+```
+categoria_despesa
+  id              uuid PK
+  tenant_id       uuid FK → tenant
+  nome            text NOT NULL              -- "Licenças de Software", "Telefonia", …
+  categoria_pai_id uuid FK → categoria_despesa NULL   -- subcategoria, 2 níveis
+  classificacao_sugerida text CHECK (classificacao_sugerida IN ('DESPESA_FIXA','DESPESA_VARIAVEL','INVESTIMENTO'))
+  ativo           boolean NOT NULL DEFAULT true
+  UNIQUE (tenant_id, nome) WHERE deleted_at IS NULL
+  -- referenciada por titulo_pagar.categoria_id (Módulo 10)
+
+orcamento
+  id              uuid PK
+  tenant_id       uuid FK → tenant
+  ano             integer NOT NULL
+  mes             integer            -- NULL = orçamento anual, sem quebra mensal
+  categoria_id    uuid FK → categoria_despesa NULL   -- NULL = orçamento geral do centro
+  centro_custo_id uuid FK → centro_custo NULL
+  filial_id       uuid FK → filial NULL
+  valor_orcado    numeric(15,4) NOT NULL CHECK (valor_orcado >= 0)
+  created_at, created_by, updated_at, updated_by
+  UNIQUE (tenant_id, ano, mes, categoria_id, centro_custo_id, filial_id)
+  -- a UNIQUE trata NULL como valor distinto por linha (comportamento padrão do
+  -- Postgres em índice único) — duas linhas "geral" (categoria_id NULL) do
+  -- mesmo centro no mesmo mês colidiriam, que é o comportamento certo
+
+replanejamento_orcamento
+  id                uuid PK
+  tenant_id         uuid FK → tenant
+  orcamento_origem_id uuid FK → orcamento
+  orcamento_destino_id uuid FK → orcamento
+  valor_transferido numeric(15,4) NOT NULL CHECK (valor_transferido > 0)
+  motivo            text NOT NULL
+  aprovado_por      uuid FK → usuario
+  created_at        timestamptz NOT NULL DEFAULT now()
+```
+
+**Execução orçamentária não é armazenada** — é `Σ(titulo_pagar.valor_ajustado)
+WHERE categoria_id = X AND status NOT IN ('CANCELADO') AND data_emissao BETWEEN
+início E fim do período`, comparado a `orcamento.valor_orcado`. Guardar
+"quanto já foi gasto" como coluna própria divergiria do que os títulos
+realmente somam assim que um for cancelado ou tiver o valor ajustado — o
+mesmo argumento do saldo de conta bancária (Módulo 9) e do custo de aquisição
+(Anexo N): número que pode ser derivado não deveria ter caminho de escrita
+próprio.
+
+### Regras de Negócio
+
+1. **RN-F23 — Replanejamento move valor entre linhas de orçamento, nunca cria
+   nem destrói.** `orcamento_destino.valor_orcado += valor_transferido` e
+   `orcamento_origem.valor_orcado -= valor_transferido` na mesma transação;
+   `valor_transferido` não pode exceder o saldo ainda não comprometido da
+   origem (ver D-25 sobre o que conta como "comprometido").
+2. **RN-F24 — Alertas por limiar de execução: 75/90/100%.** Calculados na
+   consulta, não armazenados — um título cancelado depois de disparar o
+   alerta de 90% precisa fazer o alerta desaparecer, não persistir um estado
+   que o dado atual já não sustenta.
+3. **RN-F25 — Projeção de fechamento** = `gasto_ate_hoje / dias_decorridos_no_periodo
+   * dias_totais_do_periodo` — método linear simples, declarado como tal (não
+   é previsão estatística, é ritmo atual extrapolado).
+
+### Indicadores (todos calculados, nenhum armazenado)
+
+```
+despesa_total_mensal        = Σ titulo_pagar do mês, todas classificações
+despesa_media_filial        = despesa_total_mensal / N filiais com título no mês
+execucao_orcamentaria(%)    = despesa_total_mensal_categoria / orcamento.valor_orcado
+variacao_mes_anterior(%)    = (mês_atual − mês_anterior) / mês_anterior
+variacao_vs_orcamento(%)    = (realizado − orçado) / orçado
+indice_recorrente_vs_pontual = Σ(titulo com recorrencia_id) / Σ(total)
+proporcao_investimento      = Σ(classificacao='INVESTIMENTO') / Σ(total)
+```
+
+O indicador do pedido original "custo de TI por paciente" **não se aplica**
+a este domínio — não há conceito de paciente numa locadora de equipamentos de
+TI. O análogo real, que o pedido claramente pretendia por analogia, é
+**custo de TI por cliente ativo** ou **por equipamento em campo**:
+`despesa_total_categoria_TI / count(cliente com contrato ATIVO)` ou
+`/ count(equipamento LOCADO)`. Sinalizado como decisão, não assumido — ver
+D-26.
+
+### Análises e Relatórios
+
+Evolução mensal por categoria (linha), distribuição por categoria (pizza),
+comparativo mês a mês/ano a ano (barras), top 5 fornecedores por volume,
+despesa por filial, despesa por centro de custo (tabela hierárquica),
+execução orçamentária por categoria (medidor), investimento × despesa
+operacional (proporção) — todos consultas sobre `titulo_pagar` +
+`categoria_despesa` + `orcamento`, sem tabela nova além das já listadas.
+Exportação PDF/Excel no padrão que `mapa-lista`/CSV já estabeleceu (Anexo O).
+
+### Fluxo de Usuário
+
+1. **Despesas → Orçamento.** Grade ano/mês × categoria × centro de custo,
+   preenchimento em lote, cópia do orçamento do ano anterior como ponto de
+   partida (nunca herança automática silenciosa — sempre uma ação explícita
+   "copiar do ano anterior").
+2. **Despesas → Painel.** KPIs, gráficos, tabela de execução com semáforo
+   (verde/amarelo/vermelho/crítico nos limiares de 75/90/100%).
+3. Replanejamento: seleciona origem e destino, valor, motivo — sujeito a
+   aprovação se acima da alçada do perfil.
+
+### Endpoints de API
+
+```
+GET    /api/v1/categorias-despesa
+POST   /api/v1/categorias-despesa                  [Idempotency-Key]
+GET    /api/v1/orcamentos                           → ?ano=&mes=&categoria_id=&centro_custo_id=
+POST   /api/v1/orcamentos                            [Idempotency-Key]
+PATCH  /api/v1/orcamentos/{id}                       [If-Match]
+POST   /api/v1/orcamentos/replanejamentos            [Idempotency-Key]
+GET    /api/v1/despesas/indicadores                  → ?periodo=&filial_id=&centro_custo_id=
+GET    /api/v1/despesas/relatorios/{tipo}            → ?formato=pdf|xlsx
+```
+
+Permissões: `financeiro:centro_custo_gerenciar` (já existe, reaproveitado
+para orçamento por proximidade de domínio) — **nova decisão**: criar
+`despesa:orcamento_gerenciar` e `despesa:ler` dedicadas, para não sobrecarregar
+uma permissão de centro de custo com uma responsabilidade orçamentária
+distinta. `financeiro:exportar` (já existe) para os relatórios.
+
+### Dependências
+- **Depende de:** Módulo 8 (centro de custo), Módulo 10 (fonte de todo dado)
+- **Habilita:** nada abaixo — é o topo analítico, junto do Módulo 13
+
+### Critérios de Aceite
+- [ ] Cancelar um título reflete no percentual de execução na consulta
+      seguinte, sem job de recálculo
+- [ ] Replanejamento não permite transferir mais do que o saldo não
+      comprometido da origem
+- [ ] Indicador "custo de TI por cliente" bate com a contagem de contratos
+      ativos no mesmo período consultado
+- [ ] Relatório exportado em PDF e em Excel contêm os mesmos números da tela
+
+### Lacunas e Decisões Pendentes
+- **[DECISÃO D-25]** O que conta como "comprometido" ao limitar o
+  replanejamento — só o já gasto (`titulo_pagar` `PAGO`/`PAGO_PARCIAL`) ou
+  também o **aprovado e ainda não pago**? Recomendação: os dois — um
+  orçamento que ignora compromisso já aprovado e não pago permitiria
+  replanejar verba que já tem destino certo, e o replanejamento pareceria
+  válido até o vencimento do título original chegar.
+- **[DECISÃO D-26]** Confirmar o indicador análogo a "custo por paciente":
+  por cliente ativo, por equipamento locado, ou os dois lado a lado? Sem essa
+  confirmação o indicador fica documentado como fórmula, sem entrar no painel
+  padrão.
+
+---
+
 ## CRONOGRAMA SUGERIDO DE IMPLEMENTAÇÃO
 
-| Ordem | Módulo | Depende de | Prioridade | Complexidade | Observação |
+> Atualizado. Os módulos 1, 2, 3, 6 e 7 estão implementados (Anexos N, P, P, P
+> e O, respectivamente) — mantidos na tabela para não quebrar a numeração de
+> que os módulos 8–14 dependem, marcados como concluídos. O módulo 4 tem o
+> modelo pronto (0011) e ainda não tem tela nem API. Os módulos 8–14 são desta
+> rodada, na ordem de prioridade que o pedido original definiu: usuários e
+> permissões primeiro, revisão de código em seguida, estrutura financeira de
+> base (centro de custo, conta bancária) antes de contas a pagar, contas a
+> pagar antes de contas a receber, e a camada analítica por último.
+
+| Ordem | Módulo | Depende de | Prioridade | Complexidade | Situação |
 | :---: | --- | --- | :---: | :---: | --- |
-| **0** | **Decisões D-01 e D-02** | — | **Bloqueante** | — | Sem elas, os módulos 4, 5 e 7 (visão cliente) não começam |
-| 1 | Nota Fiscal de Compra | — | Alta | Média-Alta | Independente; pode correr em paralelo com o item 0 |
-| 2 | Tabela de Franquias | — | Alta | Média | Alto reaproveitamento: os parâmetros já existem |
-| 3 | Preço de Locação | Módulo 2 | Alta | Média | Simulador é o item de maior valor comercial |
-| 4 | Usuários e Permissões | **D-01, D-02** | Crítica | **Alta** | O modelo existe; o eixo de cliente é novo e toca RLS |
-| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | Composição de leitura; a complexidade está no módulo 4 |
-| 6 | Consumo de Impressões | Módulo 2 | Alta | **Baixa-Média** | ~70% pronto; falta consolidação, CSV e alertas |
-| 7 | Mapa Geográfico | Módulos 4, 6 | Média | Média | Backend pronto; falta geocodificação e tela |
+| 1 | Nota Fiscal de Compra | — | Alta | Média-Alta | ✅ Feito (Anexo N) |
+| 2 | Tabela de Franquias | — | Alta | Média | ✅ Feito (Anexo P) |
+| 3 | Preço de Locação | Módulo 2 | Alta | Média | ✅ Feito (Anexo P) |
+| 4 | Usuários e Permissões | — | **Crítica** | Alta | 🟡 Modelo pronto; falta tela/API/auth — ver §4.1–4.2 |
+| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | 🔲 Novo — ver checklist ao final |
+| 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
+| 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
+| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
+| **8** | **Centros de Custo** | — | Alta | Baixa | 🔲 Novo — base dos módulos 10–14 |
+| **9** | **Contas Bancárias** | — | Alta | Média | 🔲 Novo — base dos módulos 10, 11, 13 |
+| **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | 🔲 Novo — workflow de aprovação por alçada |
+| **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | 🔲 Novo — unifica com a persistência de fatura (D-20) |
+| **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |
+| **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Média | Baixa | 🔲 Novo — só leitura, nenhuma tabela de posição |
+| **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | 🔲 Novo — orçamento + indicadores, tudo calculado |
 
-**Ajuste sugerido à ordem proposta:** o módulo 6 deveria vir **antes** do 5, não
-depois — o portal exibe consumo, e exibir consumo exige a consolidação. O módulo
-7 pode adiantar a visão do fornecedor sem esperar o módulo 4; só a visão do
-cliente depende dele.
-
-Ordem recomendada: **0 → 1 ∥ 2 → 3 → 6 → 4 → 5 → 7**
+Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12 → 13 →
+14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
+terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 
 ---
 
 ## INTEGRAÇÃO ENTRE MÓDULOS
 
 ```
-                        ┌──────────────────────────┐
-                        │ 1. NOTA FISCAL DE COMPRA │
-                        └────────────┬─────────────┘
-                                     │ cria, com valor rateado e garantia
-                                     ▼
-      ┌────────────────────────────────────────────────────────┐
-      │              equipamento  (já existe)                  │
-      │   patrimônio · série · modelo · status · geo_atual      │
-      └───┬───────────────────┬────────────────────────┬───────┘
-          │                   │                        │
-          │ aloca             │ mede                   │ posiciona
-          ▼                   ▼                        ▼
-  ┌───────────────┐   ┌────────────────┐      ┌────────────────┐
-  │   contrato    │   │ 6. CONSUMO     │      │ 7. MAPA        │
-  │  (já existe)  │◄──┤   consolidação │      │  app.mapa_     │
-  └───┬───────┬───┘   │   por competên.│      │  ativos()      │
-      │       │       └────────┬───────┘      └────────┬───────┘
-      │       │                │                       │
-      │       │  franquia      │ excedente             │
-      │       └────────────────┤                       │
-      ▼                        ▼                       │
-┌─────────────┐        ┌──────────────┐                │
-│ 2. FRANQUIA │───────►│  faturamento │                │
-└─────────────┘        │ (já existe)  │                │
-┌─────────────┐        └──────┬───────┘                │
-│ 3. PREÇO    │───────────────┘                        │
-│  simulador  │                                        │
-└─────────────┘                                        │
-                                                       │
-        ┌──────────────────────────────┐               │
-        │ 4. USUÁRIOS E PERMISSÕES     │               │
-        │    escopo CLIENTE na RLS     │               │
-        └──────────────┬───────────────┘               │
-                       │ recorta TUDO abaixo           │
-                       ▼                               │
-        ┌──────────────────────────────┐               │
-        │ 5. PORTAL DO CLIENTE         │◄──────────────┘
-        │  contratos · consumo · custo · mapa           │
-        └──────────────────────────────┘
+┌──────────────────────────┐        ┌───────────────────────────────┐
+│ 1. NOTA FISCAL DE COMPRA │        │ 4. USUÁRIOS E PERMISSÕES       │
+└────────────┬─────────────┘        │    escopo CLIENTE na RLS       │
+             │ cria, valor rateado  │    (modelo pronto, tela não)   │
+             ▼                      └────────────────┬────────────────┘
+┌──────────────────────────────┐                     │ recorta TUDO,
+│  equipamento (já existe)     │                     │ inclusive o bloco
+│  patrimônio·série·status·geo │                     │ financeiro abaixo
+└───┬───────────┬──────────┬───┘                     ▼
+    │aloca      │mede      │posiciona    ┌─────────────────────────────┐
+    ▼           ▼          ▼             │ 5. PORTAL DO CLIENTE        │
+┌─────────┐ ┌──────────┐ ┌────────┐      └─────────────────────────────┘
+│contrato │ │6. CONSUMO│ │7. MAPA │
+└──┬───┬──┘ │consolid. │ └────────┘
+   │   │    └────┬─────┘
+   │   │  franquia│excedente
+   │   └──────────┤
+   ▼              ▼
+┌────────┐  ┌──────────────────────────┐
+│2.FRANQ.│─►│ 11. CONTAS A RECEBER     │◄── títulos avulsos (sem contrato)
+└────────┘  │  origem CONTRATUAL ou    │
+┌────────┐  │  AVULSO — unifica fatura │
+│3.PREÇO │─►│  (nenhuma tabela `fatura`│
+└────────┘  │  paralela — D-20)        │
+            └────────────┬─────────────┘
+                          │ baixa
+                          ▼
+            ┌──────────────────────────┐        ┌───────────────────┐
+            │  9. CONTAS BANCÁRIAS     │◄───────┤ 10. CONTAS A PAGAR │
+            │  saldo = Σ movimentação  │  baixa  │  alçada (0002!)    │
+            └────────────┬─────────────┘         └─────────┬──────────┘
+                          │                                 │
+                          │        ┌────────────────────────┘
+                          ▼        ▼
+                 ┌──────────────────────────┐      ┌─────────────────┐
+                 │ 13. FLUXO DE CAIXA       │      │ 12. LANÇAMENTOS │
+                 │  saldo real + previsto,  │◄─────┤     FUTUROS     │
+                 │  só leitura, sem tabela  │      │  converte em 10 │
+                 │  própria de posição      │      │  ou 11          │
+                 └──────────────────────────┘      └─────────────────┘
+                          ▲
+                          │ lê titulo_pagar
+                 ┌──────────────────────────┐
+                 │ 8. CENTRO DE CUSTO       │
+                 │  rateio de 10 e 11       │
+                 └────────────┬─────────────┘
+                              │
+                 ┌──────────────────────────┐
+                 │ 14. CONTROLE DE DESPESAS │
+                 │  orçamento × execução,   │
+                 │  tudo calculado sobre 10 │
+                 └──────────────────────────┘
 ```
 
 **Leitura do diagrama**
 
-- O **módulo 1 é a raiz**: nenhum ativo deveria existir sem nota de origem.
-- Os **módulos 2 e 3 alimentam o faturamento** que já existe — não o substituem.
-  O motor do Anexo E passa a ler de tabela versionada em vez de valor solto.
-- O **módulo 6 fecha o ciclo do dinheiro**: leitura → consumo → excedente →
-  fatura. Sem ele o módulo 2 não tem o que multiplicar.
-- O **módulo 4 é ortogonal**: não acrescenta dado, recorta todo o resto. É por
-  isso que ele precisa vir antes do portal, e não junto.
-- O **módulo 7 é camada de visualização** sobre dado que já existe.
+- O **módulo 4 continua ortogonal**: não acrescenta dado, recorta todo o
+  resto — inclusive o bloco financeiro inteiro, que sem ele não tem quem
+  aprove nada.
+- **11 absorve o que hoje é "faturamento" simulado.** Não há duas fontes de
+  verdade sobre quanto o cliente deve: título contratual (nasce do consumo,
+  módulo 6) e título avulso são a mesma tabela, discriminados por origem.
+- **10 finalmente usa a `alcada`** que existe desde a migração 0002 sem
+  consumidor — é o motor de aprovação por faixa de valor, já modelado, só sem
+  o que aprovar.
+- **9 é o piso factual do 13**: fluxo de caixa não inventa saldo, soma o que
+  9 registrou com o que 10/11/12 preveem.
+- **8 e 14 são camada, não origem**: centro de custo rateia o que já foi
+  lançado; controle de despesas lê o que já foi lançado. Nenhum dos dois é
+  onde a despesa nasce.
 
 ---
 
 ## LACUNAS GLOBAIS E DECISÕES PENDENTES
 
-### Bloqueantes — precisam de resposta antes do desenvolvimento
+### Resolvidas desde a versão anterior deste documento
+
+| # | Decisão | Como foi resolvida |
+| --- | --- | --- |
+| ~~D-01~~ | Isolamento do cliente locatário | Escopo `CLIENTE` na RLS, `SET LOCAL app.cliente_id` — migração 0011 (Anexo M) |
+| ~~D-02~~ | Modelo organizacional do cliente | `grupo_economico → cliente → local_operacao` — migração 0011 (Anexo M) |
+| ~~D-12~~ | Provedor de mapa | Vetor embutido como piso + tiles opcionais (satélite Esri padrão) — Anexo O |
+| ~~D-13~~ | Provedor de geocodificação | Nominatim, ação explícita — Anexo O §O.9.4 |
+
+### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
 | # | Decisão | Recomendação | Impacto se adiada |
 | --- | --- | --- | --- |
-| **D-01** | Como isolar o cliente locatário nos dados? | Escopo `CLIENTE` adicional na RLS, com `SET LOCAL app.cliente_id` — um banco, uma API | Módulos 4, 5 e a visão de cliente do 7 não começam |
-| **D-02** | Modelo organizacional do cliente | `grupo_economico → cliente → filial_cliente`, promovendo `local_operacao` | "Visão consolidada por grupo" e "Gestor de Filial" ficam inatendíveis |
+| **D-20** | `titulo_receber` único (origem CONTRATUAL/AVULSO) ou tabela `fatura` separada de `contas_a_receber`? | Tabela única — ver Módulo 11 | Duas fontes de verdade sobre dívida do cliente |
+| **D-18** | Faixas de alçada de `pagar` configuráveis pelo admin ou fixas? | Configuráveis — a tabela `alcada` já é por tenant | Sem isso, o Módulo 10 não sabe se constrói tela de configuração ou constante |
 
 ### Estruturais — definem arquitetura
 
@@ -1240,20 +2377,28 @@ Ordem recomendada: **0 → 1 ∥ 2 → 3 → 6 → 4 → 5 → 7**
 | --- | --- | --- |
 | D-03 | Origem do XML da NF-e | Upload, portal do fornecedor ou SEFAZ por chave (exige certificado A1) |
 | D-04 | Existe ERP financeiro? | Se sim, inverte a direção da integração do módulo 1 |
-| D-07 | Autenticação | Supabase Auth (coerente com o Anexo H) ou Argon2id próprio |
+| D-07 | Autenticação | Supabase Auth ou Argon2id próprio — bloqueia §4.2 item 1 |
 | D-08 | SSO corporativo para clientes grandes | Entra agora ou depois |
 | D-09 | Portal em subdomínio ou rota `/portal` | Afeta CSP, cookies e operação |
 | D-11 | Telemetria de contador | DCA na rede do cliente, API do fabricante, ou manual |
-| D-12 | Provedor de mapa | MapLibre + OSM (sem custo) vs Google (melhor endereço, pago) — **custo recorrente** |
-| D-13 | Provedor de geocodificação | Pode diferir do provedor de tiles |
+| D-15 | Política de senha por tenant ou por perfil | Por tenant no lançamento — Módulo 4 §4.2 |
+| D-17 | Formato de importação de extrato bancário | OFX primeiro; CNAB se/quando houver cobrança registrada — Módulo 9 |
+| D-21 | Índice de reajuste: API externa ou manual? | Manual — Módulo 11 |
+| D-22 | Geração de título contratual: no fechamento ou em ciclo separado? | No fechamento — Módulo 11 |
+| D-24 | Fluxo de caixa integra com ERP/Open Finance ou só títulos internos? | Só títulos internos — Módulo 13 |
 
 ### De negócio — precisam de resposta da operação
 
 | # | Pergunta | Módulo |
 | --- | --- | --- |
 | D-05 | Franquia acumulativa existe? | 2 |
-| D-06 | Preço por filial do cliente é necessário? | 3 (depende de D-02) |
+| D-06 | Preço por filial do cliente é necessário? | 3 |
 | D-10 | Cliente abre chamado pelo portal? | 5 |
+| D-16 | Rateio entre centros de custo: percentual, valor fixo, ou os dois? | 8 |
+| D-19 | Provedor de envio de e-mail para notificação de aprovação | 10, 12 |
+| D-23 | Conversão de lançamento futuro notifica o responsável? | 12 |
+| D-25 | Replanejamento de orçamento considera só o pago, ou também o aprovado-não-pago? | 14 |
+| D-26 | Indicador análogo a "custo por paciente": por cliente ativo, por equipamento, ou os dois? | 14 |
 | — | Página A3 conta como 2× A4? | 2, 6 |
 | — | Duplex conta como 1 ou 2 páginas? | 6 |
 | — | Qual o dia de corte da leitura mensal? | 6 |
@@ -1268,12 +2413,103 @@ Ordem recomendada: **0 → 1 ∥ 2 → 3 → 6 → 4 → 5 → 7**
 2. **MFA tem coluna e não tem fluxo** — `usuario.mfa_habilitado` existe desde a
    migração 0002.
 3. **Motor de reajuste não especificado** — `contrato.indice_reajuste` e
-   `periodicidade_reajuste_meses` existem sem implementação; a tabela de preços
-   é a origem natural.
-4. **`app.mapa_ativos` nunca foi exercitada** — a função existe desde 0008 e não
-   tem teste, porque não há consumidor.
-5. **Notificações não existem como subsistema** — os módulos 5 e 6 pedem e-mail
-   e alertas; hoje há apenas o `outbox_evento` (migração 0007) sem worker.
+   `periodicidade_reajuste_meses` existem sem implementação, com CHECK menos
+   restritivo que o do módulo de preço (`tabela_preco.indice_reajuste` já
+   valida IPCA/IGPM/INPC/FIXO; `contrato` aceita texto livre) — inconsistência
+   a fechar quando o motor for construído (Módulo 11).
+4. **`app.mapa_ativos` nunca foi exercitada** — a função existe desde 0008;
+   agora tem consumidor (Anexo O), mas ainda sem teste próprio.
+5. **Notificações não existem como subsistema** — os módulos 5, 6, 10 e 12
+   pedem e-mail e alertas; hoje há apenas o `outbox_evento` (migração 0007)
+   sem worker que efetivamente envie.
+6. **Nenhuma tabela `fatura` existe** — descoberto ao modelar o Módulo 11; a
+   tela "Faturamento" hoje é inteiramente demonstrativa, em memória no
+   front-end. Não é uma regressão desta rodada — é uma lacuna que só ficou
+   visível ao se tentar modelar contas a receber sem duplicar o conceito.
+
+---
+
+## MATRIZ DE PERMISSÕES (Esqueleto)
+
+Formato `recurso:ação`, não módulo→tela→botão como estrutura de dado — a
+diferença e sua razão estão em §4.1. A tabela abaixo é a mesma matriz em forma
+de visão administrativa: uma coluna por módulo, uma linha por perfil-base,
+✔/— indicando acesso de leitura pelo menos; detalhe de ação granular fica no
+catálogo (`packages/contracts/src/catalogo-permissoes.ts`), não aqui.
+
+| Perfil | Financeiro¹ | Contas a Pagar | Contas a Receber | Fluxo de Caixa | Despesas | Usuários | Contratos | Equipamentos | Manutenção | Mapa |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Administrador da Plataforma | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Diretor / Executivo | ✔² | — | — | ✔ | ✔ | — | ✔ leitura | ✔ leitura | ✔ leitura | ✔ |
+| Analista Financeiro | ✔ | ✔ | ✔ | ✔ | ✔ | — | ✔ leitura | ✔ leitura | — | ✔ |
+| Operador Administrativo | — | ✔ criar/baixar³ | ✔ criar/baixar³ | — | — | — | ✔ | — | — | ✔ |
+| Aprovador N1/N2/N3⁴ | — | ✔ só a fila do próprio nível | ✔ idem | — | — | — | — | — | — | — |
+| Visualizador | — | ✔ leitura | ✔ leitura | ✔ leitura | ✔ leitura | — | ✔ leitura | ✔ leitura | ✔ leitura | ✔ |
+| Supervisor de Manutenção | — | — | — | — | — | — | ✔ leitura | ✔ | ✔ | ✔ |
+| Admin Cliente / Gestor de Filial / Visualizador (cliente)⁵ | — | — | — | — | — | — | ✔ leitura, próprio | ✔ leitura, próprio | ✔ + abrir chamado | ✔ leitura, próprio |
+
+¹ "Financeiro" aqui é o painel executivo (`financeiro:painel_executivo`,
+`:rentabilidade_ler`), não uma tela própria — é visão consolidada sobre os
+módulos ao lado.
+² Diretor tem `financeiro:painel_executivo` mas não `pagar:aprovar` por
+padrão — aprovação de valor alto é alçada, não perfil; ver Módulo 10 RN-F01.
+³ "Sem aprovar" — operador cria o título e baixa o pagamento já aprovado, não
+decide aprovação.
+⁴ Não é um perfil, é uma **posição na fila** de `titulo_pagar_aprovacao` —
+qualquer perfil com `alcada.tipo` configurado pode ocupar um nível.
+⁵ Os três perfis de cliente (Módulo 4, "Perfis-base a provisionar") nunca têm
+acesso a nenhuma coluna financeira — é a RN-L25 que já existe: usuário de
+cliente não recebe permissão de escrita de cadastro nem, por extensão, acesso
+a página financeira do locador.
+
+---
+
+## REVISÃO DE CÓDIGO — CHECKLIST
+
+O pedido original trata isto como trabalho a fazer do zero. Boa parte **já
+existe** — o valor desta seção é dizer com precisão o que está feito, o que
+está feito mas não conectado, e o que falta.
+
+- [x] **Mapear todos os endpoints existentes** — `apps/api/scripts/verificar-rotas.mjs`
+      já faz isso a cada execução de CI, não é um mapeamento estático que
+      envelhece: analisa todo `*.controller.ts` e reprova o build se algum
+      `@Get/@Post/@Put/@Patch/@Delete` não tiver `@ExigePermissao` ou
+      `@Publico` no mesmo bloco de decoradores.
+- [x] **Middleware de autorização** — `PermissaoGuard`, registrado globalmente
+      em `app.module.ts` via `APP_GUARD`. Nega por omissão (RN-026): rota sem
+      permissão declarada nunca abre por esquecimento.
+- [x] **Validação de permissão em cada endpoint** — decorrência do item
+      acima: o guarda lê `@ExigePermissao` do handler e barra antes de
+      chegar ao serviço. O que falta **não é o mecanismo**, é ele ter algo
+      real para checar — ver o próximo item.
+- [ ] **Emissão do JWT com permissões reais** — hoje só existe em teste
+      (`apps/api/test/apoio.ts::token()`, que assina o mesmo formato que a
+      produção usaria). Falta `POST /auth/login` assinando esse token a
+      partir de `perfil.permissoes` de verdade — Módulo 4 §4.2 item 1. Sem
+      isso, o guarda funciona mas nunca foi exercitado fora de teste.
+- [ ] **Componente de renderização condicional no front** — `pode()` já
+      existe (`lib/contexto.tsx`) e já é usado em telas (`pode('financeiro:rentabilidade_ler')`,
+      por exemplo, no mapa). O que falta é a fonte: hoje `pode()` lê um
+      perfil trocado por um seletor de demonstração, não uma sessão de login
+      — Módulo 4 §4.2 item 2. A assinatura de `pode()` não muda; só a fonte.
+- [x] **Filtro de filial em todas as consultas** — já é RLS (`usuario_perfil.escopo_tipo`),
+      não filtro de aplicação, desde a migração 0002; estendido para o eixo
+      de cliente na 0011. Toda tabela nova deste levantamento (Módulos 8–14)
+      segue a mesma convenção — declarado em cada seção de modelagem acima.
+- [ ] **Testar perfis com permissões diferentes** — os módulos existentes já
+      têm teste de isolamento por tenant e por escopo (ver `packages/db/tests/02_rn028_isolamento_tenant.sql`
+      e os testes de API por módulo); os módulos novos (8–14) precisam do
+      mesmo par de testes cada um — já listado em "Critérios de Aceite" de
+      cada seção acima, não repetido aqui.
+- [ ] **Documentar a matriz de permissões por endpoint** — a matriz de perfil
+      × módulo acima é a visão de produto; a de endpoint × permissão já é
+      gerada automaticamente por `verificar-rotas.mjs` (ele sabe qual
+      permissão cada rota exige, porque é o que ele confere) — falta só expor
+      esse mesmo dado como relatório legível, não recolher de novo à mão.
+
+**Diagnóstico em uma frase:** a AUTORIZAÇÃO está pronta e testada; o que falta
+é a AUTENTICAÇÃO que a alimenta com dado real em vez de simulação — e isso é
+inteiramente o Módulo 4.
 
 ---
 
@@ -1291,3 +2527,7 @@ Ordem recomendada: **0 → 1 ∥ 2 → 3 → 6 → 4 → 5 → 7**
 | Arquitetura do front-end | [Anexo I](I-refatoracao-frontend.md) |
 | Implementação da API | [Anexo J](J-api-implementacao.md) |
 | Formulários e camada de escrita | [Anexo K](K-formularios.md) |
+| Resolução de D-01, D-02 e mais onze decisões | [Anexo M](M-decisoes-mercado-brasileiro.md) |
+| Entrada fiscal de compra (Módulo 1) | [Anexo N](N-nota-fiscal-de-compra.md) |
+| Mapa geográfico, tiles e geocodificação (Módulo 7) | [Anexo O](O-mapa-geografico.md) |
+| Franquia, preço e consumo (Módulos 2, 3, 6) | [Anexo P](P-nucleo-comercial-e-consumo.md) |
