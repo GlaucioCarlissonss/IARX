@@ -244,15 +244,50 @@ provisão e estorno em caso de distrato que merece módulo próprio.
 
 ## M.5 Acesso e autenticação
 
-### D-07 · Autenticação — **RESOLVIDA**
+### D-07 · Autenticação — **REVERTIDA para implementação própria**
 
-**Decisão:** Supabase Auth. `usuario.subject_oidc` já existe para isso.
+**Decisão atual:** autenticação própria, senha com **Argon2id**.
 
-**Fundamentação.** Coerente com o Anexo H. Entrega recuperação de senha, MFA,
-rotação de refresh token e bloqueio por tentativa sem implementação própria —
-e implementação própria de autenticação é onde erros custam caro. O hook de
-access token customizado (H.4) já é o mecanismo previsto para injetar
-`tenant_id`, `cliente_id` e permissões nas claims.
+**Decisão anterior (mantida como registro):** Supabase Auth, por ser coerente
+com o Anexo H e entregar recuperação, MFA, rotação de refresh token e bloqueio
+por tentativa sem implementação própria — argumento que continua tecnicamente
+correto e que a reversão aceita como custo.
+
+**O que a reversão custa, declarado:**
+
+| Item | Com Supabase Auth | Com implementação própria |
+| --- | --- | --- |
+| Hash de senha | Pronto | Argon2id, parâmetros a fixar e revisar |
+| Recuperação por e-mail | Pronto | `token_recuperacao` (já existe na 0011) + provedor de envio (D-19) |
+| MFA | Pronto, desligado | A construir; `usuario.mfa_habilitado` continua coluna sem fluxo |
+| Rotação de refresh token | Pronto | A construir |
+| Revogação de sessão | Pronto | Tabela de sessão própria (migração 0015) |
+| Bloqueio por tentativa | Pronto | `tentativas_falhas`/`bloqueado_ate` já existem na 0011; falta a regra |
+| Auditoria de acesso | Parcial | `log_acesso` já existe na 0011, mais completo |
+
+**O que a reversão ganha:** independência de fornecedor no ponto que mais
+amarra uma plataforma — o cadastro de identidade. Sair do Supabase deixa de
+exigir migração de usuários e redefinição de senha em massa. E a emissão do
+token passa a ser nossa, o que remove o hook de access token customizado
+(H.4) do caminho crítico: as claims de `tenant_id`, `cliente_id` e permissões
+são montadas pelo mesmo código que já as consome nos testes.
+
+**O que não muda:** `usuario.subject_oidc` permanece e continua único global.
+Autenticação própria e OIDC não são exclusivas — D-08 (SSO corporativo) segue
+possível sem migração, e um cliente grande pode entrar por OIDC enquanto os
+demais usam senha.
+
+**Restrições que a decisão impõe, não negociáveis:**
+
+1. Argon2id, nunca bcrypt/PBKDF2/SHA — e nunca hash caseiro.
+2. Parâmetros mínimos: 19 MiB de memória, 2 iterações, paralelismo 1
+   (perfil recomendado pela RFC 9106 para uso interativo). Registrados no
+   banco junto do hash, para que um aumento futuro de custo não invalide os
+   hashes existentes.
+3. A senha nunca aparece em log, erro, trilha de auditoria ou resposta de API
+   — nem em `problem+json` de validação.
+4. Resposta de recuperação é idêntica para e-mail existente e inexistente
+   (RN-L28, já documentada no Anexo L).
 
 ### D-08 · SSO corporativo — **ADIADA, com preparo**
 
@@ -338,13 +373,15 @@ cliente. É produto próprio, não funcionalidade.
 | D-04 | ERP | Plataforma é a origem | Não criar dependência externa no cadastro |
 | D-05 | Franquia acumulativa | Modelada, desligada | Padrão de mercado é expirar |
 | D-06 | Preço por filial | Sim, sem estrutura nova | Decorre de D-02 |
-| D-07 | Autenticação | Supabase Auth | Anexo H; não implementar auth própria |
+| D-07 | Autenticação | **Implementação própria, Argon2id** *(revertida)* | Independência de fornecedor no cadastro de identidade |
 | D-08 | SSO | Adiado, preparado | `subject_oidc` já existe |
 | D-09 | Portal | Mesma origem, `/portal` | Isolamento é RLS, não origem |
 | D-10 | Chamado pelo cliente | Sim, com triagem obrigatória | Prioridade é do SLA, não do solicitante |
 | D-11 | Telemetria | Adiada, preparada | Exige agente na rede do cliente |
-| D-12 | Mapa | MapLibre + OSM | Sem custo recorrente; PostGIS já pronto |
-| D-13 | Geocodificação | ViaCEP → Nominatim → manual | Cache obrigatório por política do Nominatim |
+| D-12 | Mapa | **Vetor embutido + tiles opcionais** *(revista)* | Build de arquivo único precisa funcionar sem rede |
+| D-13 | Geocodificação | Nominatim, por ação explícita | Política de uso: 1 req/s, sem busca a cada tecla |
+| D-20 | Contas a receber | **Tabela única com origem** | Duas tabelas = duas verdades sobre a dívida do cliente |
+| D-21 | Índice de reajuste | **Cadastro manual mensal** | Motor roda dentro do banco; API externa vira dependência de rede |
 | — | A3 | 2 × A4, configurável | Contador do equipamento e tabela comercial |
 | — | Duplex | 2 páginas, sem conversão | Contador conta faces, não folhas |
 | — | Scan | Registrado, não cobrado | Minoria no mercado |
@@ -369,3 +406,6 @@ Registro honesto do risco de cada uma, para revisão futura.
 | D-12 MapLibre | **Baixo.** Camada de apresentação; o dado está no PostGIS |
 | D-03 Upload manual | **Baixo.** Acrescentar a consulta SEFAZ não invalida o que existe |
 | Retenção 5 anos | **Nenhum.** Guardar a mais nunca é problema |
+| D-07 Auth própria | **Alto se para trás, baixo se para frente.** Migrar para Supabase Auth depois exige redefinição de senha em massa — o hash é nosso e não se exporta. Ir de Supabase para próprio seria o mesmo problema espelhado. É a decisão mais cara de reverter deste conjunto, e por isso a que mais merecia ser tomada com os dois custos à vista |
+| D-20 Título único | **Médio.** Separar depois exige migrar as linhas CONTRATUAL para uma tabela `fatura` e reapontar o portal |
+| D-21 Índice manual | **Nenhum.** Acrescentar consulta a API depois não invalida os índices já cadastrados |
