@@ -24,6 +24,8 @@ const ROTAS = [
   { hash: '#/estoque', nome: 'estoque', titulo: 'Peças e suprimentos' },
   { hash: '#/faturamento', nome: 'faturamento', titulo: 'Faturamento' },
   { hash: '#/resultado', nome: 'resultado', titulo: 'Resultado operacional' },
+  { hash: '#/usuarios', nome: 'usuários', titulo: 'Usuários' },
+  { hash: '#/perfis', nome: 'perfis de acesso', titulo: 'Perfis de acesso' },
 ]
 
 const BLOQUEANTES = ['critical', 'serious']
@@ -260,7 +262,7 @@ test('perfil sem permissão não vê o item no menu nem acessa a rota', async ({
   await abrir(page)
   await expect(page.getByRole('link', { name: /Resultado/ })).toBeVisible()
 
-  await page.getByLabel('Perfil de acesso').selectOption('suporte')
+  await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
 
   // Supervisor de suporte não tem painel executivo nem faturamento.
   await expect(page.getByRole('link', { name: /Resultado/ })).toHaveCount(0)
@@ -278,7 +280,7 @@ test('ação restrita não é renderizada para perfil sem alçada', async ({ pag
   await abrir(page, { hash: '#/faturamento' })
   await expect(page.getByRole('button', { name: /Aprovar .* itens sem exceção/ })).toBeVisible()
 
-  await page.getByLabel('Perfil de acesso').selectOption('operacao')
+  await page.getByLabel('Perfil de acesso').selectOption('perf-operacao')
   await page.goto(APP + '#/faturamento')
   await expect(page.getByRole('heading', { level: 1, name: 'Faturamento' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Aprovar .* itens sem exceção/ })).toHaveCount(0)
@@ -1084,17 +1086,17 @@ test('RN-027: quem lança a nota não pode conferi-la', async ({ page }) => {
 test('a segregação também está no perfil: operação lança, suporte confere', async ({ page }) => {
   await abrir(page, { hash: '#/notas-fiscais' })
 
-  await page.getByLabel('Perfil de acesso').selectOption('operacao')
+  await page.getByLabel('Perfil de acesso').selectOption('perf-operacao')
   await expect(page.getByRole('button', { name: 'Registrar entrada' })).toBeVisible()
   await expect(page.getByRole('button', { name: /^Conferir/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Integrar/ })).toHaveCount(0)
 
-  await page.getByLabel('Perfil de acesso').selectOption('suporte')
+  await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
   await expect(page.getByRole('button', { name: 'Registrar entrada' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Conferir/ }).first()).toBeVisible()
 
   // Patrimônio é lançamento contábil: integrar é do financeiro.
-  await page.getByLabel('Perfil de acesso').selectOption('financeiro')
+  await page.getByLabel('Perfil de acesso').selectOption('perf-financeiro')
   await expect(page.getByRole('button', { name: /^Integrar/ }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /^Conferir/ })).toHaveCount(0)
 })
@@ -1739,6 +1741,208 @@ test('axe com resultados de endereço na tela', async ({ page }) => {
 
   const v = await violacoes(page)
   expect(v, `busca de endereço:\n  ${descrever(v)}`).toEqual([])
+})
+
+
+/* ==================================================================== */
+/* Usuários e perfis de acesso                                          */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem: **trocar a permissão de um perfil muda o que a
+ * interface mostra**.
+ *
+ * É o critério que fecha o Módulo 4, e o único que prova que a árvore, o
+ * catálogo compartilhado e o `pode()` das telas falam a mesma língua. Os
+ * testes unitários provam que a lógica da árvore está certa; só aqui se
+ * verifica que ela chega à tela.
+ */
+
+test('a árvore de permissões é navegável só pelo teclado', async ({ page }) => {
+  await abrir(page, { hash: '#/perfis' })
+
+  const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
+  await expect(arvore).toBeVisible()
+
+  // Um só ponto de tabulação: as setas andam por dentro. Com um tabindex por
+  // caixa, chegar da primeira permissão à última custaria 113 tabulações.
+  const focaveis = arvore.locator('[role="treeitem"][tabindex="0"]')
+  await expect(focaveis).toHaveCount(1)
+
+  await focaveis.first().focus()
+  await page.keyboard.press('ArrowRight')          // expande o módulo
+  await expect(arvore.getByRole('group').first()).toBeVisible()
+
+  /*
+   * `toBeFocused` em vez de ler `document.activeElement` na hora.
+   *
+   * O componente move o foco dentro de `requestAnimationFrame` — precisa
+   * esperar o nó existir no DOM depois da expansão. Lida de forma síncrona
+   * logo após a tecla, a asserção corre antes do quadro e falha por corrida,
+   * não por defeito. Estas asserções repetem até o prazo.
+   */
+  await page.keyboard.press('ArrowDown')           // desce para a primeira tela
+  await expect(arvore.locator('[data-no^="tela:"]').first()).toBeFocused()
+
+  // Uma seta à esquerda basta: a tela não está expandida, então o APG manda
+  // subir para o pai em vez de fechar.
+  await page.keyboard.press('ArrowLeft')
+  await expect(arvore.locator('[data-no^="mod:"]').first()).toBeFocused()
+})
+
+test('o estado parcial é anunciado, e é o que impede a árvore de mentir', async ({ page }) => {
+  await abrir(page, { hash: '#/perfis' })
+
+  // O perfil derivado é o editável; os de sistema abrem em leitura.
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('button', { name: 'Editar permissões' }).click()
+
+  const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
+  const modulo = arvore.locator('[data-no^="mod:"]').first()
+
+  // Sem o terceiro estado, um módulo com três de dez permissões apareceria
+  // como "não marcado", e quem configura concluiria que não há acesso ali.
+  const estados = await arvore.locator('[data-no^="mod:"]').evaluateAll((ns) =>
+    ns.map((n) => n.getAttribute('aria-checked')),
+  )
+  expect(estados).toContain('mixed')
+  await expect(modulo).toHaveAttribute('aria-expanded', 'false')
+})
+
+test('marcar um módulo concede as permissões dele e a contagem acompanha', async ({ page }) => {
+  await abrir(page, { hash: '#/perfis' })
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('button', { name: 'Editar permissões' }).click()
+
+  const contar = async () => Number((await page.getByRole('status').first().innerText()).match(/(\d+)/)[1])
+  const antes = await contar()
+
+  const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
+  const financeiro = arvore.locator('[data-no="mod:financeiro"]')
+  await financeiro.getByRole('checkbox').check()
+
+  await expect(financeiro).toHaveAttribute('aria-checked', 'true')
+  const depois = await contar()
+  expect(depois).toBeGreaterThan(antes)
+})
+
+test('perfil de sistema não é editável, e a tela diz o que fazer', async ({ page }) => {
+  await abrir(page, { hash: '#/perfis' })
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Administrador da Plataforma/ }).click()
+
+  // Beco sem saída é o que a interface não pode oferecer: a recusa vem com a
+  // alternativa ao lado.
+  await expect(page.getByText(/Perfil de sistema, em leitura/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Editar permissões' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Duplicar' })).toBeEnabled()
+})
+
+test('trocar a permissão de um perfil muda o que a interface mostra', async ({ page }) => {
+  // O critério que fecha o módulo. Sem ele, a árvore poderia estar gravando
+  // permissões que o `pode()` das telas não reconhece — que era exatamente a
+  // divergência entre os dois catálogos antes da reconciliação.
+  await abrir(page)
+  const menu = page.getByRole('navigation')
+  const seletor = page.getByLabel('Perfil de acesso')
+
+  // A pré-condição precisa ser medida **com o perfil que vai ser alterado**.
+  // Medida com o administrador — que tem tudo — ela nunca falharia, e o teste
+  // passaria sem que nada tivesse acontecido: exatamente o defeito que ele
+  // existe para pegar.
+  await seletor.selectOption('perf-suporte')
+  await expect(menu.getByRole('link', { name: /Resultado/ })).toHaveCount(0)
+
+  // Volta ao administrador para editar: `perfil:gerenciar` é dele, não do
+  // supervisor. Sem recarregar a página — a base é de memória, e um `goto`
+  // descartaria a alteração antes de ela ser observada.
+  await seletor.selectOption('perf-admin')
+  await menu.getByRole('link', { name: 'Perfis de acesso' }).click()
+
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('button', { name: 'Editar permissões' }).click()
+
+  const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
+  await arvore.locator('[data-no="mod:financeiro"]').getByRole('checkbox').check()
+  await page.getByRole('button', { name: 'Salvar perfil' }).click()
+
+  await expect(page.getByText('Perfil salvo')).toBeVisible()
+
+  // E o efeito aparece na navegação: `financeiro:painel_executivo` abre a tela
+  // de Resultado, que o perfil de suporte não abria um instante atrás.
+  await seletor.selectOption('perf-suporte')
+  await expect(menu.getByRole('link', { name: /Resultado/ })).toBeVisible()
+})
+
+test('convidar usuário não pede senha em lugar nenhum', async ({ page }) => {
+  await abrir(page, { hash: '#/usuarios' })
+  await page.getByRole('button', { name: 'Convidar usuário' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+
+  // Senha definida por terceiro é senha compartilhada: quem a criou continua
+  // sabendo, e o dono não tem como provar que não foi ele.
+  await expect(dialogo.locator('input[type="password"]')).toHaveCount(0)
+  await expect(dialogo.getByText(/define a própria senha/)).toBeVisible()
+})
+
+test('perfil de cliente não é oferecido a usuário interno', async ({ page }) => {
+  await abrir(page, { hash: '#/usuarios' })
+  await page.getByRole('button', { name: 'Convidar usuário' }).click()
+
+  // RN-L25: usuário de cliente com perfil interno enxergaria a operação
+  // inteira da locadora. A tela nem oferece a combinação.
+  const opcoes = await page.getByLabel('Perfil', { exact: true }).locator('option').allInnerTexts()
+  expect(opcoes.some((o) => /Visualizador do Cliente/.test(o))).toBe(false)
+
+  await page.getByLabel('Tipo de acesso').selectOption('CLIENTE')
+  const doCliente = await page.getByLabel('Perfil', { exact: true }).locator('option').allInnerTexts()
+  expect(doCliente.some((o) => /Visualizador do Cliente/.test(o))).toBe(true)
+})
+
+test('o último administrador não pode ser desativado, e a tela explica', async ({ page }) => {
+  await abrir(page, { hash: '#/usuarios' })
+
+  const linha = page.getByRole('row').filter({ hasText: 'operacao@iarx.app' })
+  await linha.getByRole('button', { name: /^Desativar/ }).click()
+
+  await page.getByLabel('Motivo').fill('saiu da empresa')
+  await page.getByRole('button', { name: 'Desativar', exact: true }).click()
+
+  // A recusa precisa dizer o que fazer, não só que não dá.
+  await expect(page.getByText(/último administrador ativo/)).toBeVisible()
+  await expect(page.getByText(/outro usuário antes/)).toBeVisible()
+})
+
+test('convite pendente e inativo aparecem como estados distintos', async ({ page }) => {
+  await abrir(page, { hash: '#/usuarios' })
+
+  // Uma lista que mostrasse só "ativo/inativo" faria alguém convidar de novo
+  // quem já foi convidado, ou procurar uma conta que está lá, desativada.
+  //
+  // Preso à tabela de propósito: solto na página, o texto casa com as opções do
+  // filtro, que têm os mesmos rótulos e ficam escondidas dentro do `select` —
+  // o teste passaria a verificar o filtro em vez do que a lista mostra.
+  const tabela = page.getByRole('table')
+  await expect(tabela.getByText('Convite pendente').first()).toBeVisible()
+  await expect(tabela.getByText('Inativo').first()).toBeVisible()
+  await expect(tabela.getByText('Locatário').first()).toBeVisible()
+})
+
+test('a paleta de comandos não oferece tela que o perfil não abre', async ({ page }) => {
+  await abrir(page, { hash: '#/mapa' })
+
+  // A lista da paleta era uma cópia escrita à mão, sem filtro de permissão:
+  // oferecia navegar e o usuário só descobria ao chegar em "esta área não faz
+  // parte do seu perfil".
+  await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
+  await page.keyboard.press('Control+k')
+
+  const lista = page.getByRole('listbox')
+  await expect(lista).toBeVisible()
+  const itens = await lista.allInnerTexts()
+  expect(itens.join(' ')).not.toContain('Usuários')
+  expect(itens.join(' ')).not.toContain('Resultado')
 })
 
 /* ==================================================================== */

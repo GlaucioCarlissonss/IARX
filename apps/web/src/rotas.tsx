@@ -13,6 +13,8 @@ import { Chamados } from './telas/Chamados'
 import { Estoque } from './telas/Estoque'
 import { Faturamento } from './telas/Faturamento'
 import { Resultado } from './telas/Resultado'
+import { Usuarios } from './telas/Usuarios'
+import { Perfis } from './telas/Perfis'
 import type { Permissao } from './lib/permissoes'
 import type { ReactNode } from 'react'
 
@@ -118,6 +120,22 @@ export function Rotas() {
           element={
             <Protegida permissao="financeiro:painel_executivo">
               <Resultado />
+            </Protegida>
+          }
+        />
+        <Route
+          path="usuarios"
+          element={
+            <Protegida permissao="usuario:gerenciar">
+              <Usuarios />
+            </Protegida>
+          }
+        />
+        <Route
+          path="perfis"
+          element={
+            <Protegida permissao="perfil:gerenciar">
+              <Perfis />
             </Protegida>
           }
         />

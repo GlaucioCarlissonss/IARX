@@ -4,7 +4,7 @@ import { useSessao } from '../../lib/contexto'
 import { api } from '../../dados/api'
 import { FILIAIS } from '../../dados/catalogo'
 import { PaletaComandos } from './PaletaComandos'
-import type { Permissao } from '../../lib/permissoes'
+import { GRUPOS, NAVEGACAO, TITULOS } from '../../lib/navegacao'
 
 /**
  * Estrutura da aplicação: rail de navegação, barra superior e área de conteúdo.
@@ -16,72 +16,17 @@ import type { Permissao } from '../../lib/permissoes'
  *    curta o suficiente para ser lida de uma vez.
  */
 
-interface ItemNav {
-  para: string
-  rotulo: string
-  glifo: string
-  permissao: Permissao
-  grupo: 'Operação' | 'Serviço' | 'Financeiro'
-  /** Contador de pendências exibido como distintivo. */
-  contador?: (i: Awaited<ReturnType<typeof api.indicadores>>) => number
-}
-
-const ITENS: ItemNav[] = [
-  { para: '/', rotulo: 'Painel do dia', glifo: '◧', permissao: 'equipamento:ler', grupo: 'Operação' },
-  { para: '/parque', rotulo: 'Parque instalado', glifo: '▤', permissao: 'equipamento:ler', grupo: 'Operação' },
-  { para: '/contratos', rotulo: 'Contratos', glifo: '❐', permissao: 'contrato:ler', grupo: 'Operação' },
-  { para: '/clientes', rotulo: 'Clientes', glifo: '⚯', permissao: 'cliente:ler', grupo: 'Operação' },
-  { para: '/mapa', rotulo: 'Mapa', glifo: '◉', permissao: 'mapa:ler', grupo: 'Operação' },
-  {
-    para: '/notas-fiscais',
-    rotulo: 'Notas fiscais',
-    glifo: '⎙',
-    permissao: 'nota_fiscal:ler',
-    grupo: 'Operação',
-  },
-  {
-    para: '/chamados',
-    rotulo: 'Chamados',
-    glifo: '⚒',
-    permissao: 'os:ler',
-    grupo: 'Serviço',
-    contador: (i) => i.chamadosEmRiscoSla,
-  },
-  {
-    para: '/estoque',
-    rotulo: 'Peças e suprimentos',
-    glifo: '⬒',
-    permissao: 'peca:ler',
-    grupo: 'Serviço',
-    contador: (i) => i.pecasAbaixoMinimo,
-  },
-  {
-    para: '/faturamento',
-    rotulo: 'Faturamento',
-    glifo: '▦',
-    permissao: 'fatura:ler',
-    grupo: 'Financeiro',
-    contador: (i) => i.pendenciasMedicao,
-  },
-  {
-    para: '/comercial',
-    rotulo: 'Política comercial',
-    glifo: '◫',
-    permissao: 'comercial:ler',
-    grupo: 'Financeiro',
-  },
-  { para: '/resultado', rotulo: 'Resultado', glifo: '◈', permissao: 'financeiro:painel_executivo', grupo: 'Financeiro' },
-]
-
-const TITULOS: Record<string, string> = {
-  '/': 'Painel do dia',
-  '/parque': 'Parque instalado',
-  '/contratos': 'Contratos',
-  '/clientes': 'Clientes',
-  '/chamados': 'Chamados técnicos',
-  '/estoque': 'Peças e suprimentos',
-  '/faturamento': 'Faturamento',
-  '/resultado': 'Resultado operacional',
+/**
+ * Contadores de pendência no menu.
+ *
+ * Ficam aqui, e não na lista compartilhada de navegação, porque só o menu os
+ * exibe — a paleta de comandos não tem onde mostrá-los. Pôr na lista comum
+ * obrigaria o outro consumidor a conhecer os indicadores sem usá-los.
+ */
+const CONTADORES: Record<string, (i: Awaited<ReturnType<typeof api.indicadores>>) => number> = {
+  '/chamados': (i) => i.chamadosEmRiscoSla,
+  '/estoque': (i) => i.pecasAbaixoMinimo,
+  '/faturamento': (i) => i.pendenciasMedicao,
 }
 
 export function AppShell() {
@@ -112,8 +57,8 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', atalho)
   }, [])
 
-  const visiveis = ITENS.filter((i) => pode(i.permissao))
-  const grupos = ['Operação', 'Serviço', 'Financeiro'] as const
+  const visiveis = NAVEGACAO.filter((i) => pode(i.permissao))
+  const grupos = GRUPOS
   const tituloAtual = TITULOS[local.pathname] ?? 'IARX'
 
   return (
@@ -142,7 +87,8 @@ export function AppShell() {
                 <div key={grupo} className="pilha" style={{ gap: 2 }}>
                   <span className="nav__grupo">{grupo}</span>
                   {doGrupo.map((item) => {
-                    const n = indicadores && item.contador ? item.contador(indicadores) : 0
+                    const contador = CONTADORES[item.para]
+                    const n = indicadores && contador ? contador(indicadores) : 0
                     return (
                       <NavLink
                         key={item.para}

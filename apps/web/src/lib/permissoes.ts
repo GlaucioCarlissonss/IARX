@@ -28,12 +28,18 @@ export interface Perfil {
 }
 
 /**
- * Perfis da demonstração.
+ * Semente dos perfis da demonstração.
  *
  * Massa de exemplo, não configuração de produção: no ambiente real eles vêm de
  * `public.perfil`, provisionados por tenant. Ficam aqui porque a aplicação
  * ainda opera sobre base em memória — ver Anexo I, "Preparação para
  * autenticação e API real".
+ *
+ * **Único consumidor: `dados/gerar.ts`.** A sessão lê os perfis de
+ * `BASE.perfis`, não daqui. Enquanto lia desta lista, a tela de perfis gravava
+ * numa coleção e o `pode()` consultava outra — salvar não mudava nada na
+ * interface. Acrescentar um perfil aqui semeia a base; alterar acesso em tempo
+ * de execução é trabalho da tela de perfis.
  */
 const TODAS: Permissao[] = [...PERMISSOES]
 

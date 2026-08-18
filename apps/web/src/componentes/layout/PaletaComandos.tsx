@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../dados/api'
 import { nomeModelo } from '../../dados/catalogo'
+import { useSessao } from '../../lib/contexto'
+import { NAVEGACAO } from '../../lib/navegacao'
 
 /**
  * Busca global e navegação rápida.
@@ -28,6 +30,7 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
   const campoRef = useRef<HTMLInputElement>(null)
   const origemRef = useRef<Element | null>(null)
   const navegar = useNavigate()
+  const { pode } = useSessao()
 
   useEffect(() => {
     const ativo = document.activeElement
@@ -48,16 +51,21 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
   const resultados = useMemo<Resultado[]>(() => {
     const t = termo.trim().toLowerCase()
 
-    const comandos: Resultado[] = [
-      { id: 'c-inicio', grupo: 'Ir para', titulo: 'Painel do dia', detalhe: 'exceções e agenda', destino: '/' },
-      { id: 'c-parque', grupo: 'Ir para', titulo: 'Parque instalado', detalhe: 'equipamentos e disponibilidade', destino: '/parque' },
-      { id: 'c-contratos', grupo: 'Ir para', titulo: 'Contratos', detalhe: 'vigência e renovação', destino: '/contratos' },
-      { id: 'c-clientes', grupo: 'Ir para', titulo: 'Clientes', detalhe: 'carteira e rentabilidade', destino: '/clientes' },
-      { id: 'c-chamados', grupo: 'Ir para', titulo: 'Chamados', detalhe: 'fila por risco de SLA', destino: '/chamados' },
-      { id: 'c-estoque', grupo: 'Ir para', titulo: 'Peças e suprimentos', detalhe: 'saldos e reposição', destino: '/estoque' },
-      { id: 'c-fat', grupo: 'Ir para', titulo: 'Faturamento', detalhe: 'fechamento e faturas', destino: '/faturamento' },
-      { id: 'c-res', grupo: 'Ir para', titulo: 'Resultado', detalhe: 'receita, margem e indicadores', destino: '/resultado' },
-    ]
+    /*
+     * Navegação filtrada por permissão, da mesma lista que o menu usa.
+     *
+     * Era uma cópia escrita à mão, já desatualizada — faltavam Mapa, Política
+     * comercial e Notas fiscais — e, pior, **sem filtro de permissão**: a
+     * paleta oferecia ir para telas que o perfil não abre, e o usuário só
+     * descobria ao chegar em "esta área não faz parte do seu perfil".
+     */
+    const comandos: Resultado[] = NAVEGACAO.filter((i) => pode(i.permissao)).map((i) => ({
+      id: `c-${i.para}`,
+      grupo: 'Ir para',
+      titulo: i.rotulo,
+      detalhe: i.detalhe,
+      destino: i.para,
+    }))
 
     if (!t) return comandos
 
@@ -113,7 +121,7 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
     const comandosFiltrados = comandos.filter((c) => c.titulo.toLowerCase().includes(t))
 
     return [...equipamentos, ...clientes, ...contratos, ...ordens, ...comandosFiltrados]
-  }, [termo, base])
+  }, [termo, base, pode])
 
   useEffect(() => {
     setAtivo(0)

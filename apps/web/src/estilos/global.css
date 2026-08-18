@@ -1748,6 +1748,111 @@ textarea {
   border-radius: var(--raio-1);
 }
 
+/* ------------------------------------------------ árvore de permissões --- */
+
+/*
+ * Um só ponto de tabulação, setas por dentro (padrão APG).
+ *
+ * Com um `tabindex` por caixa, chegar da primeira permissão à última custaria
+ * 113 tabulações. O destaque de foco precisa aparecer na **linha**, não só na
+ * caixa, porque é a linha que o leitor de tela anuncia como item da árvore.
+ */
+.arvore,
+.arvore ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.arvore ul {
+  margin-inline-start: var(--e5);
+  border-inline-start: 1px solid var(--cor-border);
+}
+
+.arvore__no {
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+  /* Alvo de toque: a linha inteira, não só a caixa de 13 px (WCAG 2.5.8). */
+  min-height: var(--alvo-toque);
+  padding-inline: var(--e1);
+  border-radius: var(--raio-1);
+}
+.arvore__no:hover {
+  background: var(--cor-surface-sunken);
+}
+.arvore__no:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--cor-focus-ring-inset), 0 0 0 4px var(--cor-focus-ring);
+}
+.arvore__no--modulo {
+  font-size: var(--t-15);
+}
+.arvore__no--tela,
+.arvore__no--acao {
+  font-size: var(--t-14);
+}
+
+.arvore__seta {
+  all: unset;
+  width: 20px;
+  min-height: var(--alvo-toque);
+  display: grid;
+  place-items: center;
+  color: var(--cor-text-secondary);
+  cursor: pointer;
+  flex: none;
+}
+
+/* A ação não tem seta; o recuo mantém as caixas alinhadas na vertical, que é
+   o que permite varrer a coluna com o olho. */
+.arvore__no--acao .arvore__rotulo {
+  padding-inline-start: 20px;
+}
+
+.arvore__rotulo {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  flex: 1;
+  min-width: 0;
+  min-height: var(--alvo-toque);
+  cursor: pointer;
+}
+.arvore__rotulo input {
+  min-height: 0;
+  accent-color: var(--cor-primary);
+  flex: none;
+}
+
+.arvore__contagem {
+  margin-inline-start: auto;
+  font-size: var(--t-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--cor-text-muted);
+  flex: none;
+}
+
+/* O identificador fica visível: quem configura permissão precisa cruzá-lo com
+   a documentação e com o log de auditoria, que registram `recurso:ação`. */
+.arvore__id {
+  font-family: var(--fonte-dado);
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  /* Em tela estreita o identificador é o primeiro a sair: o rótulo em
+     português carrega o significado, ele carrega a rastreabilidade. */
+  .arvore__id {
+    display: none;
+  }
+  .arvore ul {
+    margin-inline-start: var(--e3);
+  }
+}
+
 /* -------------------------------------------------------------------- mapa */
 
 /*
