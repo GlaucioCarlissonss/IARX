@@ -681,6 +681,94 @@ export function usuariosComPerfil(base: BaseDados, perfilId: string): number {
   return base.usuarios.filter((u) => u.perfilIds.includes(perfilId) && u.status === 'ATIVO').length
 }
 
+/* ------------------------------------------------------------ autenticação */
+
+/**
+ * Senha única da demonstração, impressa na tela de login e rotulada como tal.
+ *
+ * É andaime visível, não credencial fabricada: a distinção que importa é que
+ * ninguém pode confundi-la com senha real. Na aplicação de verdade nada disto
+ * existe — a verificação é Argon2id no servidor (`apps/api/src/comum/senha.ts`),
+ * com o hash em `usuario.senha_hash` e a política de senha por locatário
+ * (migração 0015). Aqui não há servidor, e uma tela de login que aceitasse
+ * qualquer coisa não exercitaria nem a recusa nem a mensagem uniforme.
+ */
+export const SENHA_DEMONSTRACAO = 'iarx-demo'
+
+export interface SessaoAberta {
+  usuario: Usuario
+  /** Convite não aceito: precisa definir a senha antes de entrar. */
+  deveDefinirSenha: boolean
+}
+
+/**
+ * Recusa uniforme: e-mail inexistente, senha errada e conta inativa devolvem a
+ * **mesma** mensagem.
+ *
+ * Não é economia de texto. "Este e-mail não está cadastrado" transforma a tela
+ * de login num verificador de quem trabalha aqui: quem quiser descobrir os
+ * e-mails válidos de um locatário só precisa de uma lista de palpites e de ler
+ * a diferença entre as respostas. É o mesmo comportamento de
+ * `auth.service.ts`, e o motivo de o serviço queimar tempo equivalente quando
+ * o hash é nulo — sem isso o relógio responde o que a mensagem esconde.
+ */
+export function autenticar(base: BaseDados, email: string, senha: string): Resultado<SessaoAberta> {
+  const alvo = email.trim().toLowerCase()
+  const usuario = base.usuarios.find((u) => u.email.toLowerCase() === alvo)
+  const recusa = () =>
+    falha('CREDENCIAL_INVALIDA', 'E-mail ou senha inválidos.', {
+      acoes: ['Conferir o e-mail digitado', 'Usar "Esqueci minha senha"'],
+    })
+
+  if (!usuario || usuario.status !== 'ATIVO' || senha !== SENHA_DEMONSTRACAO) return recusa()
+
+  usuario.ultimoAcesso = iso(HOJE)
+  return sucesso({ usuario, deveDefinirSenha: !usuario.conviteAceito })
+}
+
+/**
+ * Resposta neutra, sempre a mesma, exista ou não a conta.
+ *
+ * Pela mesma razão da recusa uniforme: uma resposta que diferencie "enviamos"
+ * de "não encontramos" entrega a lista de e-mails válidos a quem perguntar
+ * educadamente.
+ */
+export function solicitarRecuperacao(base: BaseDados, email: string): Resultado<{ mensagem: string }> {
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe um e-mail válido.', { campo: 'email' })
+  }
+  // A busca acontece e o resultado é descartado de propósito: é o que mantém o
+  // tempo de resposta parecido nos dois casos.
+  base.usuarios.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
+  return sucesso({
+    mensagem:
+      'Se houver uma conta com este e-mail, enviamos as instruções de recuperação. O link vale por 30 minutos.',
+  })
+}
+
+/** Primeiro acesso: o convidado define a própria senha, e só então entra. */
+export function definirSenhaPrimeiroAcesso(
+  base: BaseDados,
+  usuarioId: string,
+  senha: string,
+  confirmacao: string,
+): Resultado<Usuario> {
+  const usuario = base.usuarios.find((u) => u.id === usuarioId)
+  if (!usuario) return falha('NAO_ENCONTRADO', 'Usuário não encontrado.')
+
+  // Mínimo de 12 caracteres: é o piso da política padrão do locatário na
+  // migração 0015 (`tenant.politica_senha`), não um número escolhido aqui.
+  if (senha.length < 12) {
+    return falha('REGRA_DE_NEGOCIO', 'A senha precisa de ao menos 12 caracteres.', { campo: 'senha' })
+  }
+  if (senha !== confirmacao) {
+    return falha('REGRA_DE_NEGOCIO', 'A confirmação não coincide com a senha.', { campo: 'confirmacao' })
+  }
+
+  usuario.conviteAceito = true
+  return sucesso(usuario)
+}
+
 /* ============================================================= contratos === */
 
 export interface DadosContrato {

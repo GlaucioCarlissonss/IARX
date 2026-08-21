@@ -15,6 +15,7 @@ import { Faturamento } from './telas/Faturamento'
 import { Resultado } from './telas/Resultado'
 import { Usuarios } from './telas/Usuarios'
 import { Perfis } from './telas/Perfis'
+import { Entrar } from './telas/Entrar'
 import type { Permissao } from './lib/permissoes'
 import type { ReactNode } from 'react'
 
@@ -150,6 +151,11 @@ export function Rotas() {
           }
         />
       </Route>
+
+      {/* Fora do `AppShell`: a tela de entrada não tem menu, nem seletor de
+          filial, nem migalha. Pôr o shell em volta dela mostraria a navegação
+          de uma sessão que acabou de ser encerrada. */}
+      <Route path="/entrar" element={<Entrar />} />
       <Route path="/index.html" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -15,7 +15,7 @@ import type { Permissao, Perfil } from './permissoes'
 /* --------------------------------------------------------------- sessão */
 
 interface Sessao {
-  usuario: { nome: string; email: string }
+  usuario: { id: string; nome: string; email: string }
   perfil: Perfil
   filialId: string | 'todas'
 }
@@ -25,6 +25,9 @@ interface ContextoSessao extends Sessao {
   trocarPerfil: (id: string) => void
   definirFilial: (id: string) => void
   pode: (p: Permissao) => boolean
+  /** Entrar assume a identidade e **o perfil dela** — não só o nome no cabeçalho. */
+  entrar: (usuarioId: string) => void
+  sair: () => void
 }
 
 const SessaoCtx = createContext<ContextoSessao | null>(null)
@@ -55,8 +58,20 @@ function lerPerfis(): Perfil[] {
   }))
 }
 
+/**
+ * A aplicação abre autenticada, e a tela de login é alcançada por "Sair".
+ *
+ * Um portão de login na entrada faria cada um dos 126 testes de ponta a ponta
+ * bater no login antes de qualquer coisa, carregando um passo de autenticação
+ * que não é o que eles testam. E um artefato de demonstração que pede senha
+ * antes de mostrar qualquer coisa a quem o abriu para ver o produto troca
+ * aparência por utilidade. O andaime é declarado, não escondido.
+ */
+const USUARIO_INICIAL = 'usr-admin'
+
 export function ProvedorSessao({ children }: { children: ReactNode }) {
-  const [perfilId, setPerfilId] = useState('perf-admin')
+  const [usuarioId, setUsuarioId] = useState(USUARIO_INICIAL)
+  const [perfilId, setPerfilId] = useState<string | null>(null)
   const [filialId, setFilialId] = useState<string | 'todas'>('todas')
   const [perfis, setPerfis] = useState<Perfil[]>(lerPerfis)
 
@@ -68,11 +83,23 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
    */
   useEffect(() => assinarMudancas(() => setPerfis(lerPerfis())), [])
 
-  const perfil = perfis.find((p) => p.id === perfilId) ?? perfis[0]
+  const contas = api.baseSincrona().usuarios
+  const conta = contas.find((u) => u.id === usuarioId) ?? contas[0]!
+
+  /*
+   * `perfilId` nulo significa "o perfil de quem entrou", e não um padrão fixo.
+   *
+   * Guardar o id resolvido no lugar do nulo faria a troca de usuário manter o
+   * perfil do anterior — entrar como técnico e continuar vendo o menu do
+   * administrador. O seletor do cabeçalho grava um id e passa a mandar; entrar
+   * de novo volta o nulo e a identidade retoma o controle.
+   */
+  const perfil =
+    perfis.find((p) => p.id === (perfilId ?? conta.perfilIds[0])) ?? perfis[0]!
 
   const valor = useMemo<ContextoSessao>(
     () => ({
-      usuario: { nome: 'Operação IARX', email: 'operacao@iarx.app' },
+      usuario: { id: conta.id, nome: conta.nome, email: conta.email },
       perfil,
       filialId,
       perfis,
@@ -80,8 +107,17 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
       definirFilial: setFilialId,
       // O front esconde para reduzir ruído; a autorização real é do servidor.
       pode: (p) => perfil.permissoes.includes(p),
+      entrar: (id) => {
+        setUsuarioId(id)
+        setPerfilId(null)
+      },
+      sair: () => {
+        setUsuarioId(USUARIO_INICIAL)
+        setPerfilId(null)
+        setFilialId('todas')
+      },
     }),
-    [perfil, perfis, filialId],
+    [conta, perfil, perfis, filialId],
   )
 
   return <SessaoCtx.Provider value={valor}>{children}</SessaoCtx.Provider>

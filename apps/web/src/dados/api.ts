@@ -144,6 +144,19 @@ export const api = {
   ativarUsuario: (usuarioId: string) => executar(() => cmd.ativarUsuario(BASE, usuarioId)),
   salvarPerfil: (perfilId: string | null, d: cmd.DadosPerfil) =>
     executar(() => cmd.salvarPerfil(BASE, perfilId, d)),
+
+  /*
+   * Autenticação passa por `responder`, e não por `executar`.
+   *
+   * `executar` notifica as telas abertas em caso de sucesso — o que aqui
+   * significaria disparar a recarga de toda a aplicação no instante do login,
+   * antes de a rota ter trocado. A latência, que é o que interessa para o botão
+   * ficar em "entrando…", `responder` já dá.
+   */
+  autenticar: (email: string, senha: string) => responder(() => cmd.autenticar(BASE, email, senha)),
+  solicitarRecuperacao: (email: string) => responder(() => cmd.solicitarRecuperacao(BASE, email)),
+  definirSenhaPrimeiroAcesso: (usuarioId: string, senha: string, confirmacao: string) =>
+    executar(() => cmd.definirSenhaPrimeiroAcesso(BASE, usuarioId, senha, confirmacao)),
   definirLocalizacaoCliente: (clienteId: string, d: Parameters<typeof cmd.definirLocalizacaoCliente>[2]) =>
     executar(() => cmd.definirLocalizacaoCliente(BASE, clienteId, d)),
   definirCredito: (clienteId: string, situacao: 'LIBERADO' | 'OBSERVACAO' | 'BLOQUEADO', motivo: string) =>

@@ -21,6 +21,10 @@ import {
   revogarPerfil,
   salvarPerfil,
   usuariosComPerfil,
+  autenticar,
+  definirSenhaPrimeiroAcesso,
+  solicitarRecuperacao,
+  SENHA_DEMONSTRACAO,
 } from '../src/dados/comandos.ts'
 import type { BaseDados } from '../src/dados/tipos.ts'
 
@@ -267,4 +271,105 @@ test('nenhum usuário da massa tem e-mail repetido', () => {
   const b = base()
   const emails = b.usuarios.map((u) => u.email.toLowerCase())
   assert.equal(new Set(emails).size, emails.length)
+})
+
+/* ------------------------------------------------------------ autenticação */
+
+/**
+ * A recusa uniforme é o único destes casos cuja falha não aparece na tela.
+ *
+ * Uma mensagem que diferencie "e-mail não cadastrado" de "senha errada" faz o
+ * login funcionar perfeitamente e, de graça, entregar a lista de quem tem
+ * acesso ao ambiente a qualquer um que tenha uma lista de palpites e paciência
+ * para ler a diferença entre as respostas.
+ */
+test('e-mail inexistente, senha errada e conta inativa dão a mesma recusa', () => {
+  const b = base()
+  const inativo = b.usuarios.find((u) => u.status === 'INATIVO')!
+
+  const casos = [
+    autenticar(b, 'nao.existe@iarx.app', SENHA_DEMONSTRACAO),
+    autenticar(b, 'operacao@iarx.app', 'senha-errada'),
+    autenticar(b, inativo.email, SENHA_DEMONSTRACAO),
+  ]
+
+  for (const r of casos) assert.equal(r.ok, false)
+
+  const mensagens = new Set(casos.map((r) => (r.ok ? '' : r.erro.mensagem)))
+  assert.equal(mensagens.size, 1, `respostas distintas: ${[...mensagens].join(' | ')}`)
+
+  const codigos = new Set(casos.map((r) => (r.ok ? '' : r.erro.codigo)))
+  assert.equal(codigos.size, 1, 'o código também distingue os casos')
+})
+
+test('autenticar não diferencia maiúsculas no e-mail', () => {
+  const b = base()
+  const r = autenticar(b, 'OPERACAO@IARX.APP', SENHA_DEMONSTRACAO)
+
+  // Quem digita no celular recebe a primeira letra maiúscula do teclado e não
+  // tem culpa disso. Recusar aqui seria recusar por causa do teclado.
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  assert.equal(r.valor.usuario.id, 'usr-admin')
+  assert.equal(r.valor.deveDefinirSenha, false)
+})
+
+test('autenticar registra o último acesso de quem nunca acessou', () => {
+  const b = base()
+  // A conta escolhida é uma que a massa deixa com `ultimoAcesso` nulo — só
+  // nela a gravação tem o que provar; numa conta que já acessou hoje, a
+  // asserção passaria sem que o comando tivesse escrito nada.
+  const nunca = b.usuarios.find((u) => u.ultimoAcesso === null)!
+  assert.equal(autenticar(b, nunca.email, SENHA_DEMONSTRACAO).ok, true)
+  assert.notEqual(b.usuarios.find((u) => u.id === nunca.id)!.ultimoAcesso, null)
+})
+
+test('convite não aceito entra pelo passo de definir senha, não direto', () => {
+  const b = base()
+  const pendente = b.usuarios.find((u) => !u.conviteAceito && u.status === 'ATIVO')!
+
+  const r = autenticar(b, pendente.email, SENHA_DEMONSTRACAO)
+  assert.equal(r.ok, true)
+  if (!r.ok) return
+  assert.equal(r.valor.deveDefinirSenha, true)
+})
+
+test('a recuperação responde a mesma frase exista ou não a conta', () => {
+  const b = base()
+  const existe = solicitarRecuperacao(b, 'operacao@iarx.app')
+  const naoExiste = solicitarRecuperacao(b, 'nao.existe@iarx.app')
+
+  assert.equal(existe.ok, true)
+  assert.equal(naoExiste.ok, true)
+  if (!existe.ok || !naoExiste.ok) return
+  assert.equal(existe.valor.mensagem, naoExiste.valor.mensagem)
+})
+
+test('e-mail malformado na recuperação é erro de campo, não resposta neutra', () => {
+  const b = base()
+  const r = solicitarRecuperacao(b, 'sem-arroba')
+  assert.equal(r.ok, false)
+  if (r.ok) return
+  assert.equal(r.erro.campo, 'email')
+})
+
+test('a senha do primeiro acesso respeita o piso de 12 caracteres e a confirmação', () => {
+  const b = base()
+  const pendente = b.usuarios.find((u) => !u.conviteAceito)!
+
+  const curta = definirSenhaPrimeiroAcesso(b, pendente.id, 'curta', 'curta')
+  assert.equal(curta.ok, false)
+  if (!curta.ok) assert.equal(curta.erro.campo, 'senha')
+
+  const divergente = definirSenhaPrimeiroAcesso(b, pendente.id, 'senha-longa-o-bastante', 'outra-coisa')
+  assert.equal(divergente.ok, false)
+  if (!divergente.ok) assert.equal(divergente.erro.campo, 'confirmacao')
+
+  // Só o caso válido aceita o convite. Se um dos anteriores tivesse aceitado,
+  // a conta ficaria acessível sem senha definida.
+  assert.equal(b.usuarios.find((u) => u.id === pendente.id)!.conviteAceito, false)
+
+  const ok = definirSenhaPrimeiroAcesso(b, pendente.id, 'senha-longa-o-bastante', 'senha-longa-o-bastante')
+  assert.equal(ok.ok, true)
+  assert.equal(b.usuarios.find((u) => u.id === pendente.id)!.conviteAceito, true)
 })

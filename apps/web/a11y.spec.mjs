@@ -26,6 +26,7 @@ const ROTAS = [
   { hash: '#/resultado', nome: 'resultado', titulo: 'Resultado operacional' },
   { hash: '#/usuarios', nome: 'usuários', titulo: 'Usuários' },
   { hash: '#/perfis', nome: 'perfis de acesso', titulo: 'Perfis de acesso' },
+  { hash: '#/entrar', nome: 'entrar', titulo: 'Entrar' },
 ]
 
 const BLOQUEANTES = ['critical', 'serious']
@@ -1938,11 +1939,166 @@ test('a paleta de comandos não oferece tela que o perfil não abre', async ({ p
   await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
   await page.keyboard.press('Control+k')
 
-  const lista = page.getByRole('listbox')
-  await expect(lista).toBeVisible()
-  const itens = await lista.allInnerTexts()
+  const listaPaleta = page.getByRole('listbox')
+  await expect(listaPaleta).toBeVisible()
+  const itens = await listaPaleta.allInnerTexts()
   expect(itens.join(' ')).not.toContain('Usuários')
   expect(itens.join(' ')).not.toContain('Resultado')
+})
+
+/* ==================================================================== */
+/* Entrada na aplicação                                                 */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem: a tela de login não servir para descobrir quem
+ * tem acesso ao ambiente.
+ *
+ * Uma mensagem que distinga "e-mail não cadastrado" de "senha errada"
+ * transforma o login num verificador de contas: basta uma lista de palpites e
+ * ler a diferença entre as respostas. É o tipo de defeito que nenhuma consulta
+ * de acessibilidade pega, que não quebra nada, e que só aparece quando alguém
+ * de fora repara nele.
+ */
+
+/**
+ * Lê o e-mail de uma conta com a situação pedida, da própria tabela.
+ *
+ * A escolha sai da massa em vez de estar escrita aqui: prender o teste a
+ * `eduardo.tanaka@iarx.app` o faria quebrar na primeira vez que a geração da
+ * demonstração mudasse, sem que nada de verdade tivesse se rompido.
+ *
+ * A comparação é de **linha inteira**, e não `getByText`. O rótulo do chip vem
+ * no mesmo elemento do glifo, então `exact` não casa; e sem `exact`, "Ativo"
+ * casaria dentro de "Inativo" — que é justamente a conta oposta à pedida.
+ */
+async function emailComSituacao(page, situacao) {
+  await abrir(page, { hash: '#/usuarios' })
+  const linhas = await page.getByRole('row').allInnerTexts()
+  // Divide por tabulação também: `innerText` separa colunas com `\t`, então a
+  // situação vem colada na coluna seguinte ("Ativo\t10/07/2026").
+  const alvo = linhas.find((t) => t.split(/[\n\t]/).some((l) => l.trim() === situacao))
+  expect(alvo, `nenhuma conta com situação "${situacao}" na massa`).toBeTruthy()
+  const achado = alvo.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i)
+  expect(achado, `linha sem e-mail legível: ${alvo}`).not.toBeNull()
+  return achado[0]
+}
+
+test('sair leva ao login, e entrar de volta ao painel', async ({ page }) => {
+  await abrir(page)
+  await page.getByRole('button', { name: 'Sair' }).click()
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Entrar' })).toBeVisible()
+  // Encerrada a sessão, a navegação não fica à mostra: o menu inteiro sai.
+  await expect(page.getByRole('navigation')).toHaveCount(0)
+
+  await page.getByLabel('E-mail').fill('operacao@iarx.app')
+  await page.getByLabel('Senha').fill('iarx-demo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+
+  await expect(page.getByRole('heading', { level: 1, name: 'O que exige ação hoje' })).toBeVisible()
+})
+
+test('e-mail inexistente e senha errada dão exatamente a mesma recusa', async ({ page }) => {
+  await abrir(page)
+  await page.getByRole('button', { name: 'Sair' }).click()
+
+  const recusa = page.getByRole('alert')
+
+  await page.getByLabel('E-mail').fill('nao.existe@iarx.app')
+  await page.getByLabel('Senha').fill('iarx-demo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await expect(recusa).toBeVisible()
+  const semConta = await recusa.innerText()
+
+  await page.getByLabel('E-mail').fill('operacao@iarx.app')
+  await page.getByLabel('Senha').fill('senha-errada-mesmo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+  await expect(recusa).toBeVisible()
+  const senhaErrada = await recusa.innerText()
+
+  // Idênticas, palavra por palavra. Qualquer diferença — inclusive de
+  // pontuação — é informação sobre a existência da conta.
+  expect(senhaErrada).toBe(semConta)
+  expect(semConta).toContain('E-mail ou senha inválidos')
+})
+
+test('conta inativa recebe a mesma recusa, e não "conta desativada"', async ({ page }) => {
+  const email = await emailComSituacao(page, 'Inativo')
+
+  await page.getByRole('button', { name: 'Sair' }).click()
+  await page.getByLabel('E-mail').fill(email)
+  await page.getByLabel('Senha').fill('iarx-demo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+
+  const recusa = page.getByRole('alert')
+  await expect(recusa).toContainText('E-mail ou senha inválidos')
+  // "Esta conta está desativada" confirmaria que o e-mail existe.
+  await expect(recusa).not.toContainText(/desativad|inativ|bloquead/i)
+})
+
+test('recuperação responde igual para conta que existe e para uma que não', async ({ page }) => {
+  await abrir(page)
+  await page.getByRole('button', { name: 'Sair' }).click()
+
+  const pedir = async (email) => {
+    await page.getByRole('button', { name: 'Esqueci minha senha' }).click()
+    await page.getByLabel('E-mail').fill(email)
+    await page.getByRole('button', { name: 'Enviar instruções' }).click()
+    const aviso = page.getByRole('heading', { level: 1, name: 'Entrar' })
+    await expect(aviso).toBeVisible()
+    return (await page.locator('.aviso--ok').innerText()).replace(email, '')
+  }
+
+  const existe = await pedir('operacao@iarx.app')
+  const naoExiste = await pedir('nao.existe@iarx.app')
+  expect(naoExiste).toBe(existe)
+  expect(existe).toContain('Se houver uma conta')
+})
+
+test('convite pendente define a própria senha, e o piso de 12 caracteres vale', async ({ page }) => {
+  const email = await emailComSituacao(page, 'Convite pendente')
+
+  await page.getByRole('button', { name: 'Sair' }).click()
+  await page.getByLabel('E-mail').fill(email)
+  await page.getByLabel('Senha').fill('iarx-demo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+
+  // Não entra direto: o convite ainda não foi aceito, e quem define a senha é
+  // o dono da conta — nunca quem convidou.
+  await expect(page.getByRole('heading', { level: 1, name: 'Defina sua senha' })).toBeVisible()
+
+  await page.getByLabel('Nova senha').fill('curta')
+  await page.getByLabel('Confirmação').fill('curta')
+  await page.getByRole('button', { name: 'Definir senha e entrar' }).click()
+  await expect(page.getByRole('alert')).toContainText('12 caracteres')
+
+  await page.getByLabel('Nova senha').fill('senha-longa-o-bastante')
+  await page.getByLabel('Confirmação').fill('senha-longa-o-bastante')
+  await page.getByRole('button', { name: 'Definir senha e entrar' }).click()
+
+  await expect(page.getByRole('heading', { level: 1, name: 'O que exige ação hoje' })).toBeVisible()
+})
+
+test('entrar assume o perfil da conta, e não o do último que usou o navegador', async ({ page }) => {
+  await abrir(page)
+
+  // Administrador vê Usuários; um técnico de suporte, não. Se o perfil ficasse
+  // preso ao anterior, entrar como técnico mostraria o menu do administrador —
+  // e a demonstração passaria a mentir sobre o que cada perfil enxerga.
+  const menu = page.getByRole('navigation')
+  await expect(menu.getByRole('link', { name: /Usuários/ })).toBeVisible()
+
+  const email = await emailComSituacao(page, 'Ativo')
+  expect(email).not.toBe('operacao@iarx.app')
+
+  await page.getByRole('button', { name: 'Sair' }).click()
+  await page.getByLabel('E-mail').fill(email)
+  await page.getByLabel('Senha').fill('iarx-demo')
+  await page.getByRole('button', { name: 'Entrar' }).click()
+
+  await expect(page.getByRole('heading', { level: 1, name: 'O que exige ação hoje' })).toBeVisible()
+  await expect(menu.getByRole('link', { name: /Usuários/ })).toHaveCount(0)
 })
 
 /* ==================================================================== */

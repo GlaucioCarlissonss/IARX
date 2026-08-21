@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useSessao } from '../../lib/contexto'
 import { api } from '../../dados/api'
 import { FILIAIS } from '../../dados/catalogo'
+import { Botao } from '../ui/primitivos'
 import { PaletaComandos } from './PaletaComandos'
 import { GRUPOS, NAVEGACAO, TITULOS } from '../../lib/navegacao'
 
@@ -30,7 +31,8 @@ const CONTADORES: Record<string, (i: Awaited<ReturnType<typeof api.indicadores>>
 }
 
 export function AppShell() {
-  const { perfil, perfis, trocarPerfil, filialId, definirFilial, pode } = useSessao()
+  const { usuario, perfil, perfis, trocarPerfil, filialId, definirFilial, pode, sair } = useSessao()
+  const navegar = useNavigate()
   const [paletaAberta, setPaletaAberta] = useState(false)
   const [tema, setTema] = useState<'sistema' | 'light' | 'dark'>('sistema')
   const [indicadores, setIndicadores] = useState<Awaited<ReturnType<typeof api.indicadores>> | null>(null)
@@ -172,6 +174,26 @@ export function AppShell() {
                 <option value="dark">Tema escuro</option>
               </select>
             </label>
+
+            {/* Quem está na sessão, à vista.
+                O seletor de perfil ao lado demonstra o efeito das permissões e
+                pode divergir do perfil da conta — sem o nome do usuário aqui,
+                não haveria como saber de quem é a sessão aberta. */}
+            <div className="barra__conta">
+              <span className="barra__conta__nome" title={usuario.email}>
+                {usuario.nome}
+              </span>
+              <Botao
+                variante="sutil"
+                pequeno
+                onClick={() => {
+                  sair()
+                  navegar('/entrar')
+                }}
+              >
+                Sair
+              </Botao>
+            </div>
           </div>
         </header>
 
@@ -194,7 +216,7 @@ export function AppShell() {
             Data de referência: 30/07/2026.
           </p>
           <p>
-            Cores de <span className="dado">@iarx/tokens</span> — 188/188 verificações de contraste e daltonismo
+            Cores de <span className="dado">@iarx/tokens</span> — 202/202 verificações de contraste e daltonismo
             aprovadas.
           </p>
         </footer>

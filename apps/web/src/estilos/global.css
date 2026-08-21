@@ -2309,3 +2309,109 @@ textarea {
   font-size: var(--t-12);
   color: var(--cor-text-muted);
 }
+
+/* ------------------------------------------------------ conta na barra --- */
+.barra__conta {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding-left: var(--e3);
+  border-left: 1px solid var(--cor-border);
+  min-width: 0;
+}
+.barra__conta__nome {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--cor-text-secondary);
+  /* Nome longo não empurra o botão "Sair" para fora da barra. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14ch;
+}
+/* Abaixo de 1180px os rótulos da barra já somem; o nome vai com eles, e o
+   botão de sair fica — é a ação, e ela não pode desaparecer. */
+@media (max-width: 1180px) {
+  .barra__conta__nome {
+    display: none;
+  }
+}
+
+/* ----------------------------------------------------- tela de entrada --- */
+.entrar {
+  min-height: 100vh;
+  display: grid;
+  /* A coluna do painel é centrada; a nota fica embaixo, na largura dele. */
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  align-content: center;
+  gap: var(--e4);
+  padding: var(--e5) var(--e4);
+  background: var(--cor-surface-sunken);
+}
+.entrar__painel {
+  width: 100%;
+  max-width: 26rem;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+  padding: var(--e5);
+  background: var(--cor-bg);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-3);
+}
+.entrar__painel h1 {
+  font-size: var(--t-21);
+  margin: 0;
+}
+.entrar__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+}
+.entrar__glifo {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: var(--raio-2);
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+  font-size: var(--t-17);
+}
+.entrar__produto {
+  margin: 0;
+  font-size: var(--t-16);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.entrar__sub {
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+}
+.entrar__demo {
+  display: grid;
+  gap: var(--e1);
+  padding: var(--e3);
+  border: 1px dashed var(--cor-border-strong);
+  border-radius: var(--raio-2);
+  background: var(--cor-surface);
+  font-size: var(--t-12);
+}
+.entrar__demo p {
+  margin: 0;
+}
+.entrar__demo__titulo {
+  font-weight: 640;
+  color: var(--cor-text-secondary);
+}
+.entrar__nota {
+  max-width: 26rem;
+  margin: 0;
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+  text-align: center;
+}
