@@ -126,10 +126,30 @@ export const PERMISSOES = [
   'pagar:baixar',
   'conciliacao:executar',
   'financeiro:lancamento_manual',
-  'financeiro:centro_custo_gerenciar',
   'financeiro:painel_executivo',
   'financeiro:rentabilidade_ler',
   'financeiro:exportar',
+
+  // Centro de custo e conta bancária — Módulos 8 e 9, migração 0017
+  //
+  // `centro_custo` era `financeiro:centro_custo_gerenciar`, uma ação do recurso
+  // `financeiro`. Promovido a recurso próprio ao construir a tela, por duas
+  // razões concretas:
+  //
+  //  · o segundo nível da árvore de permissões é a **tela**, e centro de custo
+  //    é uma tela com cadastro próprio. Como ação de "Painéis financeiros", a
+  //    árvore afirmaria que ela vive dentro de um painel;
+  //  · não havia como conceder leitura sem gestão. Quem lança um título
+  //    precisa **ler** a árvore de centros para escolher um, e não precisa
+  //    poder criar centro nenhum.
+  //
+  // `conta_bancaria` é nova: não havia recurso porque não havia tabela.
+  'centro_custo:ler',
+  'centro_custo:gerenciar',
+  'conta_bancaria:ler',
+  'conta_bancaria:gerenciar',
+  'conta_bancaria:movimentar',
+  'conta_bancaria:transferir',
 
   // Política comercial — tabela de franquia, tabela de preço, simulador
   //
