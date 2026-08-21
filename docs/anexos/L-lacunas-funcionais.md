@@ -575,7 +575,7 @@ Permissões: `tabela_preco:ler` · `:gerenciar` · `:ativar` ·
 ## MÓDULO 4: Usuários e Permissões
 
 ### Status
-- [x] Melhoria sobre existente — **desbloqueado; falta a interface**
+- [x] Melhoria sobre existente — **✅ implementado; ver [Anexo Q](Q-usuarios-e-permissoes.md)**
 
 > **Atualização.** Esta seção foi escrita antes das decisões D-01/D-02, na
 > época em que elas ainda bloqueavam o módulo inteiro. As duas foram tomadas
@@ -2258,8 +2258,8 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | 1 | Nota Fiscal de Compra | — | Alta | Média-Alta | ✅ Feito (Anexo N) |
 | 2 | Tabela de Franquias | — | Alta | Média | ✅ Feito (Anexo P) |
 | 3 | Preço de Locação | Módulo 2 | Alta | Média | ✅ Feito (Anexo P) |
-| 4 | Usuários e Permissões | — | **Crítica** | Alta | 🟡 Modelo pronto; falta tela/API/auth — ver §4.1–4.2 |
-| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | 🔲 Novo — ver checklist ao final |
+| 4 | Usuários e Permissões | — | **Crítica** | Alta | ✅ Feito (Anexo Q) |
+| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, 25/25 rotas (Anexo Q §Q.8) |
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
 | 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
@@ -2363,13 +2363,31 @@ terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 | ~~D-02~~ | Modelo organizacional do cliente | `grupo_economico → cliente → local_operacao` — migração 0011 (Anexo M) |
 | ~~D-12~~ | Provedor de mapa | Vetor embutido como piso + tiles opcionais (satélite Esri padrão) — Anexo O |
 | ~~D-13~~ | Provedor de geocodificação | Nominatim, ação explícita — Anexo O §O.9.4 |
+| ~~D-07~~ | Autenticação | **Revertida**: Argon2id próprio, não Supabase Auth — Anexo Q §Q.2 |
+| ~~D-15~~ | Política de senha por tenant ou por perfil | Por locatário, `tenant.politica_senha` — migração 0015 |
+| ~~D-20~~ | `titulo_receber` único ou `fatura` separada | Tabela única, origem CONTRATUAL/AVULSO |
+| ~~D-21~~ | Índice de reajuste: API externa ou manual | Cadastro manual mensal |
+| ~~D-16~~ | Rateio entre centros de custo | Percentual; soma obrigatória de 100% |
+| ~~D-18~~ | Faixas de alçada configuráveis ou fixas | Configuráveis por locatário — `alcada` já é por tenant |
 
 ### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
-| # | Decisão | Recomendação | Impacto se adiada |
-| --- | --- | --- | --- |
-| **D-20** | `titulo_receber` único (origem CONTRATUAL/AVULSO) ou tabela `fatura` separada de `contas_a_receber`? | Tabela única — ver Módulo 11 | Duas fontes de verdade sobre dívida do cliente |
-| **D-18** | Faixas de alçada de `pagar` configuráveis pelo admin ou fixas? | Configuráveis — a tabela `alcada` já é por tenant | Sem isso, o Módulo 10 não sabe se constrói tela de configuração ou constante |
+Nenhuma em aberto. As duas que bloqueavam o bloco financeiro — D-20 e D-18 —
+foram respondidas, junto de D-16 e D-21, e estão na tabela acima.
+
+Sobre as duas resolvidas por recomendação em vez de escolha explícita do
+operador, vale registrar o raciocínio, porque as duas são reversíveis com custo
+diferente:
+
+- **D-18 configurável** é a opção que *evita* fixar valor de negócio no código:
+  as faixas passam a ser dado cadastrado, e nenhuma constante de real aparece
+  em migração. Fixá-las depois é trivial; descobrir depois quais eram as faixas
+  fixadas por engano não é.
+- **D-16 percentual** é a forma que se valida sozinha (a soma tem de fechar
+  100%) e a única que sobrevive a uma alteração do valor do título — com valor
+  fixo, mudar o total do título deixa o rateio sem cobrir a diferença. Valor
+  fixo entra depois como segundo modo, com um discriminador na tabela de
+  rateio, sem invalidar nada gravado.
 
 ### Estruturais — definem arquitetura
 
@@ -2377,13 +2395,10 @@ terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 | --- | --- | --- |
 | D-03 | Origem do XML da NF-e | Upload, portal do fornecedor ou SEFAZ por chave (exige certificado A1) |
 | D-04 | Existe ERP financeiro? | Se sim, inverte a direção da integração do módulo 1 |
-| D-07 | Autenticação | Supabase Auth ou Argon2id próprio — bloqueia §4.2 item 1 |
 | D-08 | SSO corporativo para clientes grandes | Entra agora ou depois |
 | D-09 | Portal em subdomínio ou rota `/portal` | Afeta CSP, cookies e operação |
 | D-11 | Telemetria de contador | DCA na rede do cliente, API do fabricante, ou manual |
-| D-15 | Política de senha por tenant ou por perfil | Por tenant no lançamento — Módulo 4 §4.2 |
 | D-17 | Formato de importação de extrato bancário | OFX primeiro; CNAB se/quando houver cobrança registrada — Módulo 9 |
-| D-21 | Índice de reajuste: API externa ou manual? | Manual — Módulo 11 |
 | D-22 | Geração de título contratual: no fechamento ou em ciclo separado? | No fechamento — Módulo 11 |
 | D-24 | Fluxo de caixa integra com ERP/Open Finance ou só títulos internos? | Só títulos internos — Módulo 13 |
 
@@ -2394,7 +2409,6 @@ terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 | D-05 | Franquia acumulativa existe? | 2 |
 | D-06 | Preço por filial do cliente é necessário? | 3 |
 | D-10 | Cliente abre chamado pelo portal? | 5 |
-| D-16 | Rateio entre centros de custo: percentual, valor fixo, ou os dois? | 8 |
 | D-19 | Provedor de envio de e-mail para notificação de aprovação | 10, 12 |
 | D-23 | Conversão de lançamento futuro notifica o responsável? | 12 |
 | D-25 | Replanejamento de orçamento considera só o pago, ou também o aprovado-não-pago? | 14 |
