@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
 import { BloquearEquipamento, ListarEquipamentos } from '@iarx/contracts'
 import { ExigePermissao } from '../../comum/decoradores.js'
-import { ErroDominio } from '../../comum/erros.js'
+import { versaoDe } from '../../comum/versao.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { EquipamentosService } from './equipamentos.service.js'
 
@@ -49,23 +49,4 @@ export class EquipamentosController {
   ) {
     return this.servico.desbloquear(id, versaoDe(ifMatch))
   }
-}
-
-/**
- * Concorrência otimista por `If-Match` (Anexo D.1).
- *
- * Exigido, não opcional: sem ele, dois operadores que abriram a mesma tela
- * gravam por cima um do outro e o último a clicar vence em silêncio. O ETag é
- * a versão da linha, e o cabeçalho aceita tanto `"3"` quanto `3`.
- */
-function versaoDe(ifMatch: string | undefined): number {
-  const bruto = ifMatch?.trim().replace(/^W\//, '').replace(/"/g, '')
-  const n = bruto ? Number(bruto) : Number.NaN
-  if (!Number.isInteger(n) || n < 1) {
-    throw new ErroDominio('PAYLOAD_INVALIDO', 'Cabeçalho If-Match obrigatório', {
-      detail: 'Envie If-Match com a versão do registro lida antes da alteração, ex.: If-Match: "3".',
-      errors: [{ field: 'If-Match', code: 'VERSAO_AUSENTE' }],
-    })
-  }
-  return n
 }

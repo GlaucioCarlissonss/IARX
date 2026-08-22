@@ -228,3 +228,6 @@ export function unidades(n: number, prefixo = 'NF') {
     }),
   }
 }
+
+/** Empresa do tenant A na massa de teste — toda conta bancária pertence a uma PJ. */
+export const EMPRESA_A = '11111111-1111-4111-8111-1111111111e1'
