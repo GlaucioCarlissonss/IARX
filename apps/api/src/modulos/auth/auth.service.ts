@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import { SignJWT } from 'jose'
 import type {
   Login,
@@ -18,6 +18,7 @@ import {
   hashTokenRecuperacao,
 } from '../../comum/senha.js'
 import { AuthRepositorio, type UsuarioAutenticavel } from './auth.repositorio.js'
+import { NotificacaoService } from '../notificacao/notificacao.service.js'
 
 /** Validade do access token. Curta o bastante para limitar dano, longa o bastante para um turno. */
 const HORAS_SESSAO = 8
@@ -27,7 +28,6 @@ const MINUTOS_RECUPERACAO = 30
 
 @Injectable()
 export class AuthService {
-  private readonly log = new Logger(AuthService.name)
   private readonly segredo = process.env['IARX_JWT_SEGREDO']
   private readonly emissor = process.env['IARX_JWT_ISSUER']
   private readonly audiencia = process.env['IARX_JWT_AUDIENCE']
@@ -35,6 +35,7 @@ export class AuthService {
   constructor(
     private readonly banco: BancoService,
     private readonly repo: AuthRepositorio,
+    private readonly notificacao: NotificacaoService,
   ) {}
 
   /**
@@ -166,17 +167,22 @@ export class AuthService {
    * público que responde diferente para e-mail existente é um enumerador de
    * base de clientes, e o custo de descobrir isso é zero para quem tenta.
    *
-   * O envio do e-mail não acontece aqui: o token vai para o `outbox_evento`, e
-   * um worker envia. O provedor de envio é a decisão D-19, ainda pendente —
-   * enquanto ela não vier, o token é gerado e registrado, e o e-mail não sai.
-   * Está documentado como lacuna, não escondido atrás de um `console.log`.
+   * O envio não acontece aqui: a mensagem é **enfileirada na mesma transação**
+   * que grava o token, e o worker da migração 0018 entrega. Se a gravação do
+   * token for desfeita, o aviso não existe — que é a metade do padrão outbox
+   * que importa.
+   *
+   * O token vai na mensagem e em nenhum log. Um token de recuperação em log é
+   * um token vazado: quem lê o log passa a poder redefinir a senha de qualquer
+   * pessoa, e o rastro não aparece em lugar nenhum, porque a redefinição em si
+   * é legítima.
    */
   async solicitarRecuperacao(dados: SolicitarRecuperacao, ip: string | null): Promise<void> {
     await this.banco.semContexto(async (db) => {
       const u = await this.repo.porEmail(db, dados.email)
       if (!u || u.status !== 'ATIVO') return
 
-      const { hash } = gerarTokenRecuperacao()
+      const { token, hash } = gerarTokenRecuperacao()
       await this.repo.criarTokenRecuperacao(db, {
         tenantId: u.tenant_id,
         usuarioId: u.id,
@@ -185,10 +191,19 @@ export class AuthService {
         ip,
       })
 
-      // LACUNA (D-19): sem provedor de envio decidido, o token fica registrado
-      // e não é entregue. O log não recebe o token em claro — um token em log
-      // é um token vazado.
-      this.log.warn(`token de recuperação gerado para usuário ${u.id}; envio pendente de D-19`)
+      /*
+       * `enfileirar_notificacao` usa `app.exigir_tenant()`, e esta transação
+       * roda sem contexto — é o preço de a recuperação ser pública. O tenant
+       * vem do usuário que a consulta fechada acabou de encontrar.
+       */
+      await db.consultar(`select set_config('app.tenant_id', $1, true)`, [u.tenant_id])
+      await this.notificacao.recuperacaoDeSenha(db, {
+        usuarioId: u.id,
+        nome: u.nome,
+        email: u.email,
+        token,
+        minutos: MINUTOS_RECUPERACAO,
+      })
     })
   }
 

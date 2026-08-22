@@ -11,6 +11,10 @@
     "test": "node --test dist-test/**/*.test.js"
   },
   "dependencies": {
-    "@iarx/contracts": "0.1.0"
+    "@iarx/contracts": "0.1.0",
+    "nodemailer": "^9.0.5"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.1"
   }
 }

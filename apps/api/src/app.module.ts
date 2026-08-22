@@ -22,6 +22,9 @@ import {
 } from './modulos/financeiro/financeiro.controller.js'
 import { FinanceiroRepositorio } from './modulos/financeiro/financeiro.repositorio.js'
 import { FinanceiroService } from './modulos/financeiro/financeiro.service.js'
+import { NotificacaoController } from './modulos/notificacao/notificacao.controller.js'
+import { NotificacaoService } from './modulos/notificacao/notificacao.service.js'
+import { NotificacaoWorker } from './modulos/notificacao/notificacao.worker.js'
 import { LocaisController } from './modulos/locais/locais.controller.js'
 import { LocaisRepositorio } from './modulos/locais/locais.repositorio.js'
 import { LocaisService } from './modulos/locais/locais.service.js'
@@ -57,6 +60,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     AuthController,
     CentrosCustoController,
     ContasBancariasController,
+    NotificacaoController,
   ],
   providers: [
     BancoService,
@@ -72,6 +76,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     AuthService,
     FinanceiroRepositorio,
     FinanceiroService,
+    NotificacaoService,
+    NotificacaoWorker,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },
