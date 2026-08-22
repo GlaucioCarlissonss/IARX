@@ -5,12 +5,15 @@ import type {
   Anexo,
   BaseDados,
   CategoriaAnexo,
+  CentroCusto,
   Cliente,
+  ContaBancaria,
   Contrato,
   ContratoItem,
   EntidadeAnexo,
   Equipamento,
   ModalidadeCobranca,
+  Movimentacao,
   NotaFiscal,
   NotaFiscalItem,
   OrdemServico,
@@ -767,6 +770,439 @@ export function definirSenhaPrimeiroAcesso(
 
   usuario.conviteAceito = true
   return sucesso(usuario)
+}
+
+/* ================================= centro de custo e conta bancária === */
+
+/**
+ * Saldo derivado, espelhando `app.saldo_conta` da migração 0017.
+ *
+ * Não há campo de saldo em `ContaBancaria`, e é deliberado: uma cópia guardada
+ * divergiria na primeira escrita que esquecesse de atualizá-la, e a divergência
+ * apareceria como dinheiro que não fecha, sem pista de onde começou.
+ *
+ * `ate` existe porque a conciliação precisa dele: comparar com o extrato do dia
+ * 31 exige o saldo do dia 31, não o de hoje.
+ */
+export function saldoDaConta(base: BaseDados, contaId: string, ate?: string): number {
+  const conta = base.contasBancarias.find((c) => c.id === contaId)
+  if (!conta) return 0
+
+  const soma = base.movimentacoes
+    .filter(
+      (m) =>
+        m.contaId === contaId &&
+        // Movimentação anterior ao saldo inicial não conta: o saldo inicial já
+        // a inclui, por definição de "saldo naquela data".
+        m.dataMovimento >= conta.dataSaldoInicial &&
+        (!ate || m.dataMovimento <= ate),
+    )
+    .reduce(
+      (t, m) => t + (m.tipo === 'ENTRADA' || m.tipo === 'TRANSFERENCIA_ENTRADA' ? m.valor : -m.valor),
+      0,
+    )
+
+  return Math.round((conta.saldoInicial + soma + Number.EPSILON) * 100) / 100
+}
+
+/** Profundidade de um centro na árvore, 1 a 3. Derivada da cadeia de pais. */
+export function nivelDoCentro(base: BaseDados, centroId: string): number {
+  let atual = base.centrosCusto.find((c) => c.id === centroId)
+  let nivel = 1
+  // Limite de segurança: se a base já contiver um ciclo, o laço para em vez de
+  // travar a interface. É o mesmo raciocínio do gatilho da RN-L42.
+  for (let i = 0; atual?.centroPaiId && i < 64; i++) {
+    atual = base.centrosCusto.find((c) => c.id === atual!.centroPaiId)
+    nivel++
+  }
+  return Math.min(nivel, 3)
+}
+
+export interface DadosCentroCusto {
+  codigo: string
+  nome: string
+  descricao: string
+  centroPaiId: string | null
+}
+
+/**
+ * As três recusas espelham RN-L42 e RN-L43 do banco.
+ *
+ * Aqui elas existem para a interface **explicar antes de tentar**; no banco
+ * existem porque é lá que precisam valer para quem não passa pela interface. As
+ * duas não são redundância: uma evita o erro, a outra o torna impossível.
+ */
+export function salvarCentroCusto(
+  base: BaseDados,
+  centroId: string | null,
+  dados: DadosCentroCusto,
+): Resultado<CentroCusto> {
+  const codigo = dados.codigo.trim().toUpperCase()
+  const nome = dados.nome.trim()
+
+  if (codigo.length < 2) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o código do centro de custo.', { campo: 'codigo' })
+  }
+  if (nome.length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o nome do centro de custo.', { campo: 'nome' })
+  }
+  if (base.centrosCusto.some((c) => c.codigo === codigo && c.id !== centroId)) {
+    return falha('REGRA_DE_NEGOCIO', 'Já existe um centro de custo com este código.', { campo: 'codigo' })
+  }
+
+  if (dados.centroPaiId) {
+    const pai = base.centrosCusto.find((c) => c.id === dados.centroPaiId)
+    if (!pai) return falha('NAO_ENCONTRADO', 'Centro pai não encontrado.', { campo: 'centroPaiId' })
+
+    // Ciclo: o pai escolhido está abaixo deste centro na árvore.
+    if (centroId) {
+      let cursor: CentroCusto | undefined = pai
+      for (let i = 0; cursor && i < 64; i++) {
+        if (cursor.id === centroId) {
+          return falha('REGRA_DE_NEGOCIO', 'Este centro não pode descender de si mesmo.', {
+            campo: 'centroPaiId',
+            acoes: ['Escolha um centro pai que não esteja abaixo deste na árvore'],
+          })
+        }
+        cursor = base.centrosCusto.find((c) => c.id === cursor!.centroPaiId)
+      }
+    }
+
+    if (nivelDoCentro(base, pai.id) >= 3) {
+      return falha('REGRA_DE_NEGOCIO', 'A árvore tem no máximo 3 níveis, e este pai já está no terceiro.', {
+        campo: 'centroPaiId',
+        acoes: ['Escolha um centro pai de nível 1 ou 2', 'Ou crie este centro na raiz'],
+      })
+    }
+  }
+
+  if (centroId) {
+    const c = base.centrosCusto.find((x) => x.id === centroId)
+    if (!c) return falha('NAO_ENCONTRADO', 'Centro de custo não encontrado.')
+    c.codigo = codigo
+    c.nome = nome
+    c.descricao = dados.descricao.trim()
+    c.centroPaiId = dados.centroPaiId
+    return sucesso(c)
+  }
+
+  const novo: CentroCusto = {
+    id: `cc-${codigo.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    empresaId: null,
+    codigo,
+    nome,
+    descricao: dados.descricao.trim(),
+    centroPaiId: dados.centroPaiId,
+    ativo: true,
+  }
+  base.centrosCusto.push(novo)
+  return sucesso(novo)
+}
+
+/** RN-L43: inativar em cascata seria destruição silenciosa. Recusa e explica. */
+export function definirAtivoCentro(
+  base: BaseDados,
+  centroId: string,
+  ativo: boolean,
+): Resultado<CentroCusto> {
+  const c = base.centrosCusto.find((x) => x.id === centroId)
+  if (!c) return falha('NAO_ENCONTRADO', 'Centro de custo não encontrado.')
+
+  if (!ativo) {
+    const filhos = base.centrosCusto.filter((x) => x.centroPaiId === centroId && x.ativo)
+    if (filhos.length > 0) {
+      return falha(
+        'REGRA_DE_NEGOCIO',
+        `Este centro tem ${filhos.length} subcentro(s) ativo(s): ${filhos.map((f) => f.codigo).join(', ')}.`,
+        {
+          acoes: [
+            'Inative os subcentros primeiro',
+            'Inativar em cascata desligaria o que não está à vista',
+          ],
+        },
+      )
+    }
+  }
+
+  c.ativo = ativo
+  return sucesso(c)
+}
+
+export interface DadosContaBancaria {
+  bancoCodigo: string
+  bancoNome: string
+  agencia: string
+  numero: string
+  tipo: ContaBancaria['tipo']
+  apelido: string
+  saldoInicial: number
+  dataSaldoInicial: string
+  limiteCredito: number | null
+}
+
+export function salvarContaBancaria(
+  base: BaseDados,
+  contaId: string | null,
+  dados: DadosContaBancaria,
+): Resultado<ContaBancaria> {
+  const apelido = dados.apelido.trim()
+  if (apelido.length < 2) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe como a operação chama esta conta.', { campo: 'apelido' })
+  }
+  if (!/^[0-9]{3}$/.test(dados.bancoCodigo)) {
+    return falha('REGRA_DE_NEGOCIO', 'Escolha o banco.', { campo: 'bancoCodigo' })
+  }
+  if (!dados.agencia.trim() || !dados.numero.trim()) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe agência e número da conta.', {
+      campo: dados.agencia.trim() ? 'numero' : 'agencia',
+    })
+  }
+
+  const mesma = base.contasBancarias.find(
+    (c) =>
+      c.id !== contaId &&
+      c.bancoCodigo === dados.bancoCodigo &&
+      c.agencia === dados.agencia.trim() &&
+      c.numero === dados.numero.trim(),
+  )
+  if (mesma) {
+    return falha('REGRA_DE_NEGOCIO', `Esta conta já está cadastrada como "${mesma.apelido}".`, {
+      campo: 'numero',
+    })
+  }
+
+  if (contaId) {
+    const c = base.contasBancarias.find((x) => x.id === contaId)
+    if (!c) return falha('NAO_ENCONTRADO', 'Conta bancária não encontrada.')
+    c.apelido = apelido
+    c.limiteCredito = dados.limiteCredito
+    return sucesso(c)
+  }
+
+  const nova: ContaBancaria = {
+    id: `cb-${base.contasBancarias.length + 1}-${dados.bancoCodigo}`,
+    empresaId: 'emp-alfa',
+    bancoCodigo: dados.bancoCodigo,
+    bancoNome: dados.bancoNome,
+    agencia: dados.agencia.trim(),
+    numero: dados.numero.trim(),
+    tipo: dados.tipo,
+    apelido,
+    saldoInicial: dados.saldoInicial,
+    dataSaldoInicial: dados.dataSaldoInicial,
+    limiteCredito: dados.limiteCredito,
+    status: 'ATIVA',
+  }
+  base.contasBancarias.push(nova)
+  return sucesso(nova)
+}
+
+export function definirStatusConta(
+  base: BaseDados,
+  contaId: string,
+  status: ContaBancaria['status'],
+): Resultado<ContaBancaria> {
+  const c = base.contasBancarias.find((x) => x.id === contaId)
+  if (!c) return falha('NAO_ENCONTRADO', 'Conta bancária não encontrada.')
+  c.status = status
+  return sucesso(c)
+}
+
+export interface DadosMovimentacao {
+  tipo: 'ENTRADA' | 'SAIDA' | 'TAXA'
+  valor: number
+  dataMovimento: string
+  descricao: string
+}
+
+let seqMovimentacao = 0
+
+/** RN-L47: bloqueada recusa manual; inativa recusa tudo. */
+export function lancarMovimentacao(
+  base: BaseDados,
+  contaId: string,
+  dados: DadosMovimentacao,
+): Resultado<Movimentacao> {
+  const conta = base.contasBancarias.find((c) => c.id === contaId)
+  if (!conta) return falha('NAO_ENCONTRADO', 'Conta bancária não encontrada.', { campo: 'contaId' })
+
+  if (conta.status === 'INATIVA') {
+    return falha('REGRA_DE_NEGOCIO', 'Conta inativa não recebe movimentação.', {
+      campo: 'contaId',
+      acoes: ['Reative a conta ou escolha outra'],
+    })
+  }
+  if (conta.status === 'BLOQUEADA') {
+    return falha('REGRA_DE_NEGOCIO', `A conta "${conta.apelido}" está bloqueada para lançamento manual.`, {
+      campo: 'contaId',
+      acoes: [
+        'Desbloqueie a conta ou escolha outra',
+        'Importação de extrato e estorno seguem permitidos',
+      ],
+    })
+  }
+  if (!(dados.valor > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo — o sinal vem do tipo.', {
+      campo: 'valor',
+    })
+  }
+  if (dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva o lançamento: o extrato é lido por quem não estava aqui.', {
+      campo: 'descricao',
+    })
+  }
+
+  const nova: Movimentacao = {
+    id: `mov-n${++seqMovimentacao}`,
+    contaId,
+    tipo: dados.tipo,
+    valor: dados.valor,
+    dataMovimento: dados.dataMovimento,
+    descricao: dados.descricao.trim(),
+    transferenciaParId: null,
+    estornaId: null,
+    motivo: null,
+    conciliado: false,
+    conciliadoEm: null,
+    criadoEm: iso(HOJE),
+  }
+  base.movimentacoes.unshift(nova)
+  return sucesso(nova)
+}
+
+export interface DadosTransferencia {
+  contaOrigemId: string
+  contaDestinoId: string
+  valor: number
+  dataMovimento: string
+  descricao: string
+}
+
+/**
+ * RN-L45: as duas pernas, ou nenhuma.
+ *
+ * Aqui isso é trivial — é uma função síncrona sobre arrays. Vale escrever
+ * assim mesmo porque é o contrato que o `fetch` vai substituir: no servidor a
+ * garantia é a transação, e a assinatura precisa ser a mesma para que a troca
+ * não mude a tela.
+ */
+export function transferirEntreContas(
+  base: BaseDados,
+  dados: DadosTransferencia,
+): Resultado<{ saida: Movimentacao; entrada: Movimentacao }> {
+  if (dados.contaOrigemId === dados.contaDestinoId) {
+    return falha('REGRA_DE_NEGOCIO', 'Origem e destino têm de ser contas distintas.', {
+      campo: 'contaDestinoId',
+    })
+  }
+  const origem = base.contasBancarias.find((c) => c.id === dados.contaOrigemId)
+  const destino = base.contasBancarias.find((c) => c.id === dados.contaDestinoId)
+  if (!origem) return falha('NAO_ENCONTRADO', 'Conta de origem não encontrada.', { campo: 'contaOrigemId' })
+  if (!destino) return falha('NAO_ENCONTRADO', 'Conta de destino não encontrada.', { campo: 'contaDestinoId' })
+
+  for (const [conta, campo] of [
+    [origem, 'contaOrigemId'],
+    [destino, 'contaDestinoId'],
+  ] as const) {
+    if (conta.status !== 'ATIVA') {
+      return falha('REGRA_DE_NEGOCIO', `A conta "${conta.apelido}" não está ativa.`, { campo })
+    }
+  }
+  if (!(dados.valor > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valor' })
+  }
+
+  const saidaId = `mov-t${++seqMovimentacao}`
+  const entradaId = `mov-t${++seqMovimentacao}`
+  const comum = {
+    valor: dados.valor,
+    dataMovimento: dados.dataMovimento,
+    descricao: dados.descricao.trim() || 'Transferência entre contas',
+    estornaId: null,
+    motivo: null,
+    conciliado: false,
+    conciliadoEm: null,
+    criadoEm: iso(HOJE),
+  }
+  const saida: Movimentacao = {
+    ...comum,
+    id: saidaId,
+    contaId: origem.id,
+    tipo: 'TRANSFERENCIA_SAIDA',
+    transferenciaParId: entradaId,
+  }
+  const entrada: Movimentacao = {
+    ...comum,
+    id: entradaId,
+    contaId: destino.id,
+    tipo: 'TRANSFERENCIA_ENTRADA',
+    transferenciaParId: saidaId,
+  }
+  base.movimentacoes.unshift(saida, entrada)
+  return sucesso({ saida, entrada })
+}
+
+/**
+ * RN-L46: estorno é lançamento contrário, com o tipo invertido **aqui**.
+ *
+ * Deixar o chamador escolher o tipo permitiria estornar uma saída com outra
+ * saída, dobrando a despesa em vez de anulá-la — e o extrato continuaria
+ * fechando consigo mesmo.
+ */
+export function estornarMovimentacao(
+  base: BaseDados,
+  movimentoId: string,
+  motivo: string,
+): Resultado<Movimentacao> {
+  const original = base.movimentacoes.find((m) => m.id === movimentoId)
+  if (!original) return falha('NAO_ENCONTRADO', 'Movimentação não encontrada.')
+
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Explique o motivo do estorno.', { campo: 'motivo' })
+  }
+  if (original.estornaId || base.movimentacoes.some((m) => m.estornaId === movimentoId)) {
+    return falha('REGRA_DE_NEGOCIO', 'Esta movimentação já foi estornada, ou é ela mesma um estorno.', {
+      acoes: ['Lance uma movimentação nova explicando o ajuste'],
+    })
+  }
+
+  const inverso: Record<Movimentacao['tipo'], Movimentacao['tipo']> = {
+    ENTRADA: 'SAIDA',
+    SAIDA: 'ENTRADA',
+    TAXA: 'ENTRADA',
+    TRANSFERENCIA_ENTRADA: 'TRANSFERENCIA_SAIDA',
+    TRANSFERENCIA_SAIDA: 'TRANSFERENCIA_ENTRADA',
+  }
+
+  const estorno: Movimentacao = {
+    id: `mov-e${++seqMovimentacao}`,
+    contaId: original.contaId,
+    tipo: inverso[original.tipo],
+    valor: original.valor,
+    dataMovimento: iso(HOJE),
+    descricao: `Estorno de: ${original.descricao}`,
+    transferenciaParId: null,
+    estornaId: original.id,
+    motivo: motivo.trim(),
+    conciliado: false,
+    conciliadoEm: null,
+    criadoEm: iso(HOJE),
+  }
+  base.movimentacoes.unshift(estorno)
+  return sucesso(estorno)
+}
+
+/** Conciliar não muda o fato financeiro — muda o que sabemos sobre ele. */
+export function conciliarMovimentacao(
+  base: BaseDados,
+  movimentoId: string,
+  conciliado: boolean,
+): Resultado<Movimentacao> {
+  const m = base.movimentacoes.find((x) => x.id === movimentoId)
+  if (!m) return falha('NAO_ENCONTRADO', 'Movimentação não encontrada.')
+  m.conciliado = conciliado
+  m.conciliadoEm = conciliado ? iso(HOJE) : null
+  return sucesso(m)
 }
 
 /* ============================================================= contratos === */

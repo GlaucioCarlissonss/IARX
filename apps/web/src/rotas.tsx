@@ -16,6 +16,8 @@ import { Resultado } from './telas/Resultado'
 import { Usuarios } from './telas/Usuarios'
 import { Perfis } from './telas/Perfis'
 import { Entrar } from './telas/Entrar'
+import { CentrosCusto } from './telas/CentrosCusto'
+import { ContasBancarias } from './telas/ContasBancarias'
 import type { Permissao } from './lib/permissoes'
 import type { ReactNode } from 'react'
 
@@ -121,6 +123,22 @@ export function Rotas() {
           element={
             <Protegida permissao="financeiro:painel_executivo">
               <Resultado />
+            </Protegida>
+          }
+        />
+        <Route
+          path="centros-custo"
+          element={
+            <Protegida permissao="centro_custo:ler">
+              <CentrosCusto />
+            </Protegida>
+          }
+        />
+        <Route
+          path="contas-bancarias"
+          element={
+            <Protegida permissao="conta_bancaria:ler">
+              <ContasBancarias />
             </Protegida>
           }
         />

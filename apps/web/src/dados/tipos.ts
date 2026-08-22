@@ -558,7 +558,79 @@ export interface BaseDados {
   ordens: OrdemServico[]
   pecas: Peca[]
   faturas: Fatura[]
+  centrosCusto: CentroCusto[]
+  contasBancarias: ContaBancaria[]
+  movimentacoes: Movimentacao[]
   indicadores: Indicadores
+}
+
+/* ----------------------------------------------- base do financeiro */
+
+/**
+ * Centro de custo — dimensão de análise hierárquica, até três níveis.
+ *
+ * Filial é uma dimensão só, e insuficiente: duas equipes na mesma filial não se
+ * distinguem por ela. `empresaId` nulo é centro global do locatário, o caso
+ * comum de "Administrativo" — ausência deliberada de vínculo, não dado faltando.
+ */
+export interface CentroCusto {
+  id: string
+  empresaId: string | null
+  codigo: string
+  nome: string
+  descricao: string
+  centroPaiId: string | null
+  ativo: boolean
+}
+
+export type ContaTipo = 'CORRENTE' | 'POUPANCA' | 'PAGAMENTO'
+export type ContaStatus = 'ATIVA' | 'INATIVA' | 'BLOQUEADA'
+
+/**
+ * Conta bancária. **Sem campo de saldo**, de propósito.
+ *
+ * O saldo é derivado das movimentações por `saldoDaConta()`, espelhando
+ * `app.saldo_conta` do banco. Uma cópia guardada aqui divergiria na primeira
+ * escrita que esquecesse de atualizá-la, e a divergência apareceria como
+ * dinheiro que não fecha.
+ */
+export interface ContaBancaria {
+  id: string
+  empresaId: string
+  bancoCodigo: string
+  /** Nome do banco, para exibição. Derivado do código, não digitado. */
+  bancoNome: string
+  agencia: string
+  numero: string
+  tipo: ContaTipo
+  apelido: string
+  saldoInicial: number
+  dataSaldoInicial: string
+  limiteCredito: number | null
+  status: ContaStatus
+}
+
+export type MovimentoTipo =
+  | 'ENTRADA'
+  | 'SAIDA'
+  | 'TRANSFERENCIA_ENTRADA'
+  | 'TRANSFERENCIA_SAIDA'
+  | 'TAXA'
+
+export interface Movimentacao {
+  id: string
+  contaId: string
+  tipo: MovimentoTipo
+  /** Sempre positivo. O sinal é o tipo — como na migração 0017. */
+  valor: number
+  dataMovimento: string
+  descricao: string
+  transferenciaParId: string | null
+  estornaId: string | null
+  motivo: string | null
+  conciliado: boolean
+  conciliadoEm: string | null
+  criadoEm: string
 }
 
 /* ------------------------------------------------- tabelas comerciais */

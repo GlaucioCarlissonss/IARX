@@ -2415,3 +2415,137 @@ textarea {
   color: var(--cor-text-muted);
   text-align: center;
 }
+
+/* --------------------------------------------- árvore de centro de custo --- */
+.arvore-custo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--e2);
+}
+/* Indentação por nível como classe, e não como `padding` calculado em linha:
+   três níveis são finitos e conhecidos, e a régua fica no CSS junto do resto. */
+.arvore-custo__no--n2 {
+  margin-left: var(--e4);
+}
+.arvore-custo__no--n3 {
+  margin-left: calc(var(--e4) * 2);
+}
+.arvore-custo__linha {
+  display: grid;
+  gap: var(--e1);
+  padding: var(--e3);
+  border: 1px solid var(--cor-border);
+  border-left: 3px solid var(--cor-primary);
+  border-radius: var(--raio-1);
+  background: var(--cor-surface);
+}
+.arvore-custo__no--n2 > .arvore-custo__linha {
+  border-left-color: var(--cor-border-strong);
+}
+.arvore-custo__no--n3 > .arvore-custo__linha {
+  border-left-color: var(--cor-border);
+}
+.arvore-custo__identidade {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e2);
+}
+.arvore-custo__nome {
+  font-weight: 640;
+}
+.arvore-custo__descricao {
+  margin: 0;
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  max-width: 68ch;
+}
+
+/* ------------------------------------------------- cartões de conta ------- */
+.grade--contas {
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+.conta-cartao {
+  display: grid;
+  gap: var(--e1);
+  width: 100%;
+  text-align: start;
+  padding: var(--e2);
+  margin: calc(var(--e2) * -1);
+  border: 1px solid transparent;
+  border-radius: var(--raio-1);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.conta-cartao:hover {
+  background: var(--cor-surface-sunken);
+}
+.conta-cartao[aria-current='true'] {
+  border-color: var(--cor-primary);
+  background: var(--cor-primary-subtle-bg);
+}
+.conta-cartao__apelido {
+  font-weight: 640;
+  font-size: var(--t-14);
+}
+.conta-cartao__banco,
+.conta-cartao__limite {
+  font-size: var(--t-11);
+  color: var(--cor-text-muted);
+}
+.conta-cartao__saldo {
+  font-family: var(--fonte-dado);
+  font-size: var(--t-17);
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+}
+/* Entrada e saída não se distinguem só por cor: o sinal vem impresso ao lado,
+   porque cor sozinha não é informação acessível (WCAG 1.4.1). */
+.valor-entrada {
+  color: var(--cor-disponivel);
+  font-variant-numeric: tabular-nums;
+}
+.valor-saida {
+  color: var(--cor-critico);
+  font-variant-numeric: tabular-nums;
+}
+
+/* O nível do centro de custo: anunciado sempre, exibido só quando a indentação
+   não cabe. Em 320px o recuo de terceiro nível transbordava o corpo da página —
+   remover o recuo sem mostrar o nível apagaria a hierarquia para quem vê. */
+.arvore-custo__nivel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .arvore-custo__no--n2,
+  .arvore-custo__no--n3 {
+    margin-left: 0;
+  }
+  .arvore-custo__nivel {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+    font-size: var(--t-11);
+    color: var(--cor-text-muted);
+    border: 1px solid var(--cor-border);
+    border-radius: var(--raio-1);
+    padding: 0 var(--e1);
+  }
+}
+
+/* As três ações do nó cabem em uma linha num monitor e em duas num telefone.
+   A quebra é local, e não em `.linha`: mudar a regra global faria toda barra de
+   ações do sistema passar a quebrar, o que é outra decisão. */
+.arvore-custo__linha .linha {
+  flex-wrap: wrap;
+}

@@ -1239,7 +1239,7 @@ Permissões: `mapa:ler`, `mapa:filtro_compartilhar` — **já existem.**
 ## MÓDULO 8: Centros de Custo
 
 ### Status
-- [ ] Novo
+- [x] Novo — **✅ implementado** (migração 0017, API, tela)
 
 ### Descrição
 
@@ -1335,7 +1335,7 @@ previsto e só não tinha sido modelado.
 ## MÓDULO 9: Contas Bancárias
 
 ### Status
-- [ ] Novo
+- [x] Novo — **✅ implementado** (migração 0017, API, tela); importação de extrato OFX fica para a próxima rodada
 
 ### Descrição
 
@@ -2263,8 +2263,8 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
 | 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
-| **8** | **Centros de Custo** | — | Alta | Baixa | 🔲 Novo — base dos módulos 10–14 |
-| **9** | **Contas Bancárias** | — | Alta | Média | 🔲 Novo — base dos módulos 10, 11, 13 |
+| **8** | **Centros de Custo** | — | Alta | Baixa | ✅ Feito (Anexo R) |
+| **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
 | **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | 🔲 Novo — workflow de aprovação por alçada |
 | **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | 🔲 Novo — unifica com a persistência de fatura (D-20) |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |

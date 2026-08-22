@@ -31,6 +31,9 @@ import type {
   TabelaFranquia,
   TabelaPreco,
   Tecnico,
+  CentroCusto,
+  ContaBancaria,
+  Movimentacao,
   PerfilGravado,
   Usuario,
 } from './tipos'
@@ -1119,6 +1122,102 @@ export function gerarBase(semente = 20260730): BaseDados {
   /* ----------------------------------------------------------- indicadores */
   const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
+  /* ------------------------------------------ base do financeiro */
+
+  /** Ao centavo. Meia unidade de `numeric(15,4)` não existe em conta corrente. */
+  const cent = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
+
+  /*
+   * Centros de custo e contas da operação.
+   *
+   * Estrutura, não valores de negócio: os nomes são as áreas que uma locadora
+   * de TI tem por definição — operação de campo, logística, administrativo,
+   * comercial — e os bancos são os códigos FEBRABAN reais das instituições.
+   * Nenhum saldo, tarifa ou limite é apresentado como número de um cliente:
+   * são valores da demonstração, derivados do porte da própria massa gerada.
+   */
+  const centrosCusto: CentroCusto[] = [
+    { id: 'cc-oper', empresaId: null, codigo: 'OPER', nome: 'Operação', descricao: 'Campo, logística e assistência técnica.', centroPaiId: null, ativo: true },
+    { id: 'cc-oper-campo', empresaId: null, codigo: 'OPER-CAMPO', nome: 'Atendimento em campo', descricao: 'Deslocamento e mão de obra dos técnicos.', centroPaiId: 'cc-oper', ativo: true },
+    { id: 'cc-oper-log', empresaId: null, codigo: 'OPER-LOG', nome: 'Logística', descricao: 'Frete, armazenagem e movimentação de parque.', centroPaiId: 'cc-oper', ativo: true },
+    { id: 'cc-oper-campo-sp', empresaId: null, codigo: 'OPER-CAMPO-SP', nome: 'Campo — São Paulo', descricao: 'Terceiro nível: o máximo que a árvore aceita.', centroPaiId: 'cc-oper-campo', ativo: true },
+    { id: 'cc-adm', empresaId: null, codigo: 'ADM', nome: 'Administrativo', descricao: 'Estrutura, licenças e serviços de apoio.', centroPaiId: null, ativo: true },
+    { id: 'cc-adm-ti', empresaId: null, codigo: 'ADM-TI', nome: 'Tecnologia interna', descricao: 'Licenças, links e equipamentos de uso próprio.', centroPaiId: 'cc-adm', ativo: true },
+    { id: 'cc-com', empresaId: null, codigo: 'COM', nome: 'Comercial', descricao: 'Prospecção, propostas e pós-venda.', centroPaiId: null, ativo: true },
+    // Um inativo: é o estado que a tela precisa saber exibir e que uma massa só
+    // de centros ativos esconderia.
+    { id: 'cc-desc', empresaId: null, codigo: 'DESC', nome: 'Projeto descontinuado', descricao: 'Mantido para não romper o histórico de rateio.', centroPaiId: null, ativo: false },
+  ]
+
+  const contasBancarias: ContaBancaria[] = [
+    { id: 'cb-oper', empresaId: 'emp-alfa', bancoCodigo: '341', bancoNome: 'Itaú Unibanco', agencia: '0912', numero: '45871-3', tipo: 'CORRENTE', apelido: 'Operação', saldoInicial: 418_500, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: 150_000, status: 'ATIVA' },
+    { id: 'cb-folha', empresaId: 'emp-alfa', bancoCodigo: '001', bancoNome: 'Banco do Brasil', agencia: '3155', numero: '21004-8', tipo: 'CORRENTE', apelido: 'Folha de pagamento', saldoInicial: 96_200, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: null, status: 'ATIVA' },
+    { id: 'cb-invest', empresaId: 'emp-alfa', bancoCodigo: '033', bancoNome: 'Santander', agencia: '0447', numero: '13002-6', tipo: 'POUPANCA', apelido: 'Reserva de renovação de parque', saldoInicial: 640_000, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: null, status: 'ATIVA' },
+    // Uma bloqueada: exercita a recusa de lançamento manual (RN-L47).
+    { id: 'cb-antiga', empresaId: 'emp-alfa', bancoCodigo: '237', bancoNome: 'Bradesco', agencia: '1188', numero: '7740-2', tipo: 'CORRENTE', apelido: 'Conta antiga (em encerramento)', saldoInicial: 3_140, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: null, status: 'BLOQUEADA' },
+  ]
+
+  /*
+   * Movimentações derivadas das faturas e das ordens já geradas, e não sorteadas
+   * à parte.
+   *
+   * Sorteadas, o extrato contaria uma história diferente da do faturamento —
+   * duas verdades sobre o mesmo mês. Derivando, o saldo da conta de operação
+   * reflete a receita e o custo que o resto da aplicação mostra.
+   */
+  const movimentacoes: Movimentacao[] = []
+  let seqMov = 0
+  const movId = () => `mov-${String(++seqMov).padStart(4, '0')}`
+
+  for (const f of faturas.filter((x) => x.status === 'PAGA').slice(0, 40)) {
+    movimentacoes.push({
+      id: movId(),
+      contaId: 'cb-oper',
+      tipo: 'ENTRADA',
+      valor: cent(f.valorLiquido),
+      dataMovimento: f.vencimento,
+      descricao: `Recebimento da fatura ${f.numero}`,
+      transferenciaParId: null,
+      estornaId: null,
+      motivo: null,
+      // Os mais antigos já conciliados, os recentes não: é a fila de trabalho.
+      conciliado: f.vencimento < iso(somarDias(HOJE, -20)),
+      conciliadoEm: f.vencimento < iso(somarDias(HOJE, -20)) ? f.vencimento : null,
+      criadoEm: f.vencimento,
+    })
+  }
+
+  const custoDa = (o: OrdemServico) => cent(o.custoMaoObra + o.custoPecas)
+
+  for (const o of ordens.filter((x) => x.status === 'CONCLUIDA' && custoDa(x) > 0).slice(0, 30)) {
+    movimentacoes.push({
+      id: movId(),
+      contaId: 'cb-oper',
+      tipo: 'SAIDA',
+      valor: custoDa(o),
+      dataMovimento: o.concluidaEm ?? iso(HOJE),
+      descricao: `Custo do chamado ${o.numero}`,
+      transferenciaParId: null,
+      estornaId: null,
+      motivo: null,
+      conciliado: false,
+      conciliadoEm: null,
+      criadoEm: o.concluidaEm ?? iso(HOJE),
+    })
+  }
+
+  // Uma transferência de verdade, com as duas pernas se referenciando: é a
+  // única forma de a tela de extrato exercitar o par.
+  const saidaId = movId()
+  const entradaId = movId()
+  const dataTransf = iso(somarDias(HOJE, -12))
+  movimentacoes.push(
+    { id: saidaId, contaId: 'cb-oper', tipo: 'TRANSFERENCIA_SAIDA', valor: 180_000, dataMovimento: dataTransf, descricao: 'Provisão de folha do mês', transferenciaParId: entradaId, estornaId: null, motivo: null, conciliado: true, conciliadoEm: dataTransf, criadoEm: dataTransf },
+    { id: entradaId, contaId: 'cb-folha', tipo: 'TRANSFERENCIA_ENTRADA', valor: 180_000, dataMovimento: dataTransf, descricao: 'Provisão de folha do mês', transferenciaParId: saidaId, estornaId: null, motivo: null, conciliado: true, conciliadoEm: dataTransf, criadoEm: dataTransf },
+  )
+
+  movimentacoes.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+
   return {
     competencias: comps,
     regioes: REGIOES,
@@ -1142,6 +1241,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     ordens,
     pecas,
     faturas,
+    centrosCusto,
+    contasBancarias,
+    movimentacoes,
     indicadores,
   }
 }

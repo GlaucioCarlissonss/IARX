@@ -26,6 +26,8 @@ const ROTAS = [
   { hash: '#/resultado', nome: 'resultado', titulo: 'Resultado operacional' },
   { hash: '#/usuarios', nome: 'usuários', titulo: 'Usuários' },
   { hash: '#/perfis', nome: 'perfis de acesso', titulo: 'Perfis de acesso' },
+  { hash: '#/centros-custo', nome: 'centros de custo', titulo: 'Centros de custo' },
+  { hash: '#/contas-bancarias', nome: 'contas bancárias', titulo: 'Contas bancárias' },
   { hash: '#/entrar', nome: 'entrar', titulo: 'Entrar' },
 ]
 
@@ -2099,6 +2101,216 @@ test('entrar assume o perfil da conta, e não o do último que usou o navegador'
 
   await expect(page.getByRole('heading', { level: 1, name: 'O que exige ação hoje' })).toBeVisible()
   await expect(menu.getByRole('link', { name: /Usuários/ })).toHaveCount(0)
+})
+
+/* ==================================================================== */
+/* Centros de custo e contas bancárias                                  */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem: **o saldo é o extrato**.
+ *
+ * Não existe campo de saldo em nenhuma camada — nem na tabela, nem no contrato,
+ * nem no modelo do front. É essa ausência que garante que os dois não divergem,
+ * e o defeito que ela evita não aparece como erro: aparece como dinheiro que
+ * não fecha, meses depois, sem pista de onde começou.
+ */
+
+test('a árvore de centros mostra o nível, e o quarto não é oferecido', async ({ page }) => {
+  await abrir(page, { hash: '#/centros-custo' })
+
+  const arvore = page.getByRole('list', { name: 'Centros de custo' })
+  await expect(arvore).toBeVisible()
+
+  // Três níveis existem na massa: sem eles a tela não exercita o limite.
+  await expect(arvore.locator('.arvore-custo__no--n3').first()).toBeVisible()
+
+  // No terceiro nível o botão de subcentro está desabilitado, não ausente: a
+  // ausência esconderia que a ação existe, o desabilitado com motivo diz por
+  // que ela não se aplica ali.
+  const terceiro = arvore.locator('.arvore-custo__no--n3').first()
+  await expect(terceiro.getByRole('button', { name: /^Subcentro/ })).toBeDisabled()
+
+  const primeiro = arvore.locator('.arvore-custo__no--n1').first()
+  await expect(primeiro.getByRole('button', { name: /^Subcentro/ })).toBeEnabled()
+})
+
+test('inativar centro com subcentro ativo é recusado com a razão à vista', async ({ page }) => {
+  await abrir(page, { hash: '#/centros-custo' })
+
+  const arvore = page.getByRole('list', { name: 'Centros de custo' })
+  const pai = arvore.locator('.arvore-custo__no--n1').first()
+  await pai.getByRole('button', { name: /^Inativar/ }).click()
+
+  // A recusa vem com o que fazer em seguida. Inativar em cascata desligaria uma
+  // subárvore que o operador não está vendo.
+  const aviso = page.getByText(/subcentro\(s\) ativo\(s\)/)
+  await expect(aviso).toBeVisible()
+  await expect(page.getByText(/Inative os subcentros primeiro/)).toBeVisible()
+})
+
+test('o seletor de centro pai não oferece nó de terceiro nível', async ({ page }) => {
+  await abrir(page, { hash: '#/centros-custo' })
+  await page.getByRole('button', { name: 'Novo centro' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+
+  // Oferecer um nó cheio deixaria o operador escolher e só descobrir a recusa
+  // depois de salvar.
+  const opcoes = await dialogo.getByLabel('Centro pai').locator('option').allInnerTexts()
+  expect(opcoes.some((o) => /OPER-CAMPO-SP/.test(o))).toBe(false)
+  expect(opcoes.some((o) => /^OPER —/.test(o))).toBe(true)
+})
+
+test('o saldo exibido é a soma do extrato, e muda com o lançamento', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+
+  const consolidado = page.locator('.metrica', { hasText: 'Saldo consolidado' }).locator('.metrica__valor')
+  const antes = await consolidado.textContent()
+
+  // Escolhe a conta de operação e lança uma saída conhecida.
+  await page.getByRole('button', { name: /Operação/ }).first().click()
+  await page.getByRole('button', { name: /^Lançar/ }).first().click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Tipo').selectOption('SAIDA')
+  await dialogo.getByLabel('Valor').fill('1234.56')
+  await dialogo.getByLabel('Descrição').fill('Lançamento do teste de ponta a ponta')
+  await dialogo.getByRole('button', { name: 'Lançar', exact: true }).click()
+
+  await expect(page.getByText('Lançamento registrado')).toBeVisible()
+
+  // O saldo consolidado tem de ter mudado: se não mudou, ele é um número
+  // guardado em algum lugar e não a soma do extrato.
+  await expect(consolidado).not.toHaveText(antes)
+  // Preso à célula: o texto também aparece no rótulo só-leitor do botão de
+  // estornar da mesma linha, e sem `.first()` o localizador fica ambíguo.
+  await expect(
+    page.getByRole('table').getByText('Lançamento do teste de ponta a ponta').first(),
+  ).toBeVisible()
+})
+
+test('o valor é sempre positivo, e o sinal vem do tipo', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: /Operação/ }).first().click()
+  await page.getByRole('button', { name: /^Lançar/ }).first().click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Valor').fill('-50')
+  await dialogo.getByLabel('Descrição').fill('Tentativa com valor negativo')
+  await dialogo.getByRole('button', { name: 'Lançar', exact: true }).click()
+
+  // Permitir negativo criaria duas formas de gravar a mesma saída, e toda soma
+  // passaria a precisar saber qual das duas está lendo.
+  await expect(page.getByRole('alert')).toContainText(/positivo/)
+})
+
+test('conta bloqueada não oferece lançar, e diz por quê', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+
+  const bloqueada = page.getByRole('button', { name: /Conta antiga/ }).first()
+  await expect(bloqueada).toBeVisible()
+
+  // Nem oferece a ação, e explica: importação de extrato e estorno seguem
+  // permitidos, porque bloquear no meio de uma baixa em curso não deve travá-la.
+  const cartao = bloqueada.locator('..')
+  await expect(cartao.getByRole('button', { name: /^Lançar/ })).toHaveCount(0)
+  await expect(cartao.getByText(/Importação de extrato e estorno seguem permitidos/)).toBeVisible()
+})
+
+test('a transferência gera as duas pernas, uma em cada conta', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: 'Transferir' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Valor').fill('7500')
+  await dialogo.getByLabel('Descrição').fill('Transferência do teste')
+  await dialogo.getByRole('button', { name: 'Transferir', exact: true }).click()
+
+  await expect(page.getByText('Transferência registrada')).toBeVisible()
+
+  // Cada ponta aparece no extrato da sua conta. Uma perna órfã é dinheiro que
+  // saiu de uma conta e não entrou em nenhuma.
+  const tabela = page.getByRole('table')
+  await expect(tabela.getByText('Transferência do teste').first()).toBeVisible()
+  await expect(tabela.getByText(/par vinculado/).first()).toBeVisible()
+})
+
+test('transferir para a mesma conta é recusado', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: 'Transferir' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  const origem = await dialogo.getByLabel('De', { exact: true }).inputValue()
+  await dialogo.getByLabel('Para', { exact: true }).selectOption(origem)
+  await dialogo.getByLabel('Valor').fill('100')
+  await dialogo.getByRole('button', { name: 'Transferir', exact: true }).click()
+
+  await expect(page.getByRole('alert')).toContainText(/contas distintas/)
+})
+
+test('o extrato não oferece editar nem excluir — só estornar', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: /Operação/ }).first().click()
+
+  const tabela = page.getByRole('table')
+  await expect(tabela).toBeVisible()
+
+  // Movimentação bancária é registro imutável. Editar ou excluir reescreveria
+  // histórico; o que existe é lançamento contrário, com motivo.
+  await expect(tabela.getByRole('button', { name: /^Editar/ })).toHaveCount(0)
+  await expect(tabela.getByRole('button', { name: /^Excluir/ })).toHaveCount(0)
+  await expect(tabela.getByRole('button', { name: /^Estornar/ }).first()).toBeVisible()
+})
+
+test('o estorno exige motivo e mantém a movimentação original no extrato', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: /Operação/ }).first().click()
+
+  const tabela = page.getByRole('table')
+  const linha = tabela.getByRole('row').filter({ hasText: /Custo do chamado|Recebimento da fatura/ }).first()
+  const descricao = (await linha.innerText()).split('\n')[1] ?? ''
+  await linha.getByRole('button', { name: /^Estornar/ }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByRole('button', { name: 'Estornar', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText(/motivo/i)
+
+  await dialogo.getByLabel('Motivo').fill('lançamento em duplicidade identificado na conciliação')
+  await dialogo.getByRole('button', { name: 'Estornar', exact: true }).click()
+  await expect(page.getByText('Estorno lançado')).toBeVisible()
+
+  // Os dois ficam: histórico não é reescrito.
+  await expect(tabela.getByText(`Estorno de: ${descricao}`.trim()).first()).toBeVisible()
+})
+
+test('conciliar e desconciliar não mexem no saldo', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+  await page.getByRole('button', { name: /Operação/ }).first().click()
+
+  const consolidado = page.locator('.metrica', { hasText: 'Saldo consolidado' }).locator('.metrica__valor')
+  const antes = await consolidado.textContent()
+
+  const botao = page.getByRole('table').getByRole('button', { name: /^Conciliar/ }).first()
+  await botao.click()
+  await expect(consolidado).toHaveText(antes)
+
+  // Conciliar não muda o fato financeiro — muda o que sabemos sobre ele.
+  const conciliado = page.getByRole('table').getByRole('button', { name: /^Conciliado/ }).first()
+  await expect(conciliado).toBeVisible()
+  await conciliado.click()
+  await expect(consolidado).toHaveText(antes)
+})
+
+test('quem só lê o financeiro não vê ação de escrita', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-bancarias' })
+
+  // O perfil de suporte não tem `conta_bancaria:ler`: a tela nem abre para ele,
+  // e é o comportamento certo — o menu também não a oferece.
+  await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
+  await expect(page.getByText(/não faz parte do seu perfil/)).toBeVisible()
+  await expect(page.getByRole('navigation').getByRole('link', { name: /Contas bancárias/ })).toHaveCount(0)
 })
 
 /* ==================================================================== */

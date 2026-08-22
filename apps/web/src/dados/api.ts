@@ -112,6 +112,10 @@ export const api = {
   tecnicos: () => responder(() => [...BASE.tecnicos]),
   fornecedores: () => responder(() => [...BASE.fornecedores]),
   usuarios: () => responder(() => [...BASE.usuarios]),
+  centrosCusto: () => responder(() => [...BASE.centrosCusto]),
+  contasBancarias: () => responder(() => [...BASE.contasBancarias]),
+  extrato: (contaId: string) =>
+    responder(() => BASE.movimentacoes.filter((m) => m.contaId === contaId)),
   perfis: () => responder(() => [...BASE.perfis]),
   notasFiscais: () => responder(() => [...BASE.notasFiscais]),
   anexos: (entidade: EntidadeAnexo, entidadeId: string) =>
@@ -144,6 +148,23 @@ export const api = {
   ativarUsuario: (usuarioId: string) => executar(() => cmd.ativarUsuario(BASE, usuarioId)),
   salvarPerfil: (perfilId: string | null, d: cmd.DadosPerfil) =>
     executar(() => cmd.salvarPerfil(BASE, perfilId, d)),
+
+  salvarCentroCusto: (centroId: string | null, d: cmd.DadosCentroCusto) =>
+    executar(() => cmd.salvarCentroCusto(BASE, centroId, d)),
+  definirAtivoCentro: (centroId: string, ativo: boolean) =>
+    executar(() => cmd.definirAtivoCentro(BASE, centroId, ativo)),
+  salvarContaBancaria: (contaId: string | null, d: cmd.DadosContaBancaria) =>
+    executar(() => cmd.salvarContaBancaria(BASE, contaId, d)),
+  definirStatusConta: (contaId: string, status: 'ATIVA' | 'INATIVA' | 'BLOQUEADA') =>
+    executar(() => cmd.definirStatusConta(BASE, contaId, status)),
+  lancarMovimentacao: (contaId: string, d: cmd.DadosMovimentacao) =>
+    executar(() => cmd.lancarMovimentacao(BASE, contaId, d)),
+  transferirEntreContas: (d: cmd.DadosTransferencia) =>
+    executar(() => cmd.transferirEntreContas(BASE, d)),
+  estornarMovimentacao: (movimentoId: string, motivo: string) =>
+    executar(() => cmd.estornarMovimentacao(BASE, movimentoId, motivo)),
+  conciliarMovimentacao: (movimentoId: string, conciliado: boolean) =>
+    executar(() => cmd.conciliarMovimentacao(BASE, movimentoId, conciliado)),
 
   /*
    * Autenticação passa por `responder`, e não por `executar`.
