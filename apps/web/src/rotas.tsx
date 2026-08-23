@@ -18,6 +18,7 @@ import { Perfis } from './telas/Perfis'
 import { Entrar } from './telas/Entrar'
 import { CentrosCusto } from './telas/CentrosCusto'
 import { ContasBancarias } from './telas/ContasBancarias'
+import { ContasPagar } from './telas/ContasPagar'
 import type { Permissao } from './lib/permissoes'
 import type { ReactNode } from 'react'
 
@@ -139,6 +140,14 @@ export function Rotas() {
           element={
             <Protegida permissao="conta_bancaria:ler">
               <ContasBancarias />
+            </Protegida>
+          }
+        />
+        <Route
+          path="contas-pagar"
+          element={
+            <Protegida permissao="pagar:ler">
+              <ContasPagar />
             </Protegida>
           }
         />

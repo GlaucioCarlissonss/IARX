@@ -3,23 +3,31 @@ import { categoriaPorCodigo, modeloPorId } from './catalogo'
 import { arredondar, chaveValida, decomporChave, diferencaTotal, formatarCnpj, somenteDigitos } from './nfe'
 import type {
   Anexo,
+  AprovacaoPagar,
   BaseDados,
   CategoriaAnexo,
   CentroCusto,
+  ClassificacaoPagar,
   Cliente,
   ContaBancaria,
   Contrato,
   ContratoItem,
+  DelegacaoAprovacao,
   EntidadeAnexo,
   Equipamento,
+  FormaPagamento,
   ModalidadeCobranca,
   Movimentacao,
   NotaFiscal,
   NotaFiscalItem,
   OrdemServico,
+  PagamentoPagar,
   Peca,
   PerfilGravado,
   PrecisaoGeo,
+  RateioPagar,
+  StatusPagar,
+  TituloPagar,
   Usuario,
 } from './tipos'
 
@@ -2564,6 +2572,707 @@ export function cancelarNota(base: BaseDados, notaId: string, motivo: string): R
   nota.canceladaEm = iso(HOJE)
   nota.motivoCancelamento = motivo.trim()
   return sucesso(nota)
+}
+
+/* ------------------------------------------------------- contas a pagar -- */
+
+/**
+ * As nove regras do Módulo 10, replicadas aqui.
+ *
+ * No servidor elas são gatilhos e restrições da migração 0019 — o banco é a
+ * autoridade, não este arquivo. O que existe aqui é a mesma regra escrita uma
+ * segunda vez para que a tela recuse antes de pedir, com a mensagem certa. A
+ * duplicação é assumida e tem contrapartida: os testes de banco e os desta
+ * suíte falham juntos se a regra mudar num lado só.
+ */
+
+/**
+ * RN-F01 — quantos níveis de aprovação um valor exige.
+ *
+ * É a contagem de faixas cadastradas **abaixo** do valor, no máximo três. Sem
+ * faixa nenhuma cadastrada o resultado é zero, e o título nasce aprovado: é o
+ * comportamento correto de uma operação que ainda não configurou alçada, e não
+ * um buraco — o buraco seria aprovar sozinho um valor acima de uma faixa que
+ * existe.
+ */
+export function niveisExigidos(base: BaseDados, valor: number): number {
+  const limites = [...new Set(base.alcadas.map((a) => a.limiteValor))]
+  return Math.min(limites.filter((l) => l < valor).length, 3)
+}
+
+/** As faixas distintas, em ordem. A tela usa para explicar de onde vem o número. */
+export function limitesAlcada(base: BaseDados): number[] {
+  return [...new Set(base.alcadas.map((a) => a.limiteValor))].sort((a, b) => a - b)
+}
+
+/**
+ * RN-F03 — o posto de um usuário: 0 se não tem alçada, 1 a 3 conforme a faixa.
+ *
+ * O posto é a **posição** da faixa, não o valor: é o que permite ao cadastro
+ * mudar de 50 mil para 80 mil sem reescrever a regra de quem decide o quê.
+ */
+export function postoAlcada(base: BaseDados, usuarioId: string): number {
+  const usuario = base.usuarios.find((u) => u.id === usuarioId)
+  if (!usuario) return 0
+  const limites = limitesAlcada(base)
+  const meus = base.alcadas
+    .filter((a) => usuario.perfilIds.includes(a.perfilId))
+    .map((a) => limites.indexOf(a.limiteValor) + 1)
+  return meus.length === 0 ? 0 : Math.max(...meus)
+}
+
+/** Delegações vigentes recebidas por alguém, na data de referência. */
+export function delegacoesVigentes(
+  base: BaseDados,
+  delegadoId: string,
+  emIso = iso(HOJE),
+): DelegacaoAprovacao[] {
+  return base.delegacoes.filter(
+    (d) => d.delegadoId === delegadoId && d.inicio <= emIso && d.fim >= emIso,
+  )
+}
+
+/**
+ * Pode decidir um nível: por posto próprio **ou** por delegação vigente.
+ *
+ * Posto ≥ nível, e não posto exatamente igual: se um diretor não pudesse
+ * decidir o nível 1, as férias do gerente travariam a fila com o diretor
+ * sentado ao lado — e a saída seria emprestar credencial, que é pior que o
+ * problema.
+ */
+export function podeDecidirNivel(
+  base: BaseDados,
+  usuarioId: string,
+  nivel: number,
+  emIso = iso(HOJE),
+): boolean {
+  if (postoAlcada(base, usuarioId) >= nivel) return true
+  return delegacoesVigentes(base, usuarioId, emIso).some((d) => d.nivel >= nivel)
+}
+
+/** O nível ainda pendente da rodada corrente, ou null se não há. */
+export function nivelPendente(titulo: TituloPagar): AprovacaoPagar | null {
+  const rodada = Math.max(0, ...titulo.aprovacoes.map((a) => a.rodada))
+  const daRodada = titulo.aprovacoes
+    .filter((a) => a.rodada === rodada)
+    .sort((a, b) => a.nivel - b.nivel)
+  for (const ap of daRodada) {
+    if (ap.decisao === null) return ap
+    // RN-F02: uma rejeição interrompe a sequência — não há nível seguinte a
+    // decidir enquanto o título não for corrigido e reenviado.
+    if (ap.decisao === 'REJEITADO') return null
+  }
+  return null
+}
+
+/** Valor devido: o ajuste quando existe, o original quando não. Derivado. */
+export function valorDevidoDe(titulo: TituloPagar): number {
+  return titulo.valorAjustado ?? titulo.valorOriginal
+}
+
+/** Total pago, ignorando estornos. */
+export function totalPago(titulo: TituloPagar): number {
+  return arredondar(
+    titulo.pagamentos.filter((p) => p.estornadoEm === null).reduce((t, p) => t + p.valorPago, 0),
+  )
+}
+
+/** Saldo em aberto. Zero = quitado. Derivado, nunca gravado. */
+export function saldoDoTitulo(titulo: TituloPagar): number {
+  return arredondar(valorDevidoDe(titulo) - totalPago(titulo))
+}
+
+/** Um título parcelado: o pai é relatório, as filhas é que pagam (RN-F08). */
+export function ehPaiDeParcelas(base: BaseDados, titulo: TituloPagar): boolean {
+  return base.titulosPagar.some((t) => t.tituloPaiId === titulo.id)
+}
+
+export function parcelasDe(base: BaseDados, paiId: string): TituloPagar[] {
+  return base.titulosPagar
+    .filter((t) => t.tituloPaiId === paiId)
+    .sort((a, b) => (a.parcelaNumero ?? 0) - (b.parcelaNumero ?? 0))
+}
+
+/**
+ * A fila de um aprovador.
+ *
+ * Três condições, e a terceira é a que costuma faltar: o nível pendente é
+ * decidível por ele, o título está em aprovação, e **ele não é quem lançou**.
+ * Oferecer na fila o que a RN-F04 vai recusar é convidar ao erro e ensinar a
+ * desconfiar da lista.
+ */
+export function filaDeAprovacao(base: BaseDados, usuarioId: string): TituloPagar[] {
+  return base.titulosPagar.filter((t) => {
+    if (t.status !== 'EM_APROVACAO') return false
+    if (t.criadoPor === usuarioId) return false
+    const pendente = nivelPendente(t)
+    return pendente !== null && podeDecidirNivel(base, usuarioId, pendente.nivel)
+  })
+}
+
+export interface DadosTituloPagar {
+  fornecedorId: string | null
+  descricao: string
+  classificacao: ClassificacaoPagar
+  contratoFornecedorRef: string | null
+  valorOriginal: number
+  dataEmissao: string
+  dataVencimento: string
+  /** 1 = título único. Acima de 1, gera o pai e as filhas mensais. */
+  parcelas: number
+  rateio: RateioPagar[]
+}
+
+let seqTitulo = 0
+
+/** Abre a rodada 1 de aprovação, e devolve o status inicial do título. */
+function abrirAprovacoes(base: BaseDados, valor: number): {
+  aprovacoes: AprovacaoPagar[]
+  status: StatusPagar
+} {
+  const niveis = niveisExigidos(base, valor)
+  if (niveis === 0) return { aprovacoes: [], status: 'APROVADO' }
+  return {
+    status: 'EM_APROVACAO',
+    aprovacoes: Array.from({ length: niveis }, (_, i) => ({
+      nivel: i + 1,
+      rodada: 1,
+      aprovadorId: null,
+      decisao: null,
+      decididoEm: null,
+      justificativa: null,
+      delegadoDe: null,
+    })),
+  }
+}
+
+/**
+ * Lança um título — ou um parcelamento inteiro, nunca pela metade.
+ *
+ * Quando há parcelas, o pai carrega o total e as filhas o valor mensal. A
+ * aprovação é do **pai**: é ele que representa o compromisso, e é o valor dele
+ * que a alçada avalia. Aprovar parcela por parcela deixaria um parcelamento de
+ * trezentos mil passar como doze títulos de vinte e cinco mil, cada um abaixo
+ * do nível que a soma exige.
+ */
+export function criarTituloPagar(
+  base: BaseDados,
+  criadoPor: string,
+  dados: DadosTituloPagar,
+): Resultado<TituloPagar> {
+  if (dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva o título: quem aprova precisa saber o que é.', {
+      campo: 'descricao',
+    })
+  }
+  if (!(dados.valorOriginal > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valorOriginal' })
+  }
+  if (dados.dataVencimento < dados.dataEmissao) {
+    return falha('REGRA_DE_NEGOCIO', 'O vencimento não pode ser anterior à emissão.', {
+      campo: 'dataVencimento',
+    })
+  }
+  if (dados.parcelas < 1 || dados.parcelas > 120) {
+    return falha('REGRA_DE_NEGOCIO', 'O parcelamento vai de 1 a 120 parcelas.', { campo: 'parcelas' })
+  }
+
+  // RN-F05: rateio vazio é legítimo (o título fica sem dimensão de análise);
+  // rateio pela metade não é — sobraria despesa sem centro de custo, e o
+  // relatório por área passaria a mentir sem avisar.
+  const soma = arredondar(dados.rateio.reduce((t, r) => t + r.percentual, 0))
+  if (dados.rateio.length > 0 && Math.abs(soma - 100) > 0.005) {
+    return falha('REGRA_DE_NEGOCIO', `O rateio soma ${soma}% — tem de fechar em 100%.`, {
+      campo: 'rateio',
+      acoes: ['Ajuste os percentuais', 'Ou remova o rateio inteiro'],
+    })
+  }
+  const centros = new Set(dados.rateio.map((r) => r.centroCustoId))
+  if (centros.size !== dados.rateio.length) {
+    return falha('REGRA_DE_NEGOCIO', 'O mesmo centro de custo aparece duas vezes no rateio.', {
+      campo: 'rateio',
+      acoes: ['Some os percentuais numa linha só'],
+    })
+  }
+  for (const r of dados.rateio) {
+    const centro = base.centrosCusto.find((c) => c.id === r.centroCustoId)
+    if (!centro) return falha('NAO_ENCONTRADO', 'Centro de custo não encontrado.', { campo: 'rateio' })
+    if (!centro.ativo) {
+      return falha('REGRA_DE_NEGOCIO', `O centro "${centro.codigo} — ${centro.nome}" está inativo.`, {
+        campo: 'rateio',
+        acoes: ['Escolha um centro ativo'],
+      })
+    }
+  }
+
+  const { aprovacoes, status } = abrirAprovacoes(base, dados.valorOriginal)
+  const parcelado = dados.parcelas > 1
+  const agora = iso(HOJE)
+
+  const pai: TituloPagar = {
+    id: `tpg-n${++seqTitulo}`,
+    fornecedorId: dados.fornecedorId,
+    descricao: dados.descricao.trim(),
+    classificacao: dados.classificacao,
+    contratoFornecedorRef: dados.contratoFornecedorRef?.trim() || null,
+    valorOriginal: arredondar(dados.valorOriginal),
+    valorAjustado: null,
+    motivoAjuste: null,
+    dataEmissao: dados.dataEmissao,
+    dataVencimento: dados.dataVencimento,
+    status,
+    tituloPaiId: null,
+    parcelaNumero: null,
+    // O pai sabe que são doze e não é nenhuma delas: total sem número.
+    parcelaTotal: parcelado ? dados.parcelas : null,
+    criadoPor,
+    criadoEm: agora,
+    rateio: dados.rateio.map((r) => ({ ...r })),
+    aprovacoes,
+    pagamentos: [],
+  }
+  base.titulosPagar.unshift(pai)
+
+  if (parcelado) {
+    // A última parcela absorve a diferença de arredondamento. Distribuir o
+    // centavo por igual faria a soma das parcelas divergir do total do pai — e
+    // é a soma que o fornecedor cobra.
+    const base100 = Math.floor((dados.valorOriginal * 100) / dados.parcelas)
+    for (let i = 1; i <= dados.parcelas; i++) {
+      const centavos =
+        i < dados.parcelas ? base100 : Math.round(dados.valorOriginal * 100) - base100 * (dados.parcelas - 1)
+      base.titulosPagar.unshift({
+        ...pai,
+        id: `tpg-n${++seqTitulo}`,
+        valorOriginal: arredondar(centavos / 100),
+        dataVencimento: somarMesesIso(dados.dataVencimento, i - 1),
+        tituloPaiId: pai.id,
+        parcelaNumero: i,
+        parcelaTotal: dados.parcelas,
+        // As parcelas herdam o status do pai, sem rodada própria: quem aprova
+        // é ele. Nascer PENDENTE sem rodada aberta as deixaria impagáveis para
+        // sempre, esperando uma aprovação que ninguém pode dar.
+        aprovacoes: [],
+        pagamentos: [],
+        rateio: pai.rateio.map((r) => ({ ...r })),
+      })
+    }
+  }
+
+  return sucesso(pai)
+}
+
+/** Propaga o status do pai para as parcelas que ainda não foram pagas. */
+function propagarStatus(base: BaseDados, paiId: string, status: StatusPagar): void {
+  for (const p of base.titulosPagar) {
+    if (p.tituloPaiId !== paiId) continue
+    if (!['PENDENTE', 'EM_APROVACAO', 'APROVADO'].includes(p.status)) continue
+    p.status = status
+  }
+}
+
+export interface DadosDecisao {
+  decisao: 'APROVADO' | 'REJEITADO'
+  justificativa: string
+}
+
+/**
+ * Decide um nível. É aqui que as três regras que dão sentido ao fluxo moram.
+ */
+export function decidirAprovacao(
+  base: BaseDados,
+  tituloId: string,
+  nivel: number,
+  aprovadorId: string,
+  dados: DadosDecisao,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status !== 'EM_APROVACAO') {
+    return falha('REGRA_DE_NEGOCIO', `Um título ${ROTULO_STATUS[titulo.status]} não está em aprovação.`)
+  }
+
+  // RN-F04, e é a regra que faz o fluxo inteiro significar algo: sem ela,
+  // "aprovado" quer dizer apenas que alguém clicou no próprio pedido.
+  if (titulo.criadoPor === aprovadorId) {
+    return falha('REGRA_DE_NEGOCIO', 'Quem lançou o título não pode aprová-lo.', {
+      acoes: ['Peça a decisão a outro aprovador do mesmo nível'],
+    })
+  }
+
+  const pendente = nivelPendente(titulo)
+  if (!pendente) {
+    return falha('REGRA_DE_NEGOCIO', 'Não há nível pendente neste título.')
+  }
+  // RN-F02: o nível superior decidindo antes autorizaria algo que o inferior
+  // ainda pode rejeitar — e a rejeição chegaria depois da autorização.
+  if (pendente.nivel !== nivel) {
+    return falha('REGRA_DE_NEGOCIO', `O nível ${pendente.nivel} ainda não decidiu.`, {
+      acoes: [`Aguarde a decisão do nível ${pendente.nivel}`],
+    })
+  }
+  // RN-F03.
+  if (!podeDecidirNivel(base, aprovadorId, nivel)) {
+    return falha('REGRA_DE_NEGOCIO', `Seu perfil não tem alçada para o nível ${nivel}.`, {
+      acoes: ['Peça ao administrador para configurar a faixa de alçada', 'Ou solicite uma delegação'],
+    })
+  }
+  if (dados.decisao === 'REJEITADO' && dados.justificativa.trim().length < 10) {
+    return falha('REGRA_DE_NEGOCIO', 'A rejeição exige justificativa: sem ela o solicitante reenvia igual.', {
+      campo: 'justificativa',
+    })
+  }
+
+  const proprio = postoAlcada(base, aprovadorId) >= nivel
+  const porDelegacao = proprio
+    ? null
+    : (delegacoesVigentes(base, aprovadorId).find((d) => d.nivel >= nivel)?.deleganteId ?? null)
+
+  pendente.aprovadorId = aprovadorId
+  pendente.decisao = dados.decisao
+  pendente.decididoEm = iso(HOJE)
+  pendente.justificativa = dados.justificativa.trim() || null
+  pendente.delegadoDe = porDelegacao
+
+  if (dados.decisao === 'REJEITADO') {
+    // Volta a PENDENTE, e não a um estado terminal: o título rejeitado tem
+    // destino natural — o solicitante corrige e reenvia.
+    titulo.status = 'PENDENTE'
+    propagarStatus(base, titulo.id, 'PENDENTE')
+    return sucesso(titulo)
+  }
+
+  if (nivelPendente(titulo) === null) {
+    titulo.status = 'APROVADO'
+    propagarStatus(base, titulo.id, 'APROVADO')
+  }
+  return sucesso(titulo)
+}
+
+/** Reenvia um título rejeitado: rodada nova, a antiga preservada. */
+export function reenviarTituloPagar(
+  base: BaseDados,
+  tituloId: string,
+  solicitanteId: string,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status !== 'PENDENTE') {
+    return falha('REGRA_DE_NEGOCIO', 'Só um título pendente é reenviado para aprovação.')
+  }
+  if (titulo.criadoPor !== solicitanteId) {
+    return falha('REGRA_DE_NEGOCIO', 'O reenvio é de quem lançou o título.')
+  }
+
+  const rodada = Math.max(0, ...titulo.aprovacoes.map((a) => a.rodada)) + 1
+  const niveis = niveisExigidos(base, valorDevidoDe(titulo))
+  if (niveis === 0) {
+    titulo.status = 'APROVADO'
+    propagarStatus(base, titulo.id, 'APROVADO')
+    return sucesso(titulo)
+  }
+  for (let n = 1; n <= niveis; n++) {
+    titulo.aprovacoes.push({
+      nivel: n,
+      rodada,
+      aprovadorId: null,
+      decisao: null,
+      decididoEm: null,
+      justificativa: null,
+      delegadoDe: null,
+    })
+  }
+  titulo.status = 'EM_APROVACAO'
+  propagarStatus(base, titulo.id, 'EM_APROVACAO')
+  return sucesso(titulo)
+}
+
+/** Multa, juro ou desconto negociado. Exige motivo: muda o que se vai pagar. */
+export function ajustarValorTitulo(
+  base: BaseDados,
+  tituloId: string,
+  valorAjustado: number,
+  motivo: string,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (['PAGO', 'CANCELADO'].includes(titulo.status)) {
+    return falha('REGRA_DE_NEGOCIO', `Um título ${ROTULO_STATUS[titulo.status]} não muda de valor.`)
+  }
+  if (!(valorAjustado > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor ajustado tem de ser positivo.', { campo: 'valorAjustado' })
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do ajuste — multa, juro ou desconto negociado.', {
+      campo: 'motivo',
+    })
+  }
+  const pago = totalPago(titulo)
+  if (valorAjustado < pago) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Já foram pagos ${moedaSimples(pago)}: o ajuste não pode ficar abaixo disso.`,
+      { campo: 'valorAjustado', acoes: ['Estorne o pagamento antes de reduzir o valor'] },
+    )
+  }
+
+  titulo.valorAjustado = arredondar(valorAjustado)
+  titulo.motivoAjuste = motivo.trim()
+  // Quitado pelo ajuste: um desconto que zera o saldo encerra o título.
+  if (saldoDoTitulo(titulo) === 0 && titulo.pagamentos.length > 0) titulo.status = 'PAGO'
+  else if (titulo.status === 'PAGO') titulo.status = 'PAGO_PARCIAL'
+  return sucesso(titulo)
+}
+
+export interface DadosPagamentoTitulo {
+  valorPago: number
+  dataPagamento: string
+  contaId: string
+  forma: FormaPagamento
+}
+
+let seqPagamento = 0
+
+/**
+ * Baixa um título e lança a saída na conta, no mesmo ato.
+ *
+ * Separar os dois criaria o pior estado possível: título quitado sem dinheiro
+ * saindo do extrato, ou o contrário. Não há caminho na interface que faça um
+ * sem o outro.
+ */
+export function pagarTitulo(
+  base: BaseDados,
+  tituloId: string,
+  dados: DadosPagamentoTitulo,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+
+  // RN-F08: o pai de um parcelamento é relatório, não obrigação de caixa.
+  // Pagá-lo somaria o total às parcelas e dobraria a despesa.
+  if (ehPaiDeParcelas(base, titulo)) {
+    return falha('REGRA_DE_NEGOCIO', 'Um título parcelado é pago nas parcelas, não no total.', {
+      acoes: ['Abra o parcelamento e pague a parcela'],
+    })
+  }
+  // RN-F07.
+  if (!['APROVADO', 'AGENDADO', 'PAGO_PARCIAL'].includes(titulo.status)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Um título ${ROTULO_STATUS[titulo.status]} não é pago — a aprovação vem antes do dinheiro.`,
+      { acoes: ['Conclua a aprovação do título'] },
+    )
+  }
+  if (!(dados.valorPago > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor pago tem de ser positivo.', { campo: 'valorPago' })
+  }
+  // RN-F06: pagamento acima do saldo não vira crédito com o fornecedor — vira
+  // dinheiro que ninguém sabe explicar na conciliação.
+  const saldo = saldoDoTitulo(titulo)
+  if (dados.valorPago > saldo + 0.005) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O saldo em aberto é ${moedaSimples(saldo)} — o pagamento não pode excedê-lo.`,
+      { campo: 'valorPago', acoes: [`Pague no máximo ${moedaSimples(saldo)}`] },
+    )
+  }
+
+  const movimento = lancarMovimentacao(base, dados.contaId, {
+    tipo: 'SAIDA',
+    valor: dados.valorPago,
+    dataMovimento: dados.dataPagamento,
+    descricao: `Pagamento — ${titulo.descricao}`,
+  })
+  if (!movimento.ok) return movimento
+
+  const pagamento: PagamentoPagar = {
+    id: `pgt-n${++seqPagamento}`,
+    valorPago: arredondar(dados.valorPago),
+    dataPagamento: dados.dataPagamento,
+    contaId: dados.contaId,
+    forma: dados.forma,
+    movimentacaoId: movimento.valor.id,
+    estornadoEm: null,
+    estornoMotivo: null,
+  }
+  titulo.pagamentos.push(pagamento)
+  titulo.status = saldoDoTitulo(titulo) === 0 ? 'PAGO' : 'PAGO_PARCIAL'
+  return sucesso(titulo)
+}
+
+/** Estorna uma baixa e devolve o dinheiro à conta. Uma vez só. */
+export function estornarPagamentoTitulo(
+  base: BaseDados,
+  tituloId: string,
+  pagamentoId: string,
+  motivo: string,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  const pagamento = titulo.pagamentos.find((p) => p.id === pagamentoId)
+  if (!pagamento) return falha('NAO_ENCONTRADO', 'Pagamento não encontrado.')
+  if (pagamento.estornadoEm) {
+    return falha('REGRA_DE_NEGOCIO', 'Este pagamento já foi estornado.', {
+      acoes: ['Estorno não se estorna — registre um pagamento novo'],
+    })
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do estorno.', { campo: 'motivo' })
+  }
+
+  if (pagamento.movimentacaoId) {
+    const devolucao = estornarMovimentacao(base, pagamento.movimentacaoId, motivo)
+    if (!devolucao.ok) return devolucao
+  }
+  pagamento.estornadoEm = iso(HOJE)
+  pagamento.estornoMotivo = motivo.trim()
+  titulo.status = totalPago(titulo) === 0 ? 'APROVADO' : 'PAGO_PARCIAL'
+  return sucesso(titulo)
+}
+
+/**
+ * Cancela um título. RN-F09: pagamento não estornado impede.
+ *
+ * `cancelarParcelas` existe porque cancelar o pai em cascata silenciosa
+ * apagaria parcelas que alguém ainda espera pagar. A confirmação é explícita, e
+ * uma parcela já paga não é cancelada de jeito nenhum.
+ */
+export function cancelarTituloPagar(
+  base: BaseDados,
+  tituloId: string,
+  motivo: string,
+  cancelarParcelas = false,
+): Resultado<TituloPagar> {
+  const titulo = base.titulosPagar.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status === 'CANCELADO') {
+    return falha('REGRA_DE_NEGOCIO', 'Este título já está cancelado.')
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do cancelamento.', { campo: 'motivo' })
+  }
+  if (totalPago(titulo) > 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Um título com pagamento não é cancelado.', {
+      acoes: ['Estorne o pagamento primeiro'],
+    })
+  }
+
+  const parcelas = parcelasDe(base, titulo.id)
+  const pagas = parcelas.filter((p) => totalPago(p) > 0)
+  if (parcelas.length > 0 && !cancelarParcelas) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Este título tem ${parcelas.length} parcela(s). Confirme o cancelamento em cascata.`,
+      { acoes: ['Marque "cancelar as parcelas pendentes"'] },
+    )
+  }
+  if (pagas.length > 0) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `${pagas.length} parcela(s) já foram pagas e não podem ser canceladas.`,
+      { acoes: ['Estorne os pagamentos antes de cancelar o parcelamento'] },
+    )
+  }
+
+  for (const p of parcelas) p.status = 'CANCELADO'
+  titulo.status = 'CANCELADO'
+  titulo.motivoAjuste = titulo.motivoAjuste ?? null
+  return sucesso(titulo)
+}
+
+export interface DadosDelegacao {
+  delegadoId: string
+  nivel: number
+  inicio: string
+  fim: string
+  motivo: string
+}
+
+let seqDelegacao = 0
+
+/**
+ * Cria uma delegação. O delegante é sempre quem está logado.
+ *
+ * Aceitá-lo como parâmetro de formulário permitiria delegar a autoridade de
+ * outra pessoa — o caminho mais curto para contornar a segregação de funções.
+ */
+export function criarDelegacao(
+  base: BaseDados,
+  deleganteId: string,
+  dados: DadosDelegacao,
+): Resultado<DelegacaoAprovacao> {
+  if (dados.delegadoId === deleganteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Não se delega a própria alçada para si mesmo.', {
+      campo: 'delegadoId',
+    })
+  }
+  if (!base.usuarios.some((u) => u.id === dados.delegadoId)) {
+    return falha('NAO_ENCONTRADO', 'Usuário não encontrado.', { campo: 'delegadoId' })
+  }
+  if (dados.fim < dados.inicio) {
+    return falha('REGRA_DE_NEGOCIO', 'O fim não pode ser anterior ao início.', { campo: 'fim' })
+  }
+  if (postoAlcada(base, deleganteId) < dados.nivel) {
+    return falha('REGRA_DE_NEGOCIO', `Você não tem alçada de nível ${dados.nivel} para delegar.`, {
+      campo: 'nivel',
+      acoes: ['Delegue um nível igual ou inferior ao seu posto'],
+    })
+  }
+  if (dados.motivo.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo — férias, licença, viagem.', { campo: 'motivo' })
+  }
+
+  // Sem sobreposição do mesmo nível: duas delegações vigentes ao mesmo tempo
+  // tornariam ambíguo quem responde pela decisão, que é exatamente o que a
+  // delegação existe para manter claro.
+  const conflito = base.delegacoes.find(
+    (d) =>
+      d.deleganteId === deleganteId &&
+      d.nivel === dados.nivel &&
+      d.inicio <= dados.fim &&
+      d.fim >= dados.inicio,
+  )
+  if (conflito) {
+    return falha(
+      'CONFLITO',
+      `Já existe delegação de nível ${dados.nivel} entre ${conflito.inicio} e ${conflito.fim}.`,
+      { campo: 'inicio', acoes: ['Ajuste o período', 'Ou revogue a delegação existente'] },
+    )
+  }
+
+  const nova: DelegacaoAprovacao = {
+    id: `dlg-n${++seqDelegacao}`,
+    deleganteId,
+    delegadoId: dados.delegadoId,
+    nivel: dados.nivel,
+    inicio: dados.inicio,
+    fim: dados.fim,
+    motivo: dados.motivo.trim(),
+  }
+  base.delegacoes.push(nova)
+  return sucesso(nova)
+}
+
+export function revogarDelegacao(base: BaseDados, delegacaoId: string, deleganteId: string): Resultado<true> {
+  const i = base.delegacoes.findIndex((d) => d.id === delegacaoId)
+  if (i < 0) return falha('NAO_ENCONTRADO', 'Delegação não encontrada.')
+  if (base.delegacoes[i]!.deleganteId !== deleganteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Só quem delegou revoga a delegação.')
+  }
+  base.delegacoes.splice(i, 1)
+  return sucesso(true)
+}
+
+export const ROTULO_STATUS: Record<StatusPagar, string> = {
+  PENDENTE: 'pendente',
+  EM_APROVACAO: 'em aprovação',
+  APROVADO: 'aprovado',
+  AGENDADO: 'agendado',
+  PAGO_PARCIAL: 'pago em parte',
+  PAGO: 'pago',
+  CANCELADO: 'cancelado',
+  EM_DISPUTA: 'em disputa',
+  REJEITADO: 'rejeitado',
 }
 
 /* ------------------------------------------------------------- utilidades -- */

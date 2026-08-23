@@ -41,6 +41,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { para: '/resultado', rotulo: 'Resultado', glifo: '◈', permissao: 'financeiro:painel_executivo', grupo: 'Financeiro', detalhe: 'receita, margem e indicadores' },
   { para: '/centros-custo', rotulo: 'Centros de custo', glifo: '◵', permissao: 'centro_custo:ler', grupo: 'Financeiro', detalhe: 'árvore de áreas, até três níveis' },
   { para: '/contas-bancarias', rotulo: 'Contas bancárias', glifo: '◧', permissao: 'conta_bancaria:ler', grupo: 'Financeiro', detalhe: 'saldo derivado, extrato e conciliação' },
+  { para: '/contas-pagar', rotulo: 'Contas a pagar', glifo: '◨', permissao: 'pagar:ler', grupo: 'Financeiro', detalhe: 'fila de aprovação, alçada e baixa' },
   { para: '/usuarios', rotulo: 'Usuários', glifo: '◑', permissao: 'usuario:gerenciar', grupo: 'Administração', detalhe: 'contas, convites e perfis' },
   { para: '/perfis', rotulo: 'Perfis de acesso', glifo: '⊞', permissao: 'perfil:gerenciar', grupo: 'Administração', detalhe: 'permissões por módulo, tela e ação' },
 ]

@@ -28,6 +28,7 @@ const ROTAS = [
   { hash: '#/perfis', nome: 'perfis de acesso', titulo: 'Perfis de acesso' },
   { hash: '#/centros-custo', nome: 'centros de custo', titulo: 'Centros de custo' },
   { hash: '#/contas-bancarias', nome: 'contas bancárias', titulo: 'Contas bancárias' },
+  { hash: '#/contas-pagar', nome: 'contas a pagar', titulo: 'Contas a pagar' },
   { hash: '#/entrar', nome: 'entrar', titulo: 'Entrar' },
 ]
 
@@ -1138,7 +1139,7 @@ test('axe nos diálogos da nota fiscal', async ({ page }) => {
   let v = await violacoes(page)
   expect(v, `diálogo de lançamento:\n  ${descrever(v)}`).toEqual([])
 
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click()
   const detalhe = await abrirNota(page, 'CONFERIDA')
   v = await violacoes(page)
   expect(v, `detalhe da nota:\n  ${descrever(v)}`).toEqual([])
@@ -2479,4 +2480,270 @@ test('axe nas três abas da política comercial', async ({ page }) => {
   await page.getByRole('tab', { name: /Preços/ }).click()
   v = await violacoes(page)
   expect(v, `preços:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ------------------------------------------------------- contas a pagar (10) */
+
+/**
+ * O que estes testes existem para provar: **a fila de aprovação impede algo, e
+ * a prévia de alçada responde antes de salvar**.
+ *
+ * O resto do módulo tem teste unitário e teste de banco. Aqui verifica-se o que
+ * só aparece na tela montada: o número de níveis mudando enquanto se digita o
+ * valor, o botão de decidir aparecendo apenas em quem pode decidir, e o total do
+ * parcelamento ficando fora dos indicadores de caixa.
+ */
+
+test('a prévia de alçada responde antes de salvar, e muda com o valor', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: 'Novo título' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText(/Informe o valor para ver quantas aprovações/)).toBeVisible()
+
+  // Abaixo da primeira faixa: nenhuma aprovação, e a tela diz de onde vem o
+  // número em vez de só afirmá-lo.
+  await dialogo.getByLabel('Valor', { exact: true }).fill('1000')
+  await expect(dialogo.getByText('Nenhuma aprovação necessária.')).toBeVisible()
+
+  // Acima da segunda faixa da massa (25 mil): dois níveis.
+  await dialogo.getByLabel('Valor', { exact: true }).fill('30000')
+  await expect(dialogo.getByText(/2 nível\(is\) de aprovação/)).toBeVisible()
+
+  // Acima da terceira (120 mil): três, e é o teto.
+  await dialogo.getByLabel('Valor', { exact: true }).fill('900000')
+  await expect(dialogo.getByText(/3 nível\(is\) de aprovação/)).toBeVisible()
+})
+
+test('a prévia explica que a aprovação do parcelamento é do total', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: 'Novo título' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Valor', { exact: true }).fill('60000')
+  await dialogo.getByLabel('Parcelas').fill('12')
+
+  // É a diferença entre um parcelamento de sessenta mil e doze títulos de cinco
+  // mil, cada um abaixo do nível que a soma exige.
+  await expect(dialogo.getByText(/A aprovação é do total, não de cada parcela/)).toBeVisible()
+  await expect(dialogo.getByText(/2 nível\(is\) de aprovação/)).toBeVisible()
+})
+
+test('o rateio parcial é recusado com a soma à vista', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: 'Novo título' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Descrição').fill('Serviço de terceiro para teste')
+  await dialogo.getByLabel('Valor', { exact: true }).fill('800')
+
+  // A primeira linha nasce com o que falta para 100: o caso comum é uma linha
+  // só, e pedir para digitar "100" é trabalho que a tela pode poupar.
+  await dialogo.getByRole('button', { name: 'Acrescentar centro' }).click()
+  await expect(dialogo.getByText('Soma: 100,0%')).toBeVisible()
+
+  await dialogo.getByLabel('Percentual da linha 1').fill('60')
+  await expect(dialogo.getByText(/Soma: 60,0% — tem de fechar em 100%/)).toBeVisible()
+
+  await dialogo.getByRole('button', { name: 'Lançar título' }).click()
+  await expect(dialogo.getByText(/rateio soma 60% — tem de fechar em 100%/)).toBeVisible()
+
+  // Fechando em 100, passa.
+  await dialogo.getByRole('button', { name: 'Acrescentar centro' }).click()
+  await expect(dialogo.getByText('Soma: 100,0%')).toBeVisible()
+  await dialogo.getByRole('button', { name: 'Lançar título' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('a fila de aprovação não oferece o título de quem o lançou', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+
+  // O administrador da demonstração tem posto 3 e vê a fila dos outros.
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+  await expect(page.getByRole('heading', { name: /Minha fila de aprovação/ })).toBeVisible()
+
+  const linhas = page.getByRole('table').getByRole('row')
+  const total = (await linhas.count()) - 1
+  expect(total).toBeGreaterThan(0)
+
+  // Lança um título acima da alçada como o próprio usuário logado: ele entra em
+  // aprovação e **não** aparece na fila dele. É a RN-F04 visível na interface.
+  await page.getByRole('button', { name: 'Ver todos os títulos' }).click()
+  await page.getByRole('button', { name: 'Novo título' }).click()
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Descrição').fill('Consultoria contratada para teste de fila')
+  await dialogo.getByLabel('Valor', { exact: true }).fill('300000')
+  await expect(dialogo.getByText(/3 nível\(is\) de aprovação/)).toBeVisible()
+  await dialogo.getByRole('button', { name: 'Lançar título' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+  await expect(page.getByRole('table')).not.toContainText('Consultoria contratada para teste de fila')
+
+  // Mas ele existe: está na lista geral, em aprovação.
+  await page.getByRole('button', { name: 'Ver todos os títulos' }).click()
+  await page.getByPlaceholder('Buscar título…').fill('Consultoria contratada')
+  await expect(page.getByRole('table')).toContainText('Em aprovação')
+})
+
+test('decidir um nível registra a decisão e libera o próximo', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+
+  const primeira = page.getByRole('table').getByRole('row').nth(1)
+  await primeira.getByRole('button', { name: /^Decidir/ }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByRole('heading', { name: /Decidir nível/ })).toBeVisible()
+  // A tela diz o que acontece depois desta decisão: sem isso, quem aprova o
+  // nível 1 não sabe se liberou o pagamento ou só passou adiante.
+  await expect(dialogo.getByText('Depois deste nível')).toBeVisible()
+  await dialogo.getByRole('button', { name: 'Aprovar' }).click()
+
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('region', { name: 'Avisos do sistema' }).getByText(/aprovado/i).first(),
+  ).toBeVisible()
+})
+
+test('a rejeição exige justificativa antes de aceitar o envio', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Decidir/ }).click()
+  const dialogo = page.getByRole('dialog')
+
+  await dialogo.getByRole('radio', { name: 'Rejeitar' }).check()
+  await expect(dialogo.getByText(/Obrigatória: sem ela o solicitante não sabe o que corrigir/)).toBeVisible()
+
+  await dialogo.getByRole('button', { name: 'Rejeitar' }).click()
+  // A mensagem aparece duas vezes de propósito: no resumo do topo, que diz
+  // quantos erros existem, e no campo, que diz qual é.
+  await expect(dialogo.getByText(/justificativa de ao menos 10 caracteres/).first()).toBeVisible()
+  // O diálogo continua aberto: recusa que fecha o formulário faz o operador
+  // digitar tudo de novo.
+  await expect(dialogo).toBeVisible()
+
+  await dialogo.getByLabel('Justificativa').fill('sem a fatura detalhada do mês anexada')
+  await dialogo.getByRole('button', { name: 'Rejeitar' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('o pagamento não excede o saldo, e o parcial é anunciado antes de confirmar', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByLabel('Situação').selectOption('APROVADO')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Pagar/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('A baixa e o extrato nascem juntos')).toBeVisible()
+
+  // O campo já vem com o saldo inteiro: o caso comum é quitar.
+  const saldo = emReais(await dialogo.getByLabel('Valor pago').inputValue())
+  expect(saldo).toBeGreaterThan(0)
+
+  await dialogo.getByLabel('Valor pago').fill(String(saldo + 1000))
+  await dialogo.getByRole('button', { name: 'Registrar baixa' }).click()
+  await expect(dialogo.getByText(/O saldo em aberto é/).first()).toBeVisible()
+
+  // Parcial: a tela diz quanto sobra antes de o operador confirmar.
+  await dialogo.getByLabel('Valor pago').fill(String(Math.floor(saldo / 2)))
+  await expect(dialogo.getByText(/Pagamento parcial: restariam/)).toBeVisible()
+  await dialogo.getByRole('button', { name: 'Registrar baixa' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('o detalhe mostra a rodada de aprovação e o rateio em reais', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByLabel('Situação').selectOption('PENDENTE')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  const dialogo = page.getByRole('dialog')
+
+  await expect(dialogo.getByRole('heading', { name: 'Aprovação' })).toBeVisible()
+  // Um título pendente na massa está pendente porque foi rejeitado: a decisão
+  // fica registrada, e é ela que explica o que corrigir.
+  await expect(dialogo.getByText('Rejeitado').first()).toBeVisible()
+  await expect(dialogo.getByRole('heading', { name: 'Rateio' })).toBeVisible()
+  // Percentual e valor: quem confere não precisa fazer a conta de cabeça.
+  await expect(dialogo.getByText(/100,0% \(R\$/).first()).toBeVisible()
+})
+
+test('a parcela diz que a aprovação é do total, e o total não aparece na lista', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByPlaceholder('Buscar título…').fill('suporte técnico terceirizado')
+
+  const tabela = page.getByRole('table')
+  await expect(tabela).toContainText('parcela 1/12')
+  // O pai é relatório e não obrigação de caixa: somá-lo às parcelas dobraria a
+  // exposição, e é o número que alguém usa para decidir se paga hoje.
+  await expect(tabela).not.toContainText('parcela 0/12')
+
+  await tabela.getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText(/A aprovação é do total do parcelamento/)).toBeVisible()
+  await expect(dialogo.getByRole('term').filter({ hasText: 'Parcela' })).toBeVisible()
+})
+
+test('a delegação é sempre de quem está logado', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: 'Delegações' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText(/Quem delega é sempre você/)).toBeVisible()
+  // Não há campo de delegante: aceitá-lo permitiria delegar a autoridade de
+  // outra pessoa, que é o caminho mais curto para contornar a segregação.
+  await expect(dialogo.getByLabel('Delegante')).toHaveCount(0)
+
+  await dialogo.getByLabel('Delegar para').selectOption({ index: 0 })
+  await dialogo.getByLabel('Fim').fill('2026-08-20')
+  await dialogo.getByLabel('Motivo').fill('férias de agosto')
+  await dialogo.getByRole('button', { name: 'Criar delegação' }).click()
+
+  await expect(dialogo.getByRole('heading', { name: 'Delegações que eu concedi' })).toBeVisible()
+  await expect(dialogo.getByText('férias de agosto')).toBeVisible()
+})
+
+test('sem permissão de aprovar, a tela não oferece decidir', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+
+  // O perfil de suporte tem `pagar:ler` e não `pagar:aprovar`: a lista continua
+  // visível, e é só a ação que sai. Esconder a tela inteira faria quem confere
+  // pagamentos perder o acesso de leitura que ele legitimamente tem.
+  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Supervisor de Suporte' })
+  await expect(page.getByRole('button', { name: /^Decidir/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Novo título' })).toHaveCount(0)
+})
+
+test('axe em contas a pagar e nos diálogos do módulo', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  let v = await violacoes(page)
+  expect(v, `lista:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('button', { name: 'Novo título' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Acrescentar centro' }).click()
+  v = await violacoes(page)
+  expect(v, `novo título:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click()
+
+  await page.getByRole('button', { name: 'Delegações' }).click()
+  v = await violacoes(page)
+  expect(v, `delegações:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Fechar', exact: true }).click()
+
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Decidir/ }).click()
+  v = await violacoes(page)
+  expect(v, `decisão:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('contas a pagar reflui em 320px sem rolagem horizontal', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar', largura: 320, altura: 720 })
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a página transborda na largura de 320px').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px:\n  ${descrever(v)}`).toEqual([])
 })

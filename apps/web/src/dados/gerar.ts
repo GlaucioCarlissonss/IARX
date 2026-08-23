@@ -36,6 +36,14 @@ import type {
   Movimentacao,
   PerfilGravado,
   Usuario,
+  AprovacaoPagar,
+  ClassificacaoPagar,
+  DelegacaoAprovacao,
+  FaixaAlcada,
+  PagamentoPagar,
+  RateioPagar,
+  StatusPagar,
+  TituloPagar,
 } from './tipos'
 
 /**
@@ -492,7 +500,16 @@ export function gerarBase(semente = 20260730): BaseDados {
       // Um inativo e um sem convite aceito: os dois estados que a tela precisa
       // saber exibir e que uma massa só de contas felizes esconderia.
       status: (i === 4 ? 'INATIVO' : 'ATIVO') as Usuario['status'],
-      perfilIds: [i % 2 === 0 ? 'perf-suporte' : 'perf-operacao'],
+      /*
+       * Os três perfis internos rodam, não dois.
+       *
+       * Com `i % 2` ninguém recebia `perf-financeiro`, e como é ele que carrega
+       * a faixa de alçada intermediária, **o nível 2 de aprovação não existia
+       * em ninguém** — a tela de contas a pagar nunca conseguiria demonstrar
+       * uma aprovação de dois níveis, e nada acusava a falta. Foi um teste da
+       * suíte de contas a pagar que a encontrou.
+       */
+      perfilIds: [['perf-suporte', 'perf-operacao', 'perf-financeiro'][i % 3]!],
       filiaisIds: i < 3 ? [] : [FILIAIS[i % FILIAIS.length]!.id],
       ultimoAcesso: i === 5 ? null : iso(somarDias(HOJE, -s.int(0, 20))),
       criadoEm: iso(somarMeses(HOJE, -s.int(2, 14))),
@@ -1218,6 +1235,414 @@ export function gerarBase(semente = 20260730): BaseDados {
 
   movimentacoes.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
 
+  /* ------------------------------------------ contas a pagar (Módulo 10) */
+
+  /*
+   * Faixas de alçada.
+   *
+   * Os três limites são **massa desta demonstração**, não regra de negócio da
+   * IARX: cada operação define os seus, e é por isso que a alçada é cadastro por
+   * locatário e não constante no código (decisão D-18). O que a interface prova
+   * é que a contagem de níveis segue os limites cadastrados, quaisquer que
+   * sejam — troque os três números aqui e a prévia de alçada acompanha.
+   */
+  const alcadas: FaixaAlcada[] = [
+    { id: 'alc-1', perfilId: 'perf-operacao', limiteValor: 5_000 },
+    { id: 'alc-2', perfilId: 'perf-financeiro', limiteValor: 25_000 },
+    { id: 'alc-3', perfilId: 'perf-admin', limiteValor: 120_000 },
+  ]
+
+  /*
+   * Títulos derivados das notas fiscais já geradas, e não sorteados à parte.
+   *
+   * Uma nota de compra integrada é, por definição, uma obrigação com o
+   * fornecedor: derivá-la mantém uma única verdade sobre o mesmo fato. Sorteando
+   * títulos à parte, a tela de contas a pagar mostraria compras que a tela de
+   * notas fiscais não conhece — e as duas estariam "certas".
+   *
+   * A cada um se acrescenta o que só existe no Módulo 10: rateio por centro de
+   * custo, rodada de aprovação e baixa. Os estados foram escolhidos para cobrir
+   * o que a tela precisa saber exibir — aprovação em curso, rejeição com
+   * justificativa, pagamento parcial, parcelamento e atraso —, porque uma massa
+   * só de títulos quitados esconde exatamente a parte difícil.
+   */
+  const titulosPagar: TituloPagar[] = []
+  let seqTit = 0
+  const titId = () => `tpg-${String(++seqTit).padStart(4, '0')}`
+
+  const niveisPara = (valor: number) =>
+    Math.min([...new Set(alcadas.map((a) => a.limiteValor))].filter((l) => l < valor).length, 3)
+
+  /** Abre uma rodada de aprovação com as decisões já tomadas que se pedir. */
+  function rodada(
+    valor: number,
+    decididos: { aprovadorId: string; justificativa?: string; decisao?: 'APROVADO' | 'REJEITADO'; em: string }[],
+  ): AprovacaoPagar[] {
+    return Array.from({ length: niveisPara(valor) }, (_, i) => {
+      const d = decididos[i]
+      return {
+        nivel: i + 1,
+        rodada: 1,
+        aprovadorId: d?.aprovadorId ?? null,
+        decisao: d ? (d.decisao ?? 'APROVADO') : null,
+        decididoEm: d?.em ?? null,
+        justificativa: d?.justificativa ?? null,
+        delegadoDe: null,
+      }
+    })
+  }
+
+  const lancadores = usuarios.filter((u) => u.tipo === 'INTERNO' && u.id !== 'usr-admin' && u.status === 'ATIVO')
+  const lancador = (i: number) => lancadores[i % lancadores.length]?.id ?? 'usr-admin'
+  /** Quem aprova na demonstração: o financeiro tem posto 2, a operação posto 1. */
+  const aprovadorN1 = lancadores.find((u) => u.perfilIds.includes('perf-operacao'))?.id ?? 'usr-admin'
+  const aprovadorN2 = lancadores.find((u) => u.perfilIds.includes('perf-financeiro'))?.id ?? 'usr-admin'
+
+  const RATEIOS: RateioPagar[][] = [
+    [{ centroCustoId: 'cc-oper-campo', percentual: 100 }],
+    [
+      { centroCustoId: 'cc-oper-log', percentual: 60 },
+      { centroCustoId: 'cc-adm', percentual: 40 },
+    ],
+    [{ centroCustoId: 'cc-adm-ti', percentual: 100 }],
+    [
+      { centroCustoId: 'cc-oper-campo-sp', percentual: 45 },
+      { centroCustoId: 'cc-oper-log', percentual: 35 },
+      { centroCustoId: 'cc-com', percentual: 20 },
+    ],
+  ]
+
+  const notasComValor = notasFiscais
+    .filter((n) => n.status !== 'CANCELADA' && n.valorTotal > 0)
+    .slice(0, 18)
+
+  notasComValor.forEach((nf, i) => {
+    const valor = cent(nf.valorTotal)
+    const emissao = nf.dataEntrada
+    const vencimento = iso(somarDias(new Date(`${emissao}T12:00:00Z`), 30))
+    const vencido = vencimento < iso(HOJE)
+    const criadoPor = lancador(i)
+
+    // Sete estados, distribuídos: o resto quita. Não é sorteio — a distribuição
+    // é fixa para que a tela tenha sempre os mesmos casos difíceis à mão.
+    const caso = i % 7
+    let status: StatusPagar = 'PAGO'
+    let aprovacoes: AprovacaoPagar[] = []
+    let pagamentos: PagamentoPagar[] = []
+
+    if (caso === 0) {
+      status = niveisPara(valor) === 0 ? 'APROVADO' : 'EM_APROVACAO'
+      aprovacoes = rodada(valor, [])
+    } else if (caso === 1) {
+      // Nível 1 decidido, nível 2 esperando: é o estado que a fila do aprovador
+      // precisa distinguir, e o que a RN-F02 governa.
+      status = niveisPara(valor) >= 2 ? 'EM_APROVACAO' : 'APROVADO'
+      aprovacoes = rodada(valor, [{ aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -6)) }])
+    } else if (caso === 2) {
+      // Rejeitado e devolvido a pendente: a decisão fica registrada, é ela que
+      // explica o que corrigir.
+      status = 'PENDENTE'
+      aprovacoes = rodada(valor, [
+        {
+          aprovadorId: aprovadorN1,
+          decisao: 'REJEITADO',
+          justificativa: 'Nota sem o pedido de compra correspondente anexado.',
+          em: iso(somarDias(HOJE, -4)),
+        },
+      ])
+    } else if (caso === 3) {
+      status = 'APROVADO'
+      aprovacoes = rodada(valor, [
+        { aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -10)) },
+        { aprovadorId: aprovadorN2, em: iso(somarDias(HOJE, -9)) },
+        { aprovadorId: 'usr-admin', em: iso(somarDias(HOJE, -8)) },
+      ])
+    } else if (caso === 4) {
+      status = 'PAGO_PARCIAL'
+      aprovacoes = rodada(valor, [
+        { aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -14)) },
+        { aprovadorId: aprovadorN2, em: iso(somarDias(HOJE, -13)) },
+        { aprovadorId: 'usr-admin', em: iso(somarDias(HOJE, -13)) },
+      ])
+      pagamentos = [
+        {
+          id: `pgt-${titId()}`,
+          valorPago: cent(valor * 0.4),
+          dataPagamento: iso(somarDias(HOJE, -7)),
+          contaId: 'cb-oper',
+          forma: 'TRANSFERENCIA',
+          movimentacaoId: null,
+          estornadoEm: null,
+          estornoMotivo: null,
+        },
+      ]
+    } else if (caso === 5) {
+      // Em disputa: divergência de quantidade recebida. Não é atraso nosso, e a
+      // tela precisa mostrar a diferença.
+      status = 'EM_DISPUTA'
+      aprovacoes = rodada(valor, [{ aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -20)) }])
+    } else {
+      aprovacoes = rodada(valor, [
+        { aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -30)) },
+        { aprovadorId: aprovadorN2, em: iso(somarDias(HOJE, -29)) },
+        { aprovadorId: 'usr-admin', em: iso(somarDias(HOJE, -29)) },
+      ])
+      pagamentos = [
+        {
+          id: `pgt-${titId()}`,
+          valorPago: valor,
+          dataPagamento: vencido ? vencimento : iso(somarDias(HOJE, -1)),
+          contaId: 'cb-oper',
+          forma: i % 2 === 0 ? 'BOLETO' : 'PIX',
+          movimentacaoId: null,
+          estornadoEm: null,
+          estornoMotivo: null,
+        },
+      ]
+    }
+
+    titulosPagar.push({
+      id: titId(),
+      fornecedorId: nf.fornecedorId,
+      descricao: `Nota fiscal ${nf.serie}/${nf.numero} — aquisição de parque`,
+      classificacao: 'INVESTIMENTO',
+      contratoFornecedorRef: null,
+      valorOriginal: valor,
+      valorAjustado: null,
+      motivoAjuste: null,
+      dataEmissao: emissao,
+      dataVencimento: vencimento,
+      status,
+      tituloPaiId: null,
+      parcelaNumero: null,
+      parcelaTotal: null,
+      criadoPor,
+      criadoEm: emissao,
+      rateio: RATEIOS[i % RATEIOS.length]!.map((r) => ({ ...r })),
+      aprovacoes,
+      pagamentos,
+    })
+  })
+
+  /*
+   * Despesas recorrentes dos últimos quatro meses.
+   *
+   * As notas fiscais de compra da massa são cinco: bastam para exercitar o
+   * caminho de aquisição, e são poucas para uma tela de contas a pagar, que
+   * precisa de paginação, filtro por situação e uma fila de aprovação com mais
+   * de um item. As recorrentes preenchem esse volume, e cobrem a classificação
+   * `DESPESA_FIXA`, que as notas nunca produzem.
+   *
+   * Estrutura, não dados de negócio: são as despesas que uma locadora de
+   * equipamentos de TI tem por definição — galpão, energia, link, frota,
+   * licenças — com o centro de custo que lhes corresponde. Os valores são da
+   * demonstração e estão dimensionados ao porte da massa gerada, não copiados
+   * de contrato nenhum.
+   */
+  const RECORRENTES: { descricao: string; valor: number; centroCustoId: string; dia: number }[] = [
+    { descricao: 'Aluguel do centro de distribuição', valor: 28_400, centroCustoId: 'cc-oper-log', dia: 5 },
+    { descricao: 'Energia elétrica — galpão e escritório', valor: 9_780, centroCustoId: 'cc-adm', dia: 12 },
+    { descricao: 'Link dedicado e telefonia corporativa', valor: 4_260, centroCustoId: 'cc-adm-ti', dia: 15 },
+    { descricao: 'Locação da frota de atendimento em campo', valor: 21_500, centroCustoId: 'cc-oper-campo', dia: 8 },
+    { descricao: 'Licenças de software de gestão', valor: 6_940, centroCustoId: 'cc-adm-ti', dia: 20 },
+  ]
+
+  RECORRENTES.forEach((r, indice) => {
+    for (let atras = 3; atras >= 0; atras--) {
+      const mes = somarMeses(HOJE, -atras)
+      const venc = `${mes.getUTCFullYear()}-${String(mes.getUTCMonth() + 1).padStart(2, '0')}-${String(r.dia).padStart(2, '0')}`
+      const emissao = iso(somarDias(new Date(`${venc}T12:00:00Z`), -10))
+      const criadoPor = lancador(indice + atras)
+
+      /*
+       * As competências fechadas estão pagas; a corrente é que carrega os
+       * estados interessantes. É a distribuição real de uma operação — o mês
+       * passado já foi conciliado, o atual está em curso — e é também o que faz
+       * a fila de aprovação ter conteúdo sem que a lista pareça caótica.
+       */
+      let status: StatusPagar = 'PAGO'
+      let aprovacoes: AprovacaoPagar[] = []
+      let pagamentos: PagamentoPagar[] = []
+
+      const aprovadaEm = iso(somarDias(new Date(`${venc}T12:00:00Z`), -6))
+      const cheia = rodada(r.valor, [
+        { aprovadorId: aprovadorN1, em: aprovadaEm },
+        { aprovadorId: aprovadorN2, em: aprovadaEm },
+        { aprovadorId: 'usr-admin', em: aprovadaEm },
+      ])
+
+      if (atras > 0) {
+        aprovacoes = cheia
+        pagamentos = [
+          {
+            id: `pgt-rec-${indice}-${atras}`,
+            valorPago: r.valor,
+            dataPagamento: venc,
+            contaId: 'cb-oper',
+            forma: 'BOLETO',
+            movimentacaoId: null,
+            estornadoEm: null,
+            estornoMotivo: null,
+          },
+        ]
+      } else if (indice % 5 === 0) {
+        // Aprovado e em aberto: a fila de quem paga precisa ter o que mostrar,
+        // e quando o vencimento já passou este é também o caso de atraso.
+        status = 'APROVADO'
+        aprovacoes = cheia
+      } else if (indice % 5 === 1) {
+        status = niveisPara(r.valor) === 0 ? 'APROVADO' : 'EM_APROVACAO'
+        aprovacoes = rodada(r.valor, [])
+      } else if (indice % 5 === 2) {
+        status = niveisPara(r.valor) >= 2 ? 'EM_APROVACAO' : 'APROVADO'
+        aprovacoes = rodada(r.valor, [{ aprovadorId: aprovadorN1, em: iso(somarDias(HOJE, -2)) }])
+      } else if (indice % 5 === 3) {
+        status = 'PENDENTE'
+        aprovacoes = rodada(r.valor, [
+          {
+            aprovadorId: aprovadorN1,
+            decisao: 'REJEITADO',
+            justificativa: 'Valor acima do mês anterior sem a fatura detalhada anexada.',
+            em: iso(somarDias(HOJE, -1)),
+          },
+        ])
+      } else {
+        status = 'EM_DISPUTA'
+        aprovacoes = cheia
+      }
+
+      titulosPagar.push({
+        id: titId(),
+        fornecedorId: fornecedores[(indice + 1) % fornecedores.length]?.id ?? null,
+        descricao: r.descricao,
+        classificacao: 'DESPESA_FIXA',
+        contratoFornecedorRef: null,
+        valorOriginal: r.valor,
+        valorAjustado: null,
+        motivoAjuste: null,
+        dataEmissao: emissao,
+        dataVencimento: venc,
+        status,
+        tituloPaiId: null,
+        parcelaNumero: null,
+        parcelaTotal: null,
+        criadoPor,
+        criadoEm: emissao,
+        rateio: [{ centroCustoId: r.centroCustoId, percentual: 100 }],
+        aprovacoes,
+        pagamentos,
+      })
+    }
+  })
+
+  /*
+   * Um parcelamento, com o pai e as filhas.
+   *
+   * Existe porque é o caso que a tela erra se ninguém o exercitar: o pai é
+   * relatório e não se paga (RN-F08), as filhas herdam o status da aprovação
+   * dele, e o total das parcelas tem de fechar com o dele ao centavo.
+   */
+  const fornecedorServico = fornecedores[0]
+  if (fornecedorServico) {
+    const totalParcelado = 96_000
+    const parcelas = 12
+    const emissao = iso(somarMeses(HOJE, -2))
+    const primeiroVencimento = iso(somarMeses(HOJE, -1))
+    const paiId = titId()
+    const aprovacoesPai = rodada(totalParcelado, [
+      { aprovadorId: aprovadorN1, em: iso(somarMeses(HOJE, -2)) },
+      { aprovadorId: aprovadorN2, em: iso(somarMeses(HOJE, -2)) },
+    ])
+    const comum = {
+      fornecedorId: fornecedorServico.id,
+      descricao: 'Contrato de suporte técnico terceirizado — 12 meses',
+      classificacao: 'DESPESA_FIXA' as ClassificacaoPagar,
+      contratoFornecedorRef: 'CTR-SUP-0042',
+      valorAjustado: null,
+      motivoAjuste: null,
+      dataEmissao: emissao,
+      criadoPor: aprovadorN2,
+      criadoEm: emissao,
+      rateio: [
+        { centroCustoId: 'cc-oper-campo', percentual: 70 },
+        { centroCustoId: 'cc-adm', percentual: 30 },
+      ],
+    }
+
+    titulosPagar.push({
+      ...comum,
+      id: paiId,
+      valorOriginal: totalParcelado,
+      dataVencimento: primeiroVencimento,
+      status: 'APROVADO',
+      tituloPaiId: null,
+      parcelaNumero: null,
+      parcelaTotal: parcelas,
+      rateio: comum.rateio.map((r) => ({ ...r })),
+      aprovacoes: aprovacoesPai,
+      pagamentos: [],
+    })
+
+    // A última parcela absorve a diferença de arredondamento: distribuí-la por
+    // igual faria a soma das parcelas divergir do total, e é a soma que o
+    // fornecedor cobra.
+    const cada100 = Math.floor((totalParcelado * 100) / parcelas)
+    for (let n = 1; n <= parcelas; n++) {
+      const centavos = n < parcelas ? cada100 : totalParcelado * 100 - cada100 * (parcelas - 1)
+      const venc = iso(somarMeses(new Date(`${primeiroVencimento}T12:00:00Z`), n - 1))
+      const jaVenceu = venc < iso(HOJE)
+      titulosPagar.push({
+        ...comum,
+        id: titId(),
+        valorOriginal: cent(centavos / 100),
+        dataVencimento: venc,
+        status: jaVenceu ? 'PAGO' : 'APROVADO',
+        tituloPaiId: paiId,
+        parcelaNumero: n,
+        parcelaTotal: parcelas,
+        rateio: comum.rateio.map((r) => ({ ...r })),
+        aprovacoes: [],
+        pagamentos: jaVenceu
+          ? [
+              {
+                id: `pgt-p${n}-${paiId}`,
+                valorPago: cent(centavos / 100),
+                dataPagamento: venc,
+                contaId: 'cb-oper',
+                forma: 'TRANSFERENCIA',
+                movimentacaoId: null,
+                estornadoEm: null,
+                estornoMotivo: null,
+              },
+            ]
+          : [],
+      })
+    }
+  }
+
+  titulosPagar.sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
+
+  /*
+   * Uma delegação vigente.
+   *
+   * Sem ela a tela nunca exibiria o caso, e é o caso que existe porque a
+   * alternativa real é emprestar credencial: sem caminho legítimo para as férias
+   * do gerente, alguém digita a senha de outra pessoa — e a trilha de auditoria
+   * passa a mentir sobre quem aprovou.
+   */
+  const delegacoes: DelegacaoAprovacao[] = [
+    {
+      id: 'dlg-0001',
+      deleganteId: aprovadorN2,
+      delegadoId: aprovadorN1,
+      nivel: 2,
+      inicio: iso(somarDias(HOJE, -3)),
+      fim: iso(somarDias(HOJE, 11)),
+      motivo: 'Férias de duas semanas.',
+    },
+  ]
+
+
   return {
     competencias: comps,
     regioes: REGIOES,
@@ -1244,6 +1669,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     centrosCusto,
     contasBancarias,
     movimentacoes,
+    alcadas,
+    titulosPagar,
+    delegacoes,
     indicadores,
   }
 }

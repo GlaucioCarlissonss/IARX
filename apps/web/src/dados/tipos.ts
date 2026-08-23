@@ -561,6 +561,9 @@ export interface BaseDados {
   centrosCusto: CentroCusto[]
   contasBancarias: ContaBancaria[]
   movimentacoes: Movimentacao[]
+  alcadas: FaixaAlcada[]
+  titulosPagar: TituloPagar[]
+  delegacoes: DelegacaoAprovacao[]
   indicadores: Indicadores
 }
 
@@ -631,6 +634,123 @@ export interface Movimentacao {
   conciliado: boolean
   conciliadoEm: string | null
   criadoEm: string
+}
+
+/* ------------------------------------------------------ contas a pagar */
+
+export type ClassificacaoPagar = 'DESPESA_FIXA' | 'DESPESA_VARIAVEL' | 'INVESTIMENTO'
+
+export type StatusPagar =
+  | 'PENDENTE'
+  | 'EM_APROVACAO'
+  | 'APROVADO'
+  | 'AGENDADO'
+  | 'PAGO_PARCIAL'
+  | 'PAGO'
+  | 'CANCELADO'
+  | 'EM_DISPUTA'
+  | 'REJEITADO'
+
+export type FormaPagamento = 'TRANSFERENCIA' | 'BOLETO' | 'PIX' | 'CHEQUE'
+
+/**
+ * Faixa de alçada de aprovação de pagamento.
+ *
+ * O limite é **por perfil**, e é o cadastro que decide quantos níveis um valor
+ * exige (RN-F01) e qual posto cada aprovador tem (RN-F03). Fixar os valores no
+ * código seria inventar regra de negócio: cada operação tem os seus, e mudá-los
+ * é ato de administração, não implantação.
+ */
+export interface FaixaAlcada {
+  id: string
+  perfilId: string
+  limiteValor: number
+}
+
+/** Uma linha de rateio. Percentual, não valor fixo — decisão D-16. */
+export interface RateioPagar {
+  centroCustoId: string
+  percentual: number
+}
+
+export interface AprovacaoPagar {
+  nivel: number
+  /**
+   * A rodada existe por causa da rejeição: o título volta a PENDENTE, é
+   * corrigido e reenviado, e a decisão antiga fica preservada. Sobrescrevê-la
+   * apagaria justamente a explicação da correção.
+   */
+  rodada: number
+  aprovadorId: string | null
+  decisao: 'APROVADO' | 'REJEITADO' | null
+  decididoEm: string | null
+  justificativa: string | null
+  /** Preenchido quando quem decidiu agiu por delegação vigente. */
+  delegadoDe: string | null
+}
+
+export interface PagamentoPagar {
+  id: string
+  valorPago: number
+  dataPagamento: string
+  contaId: string
+  forma: FormaPagamento
+  /** A movimentação bancária gerada junto. Baixa e extrato nascem no mesmo ato. */
+  movimentacaoId: string | null
+  estornadoEm: string | null
+  estornoMotivo: string | null
+}
+
+/**
+ * Título a pagar.
+ *
+ * **Sem campo de valor devido e sem campo de saldo**, pelo mesmo motivo que
+ * `ContaBancaria` não tem saldo: os dois são derivados — `valorDevidoDe()` e
+ * `saldoDoTitulo()` — e espelham a coluna gerada e a função do banco. Se não há
+ * caminho de escrita, não há caminho de divergência.
+ *
+ * `parcelaTotal` sem `parcelaNumero` é o estado legítimo do **pai** de um
+ * parcelamento: ele sabe que são doze, e não é nenhuma delas.
+ */
+export interface TituloPagar {
+  id: string
+  fornecedorId: string | null
+  descricao: string
+  classificacao: ClassificacaoPagar
+  contratoFornecedorRef: string | null
+  valorOriginal: number
+  /** Multa, juro ou desconto negociado. Nulo = nunca ajustado. */
+  valorAjustado: number | null
+  motivoAjuste: string | null
+  dataEmissao: string
+  dataVencimento: string
+  status: StatusPagar
+  tituloPaiId: string | null
+  parcelaNumero: number | null
+  parcelaTotal: number | null
+  /** Quem lançou. É o que sustenta a segregação de funções da RN-F04. */
+  criadoPor: string
+  criadoEm: string
+  rateio: RateioPagar[]
+  aprovacoes: AprovacaoPagar[]
+  pagamentos: PagamentoPagar[]
+}
+
+/**
+ * Delegação temporária de alçada.
+ *
+ * Existe porque a alternativa real é emprestar credencial: sem um caminho
+ * legítimo para as férias do gerente, alguém digita a senha de outra pessoa — e
+ * aí a trilha de auditoria passa a mentir sobre quem aprovou.
+ */
+export interface DelegacaoAprovacao {
+  id: string
+  deleganteId: string
+  delegadoId: string
+  nivel: number
+  inicio: string
+  fim: string
+  motivo: string
 }
 
 /* ------------------------------------------------- tabelas comerciais */

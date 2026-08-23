@@ -113,6 +113,8 @@ export const api = {
   fornecedores: () => responder(() => [...BASE.fornecedores]),
   usuarios: () => responder(() => [...BASE.usuarios]),
   centrosCusto: () => responder(() => [...BASE.centrosCusto]),
+  titulosPagar: () => responder(() => [...BASE.titulosPagar]),
+  delegacoes: () => responder(() => [...BASE.delegacoes]),
   contasBancarias: () => responder(() => [...BASE.contasBancarias]),
   extrato: (contaId: string) =>
     responder(() => BASE.movimentacoes.filter((m) => m.contaId === contaId)),
@@ -165,6 +167,33 @@ export const api = {
     executar(() => cmd.estornarMovimentacao(BASE, movimentoId, motivo)),
   conciliarMovimentacao: (movimentoId: string, conciliado: boolean) =>
     executar(() => cmd.conciliarMovimentacao(BASE, movimentoId, conciliado)),
+
+  /*
+   * Contas a pagar. Cada escrita recebe **quem** a está fazendo.
+   *
+   * Não é cerimônia: a segregação de funções da RN-F04 depende de comparar quem
+   * lançou com quem decide, e a delegação depende de saber quem delegou. Um
+   * comando que aceitasse "o usuário atual" implícito não teria como aplicar
+   * nenhuma das duas — e na API real esse valor vem do token, nunca do corpo.
+   */
+  criarTituloPagar: (criadoPor: string, d: cmd.DadosTituloPagar) =>
+    executar(() => cmd.criarTituloPagar(BASE, criadoPor, d)),
+  decidirAprovacao: (tituloId: string, nivel: number, aprovadorId: string, d: cmd.DadosDecisao) =>
+    executar(() => cmd.decidirAprovacao(BASE, tituloId, nivel, aprovadorId, d)),
+  reenviarTituloPagar: (tituloId: string, solicitanteId: string) =>
+    executar(() => cmd.reenviarTituloPagar(BASE, tituloId, solicitanteId)),
+  ajustarValorTitulo: (tituloId: string, valorAjustado: number, motivo: string) =>
+    executar(() => cmd.ajustarValorTitulo(BASE, tituloId, valorAjustado, motivo)),
+  pagarTitulo: (tituloId: string, d: cmd.DadosPagamentoTitulo) =>
+    executar(() => cmd.pagarTitulo(BASE, tituloId, d)),
+  estornarPagamentoTitulo: (tituloId: string, pagamentoId: string, motivo: string) =>
+    executar(() => cmd.estornarPagamentoTitulo(BASE, tituloId, pagamentoId, motivo)),
+  cancelarTituloPagar: (tituloId: string, motivo: string, cancelarParcelas: boolean) =>
+    executar(() => cmd.cancelarTituloPagar(BASE, tituloId, motivo, cancelarParcelas)),
+  criarDelegacao: (deleganteId: string, d: cmd.DadosDelegacao) =>
+    executar(() => cmd.criarDelegacao(BASE, deleganteId, d)),
+  revogarDelegacao: (delegacaoId: string, deleganteId: string) =>
+    executar(() => cmd.revogarDelegacao(BASE, delegacaoId, deleganteId)),
 
   /*
    * Autenticação passa por `responder`, e não por `executar`.

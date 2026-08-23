@@ -2549,3 +2549,115 @@ textarea {
 .arvore-custo__linha .linha {
   flex-wrap: wrap;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Contas a pagar — Módulo 10                                                 */
+/* -------------------------------------------------------------------------- */
+
+/* A prévia de alçada. Destacada por fundo e borda, não por cor de texto: ela
+   responde "quem vai ter de aprovar isto" e precisa ser vista sem ser lida. */
+.previa-alcada {
+  background: var(--cor-primary-subtle-bg);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  padding: var(--e3);
+  font-size: var(--t-13);
+  color: var(--cor-text);
+}
+.previa-alcada p + p {
+  margin-top: var(--e1);
+}
+
+/* Uma linha de rateio: centro, percentual e remover.
+   `minmax(0, …)` na primeira coluna porque o nome do centro é longo e sem ele
+   a grade estoura o diálogo em vez de encurtar a coluna. */
+.lista-rateio {
+  list-style: none;
+  display: grid;
+  gap: var(--e2);
+}
+.lista-rateio__linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem auto;
+  gap: var(--e2);
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .lista-rateio__linha {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Pares rótulo/valor do detalhe do título. Duas colunas onde cabe, uma quando
+   não — e o rótulo nunca se separa do valor, que é o defeito clássico de
+   descrever `<dl>` com float. */
+.descricoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--e3);
+}
+.descricoes dt {
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.descricoes dd {
+  font-size: var(--t-14);
+  color: var(--cor-text);
+  margin-top: 2px;
+}
+
+/* Listas de histórico — aprovações, pagamentos, rateio, delegações.
+   Sem marcador: cada item já começa por um rótulo forte ou por um chip, e o
+   ponto competiria com ele. */
+.lista-simples {
+  list-style: none;
+  display: grid;
+  gap: var(--e2);
+}
+.lista-simples > li {
+  padding-bottom: var(--e2);
+  border-bottom: 1px solid var(--cor-border);
+  font-size: var(--t-13);
+}
+.lista-simples > li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* As ações da linha da tabela podem ser até quatro. A quebra é local: mudar
+   `.linha` faria toda barra de ações do sistema passar a quebrar. */
+.linha--acoes {
+  flex-wrap: wrap;
+}
+
+/* Alternador booleano de filtro: alvo de toque de 44px como o resto do sistema,
+   e a caixa alinhada com o texto em vez de flutuando acima dele. */
+.alternador {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  min-height: 44px;
+  padding: 0 var(--e2);
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+  cursor: pointer;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  background: var(--cor-surface);
+}
+.alternador:has(input:checked) {
+  border-color: var(--cor-primary);
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-text);
+}
+.alternador input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--cor-primary);
+}
+.alternador:focus-within {
+  outline: 2px solid var(--cor-focus-ring);
+  outline-offset: 2px;
+}
