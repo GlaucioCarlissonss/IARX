@@ -30,8 +30,17 @@ import type {
   TipoAlcada,
   TituloPagar,
   Usuario,
+  AlertaCaixa,
   AprovacaoReceber,
+  CenarioCaixa,
+  DiaProjetado,
   FormaRecebimento,
+  Lado,
+  LancamentoFuturo,
+  Periodicidade,
+  Recorrencia,
+  StatusLancamento,
+  TipoLancamento,
   OrigemReceber,
   RateioReceber,
   StatusReceber,
@@ -2741,6 +2750,7 @@ export interface DadosTituloPagar {
   fornecedorId: string | null
   descricao: string
   classificacao: ClassificacaoPagar
+  filialId?: string | null
   contratoFornecedorRef: string | null
   valorOriginal: number
   dataEmissao: string
@@ -2841,6 +2851,7 @@ export function criarTituloPagar(
     fornecedorId: dados.fornecedorId,
     descricao: dados.descricao.trim(),
     classificacao: dados.classificacao,
+    filialId: dados.filialId ?? null,
     contratoFornecedorRef: dados.contratoFornecedorRef?.trim() || null,
     valorOriginal: arredondar(dados.valorOriginal),
     valorAjustado: null,
@@ -4146,9 +4157,729 @@ export const ROTULO_STATUS_RECEBER: Record<StatusReceber, string> = {
   BAIXADO: 'baixado sem recebimento',
 }
 
+/* ============================================================================
+ * Módulos 12 e 13 — lançamentos futuros e fluxo de caixa projetado
+ *
+ * Duas camadas: a **intenção** (o compromisso programado que ainda não é título)
+ * e a **leitura** (a projeção que soma saldo real e previsto).
+ *
+ * `projetarCaixa` é uma função só, consumida pelas duas telas. O levantamento
+ * especifica a projeção duas vezes — no Módulo 12 e no 13 —, admitindo "calculado
+ * aqui e lá": duas contas dariam duas respostas para "quanto entra em sessenta
+ * dias", e a divergência apareceria como um planejamento que não fecha com o
+ * painel.
+ *
+ * Nada aqui é gravado. Não há coleção de posição diária, e a ausência é o ponto:
+ * a posição de amanhã muda a cada baixa registrada hoje.
+ * ========================================================================== */
+
+/**
+ * `lado` é consequência de `tipo`, não uma segunda escolha.
+ *
+ * Pedir os dois permitiria uma provisão marcada como RECEBER, que geraria
+ * cobrança onde deveria haver despesa. Vale nos três lugares — contrato, banco e
+ * aqui —, e a repetição é deliberada: cada um fecha um caminho diferente de
+ * chegada.
+ */
+export function ladoDoTipo(tipo: TipoLancamento): Lado {
+  return tipo === 'RECEITA_RECORRENTE' || tipo === 'RECEITA_PARCELADA' ? 'RECEBER' : 'PAGAR'
+}
+
+const MESES_POR_PERIODICIDADE: Record<Periodicidade, number> = {
+  MENSAL: 1,
+  TRIMESTRAL: 3,
+  SEMESTRAL: 6,
+  ANUAL: 12,
+}
+
+/** RN-F18: soma meses, não dias. É o que faz "todo dia 10" continuar no dia 10. */
+export function avancarPeriodicidade(data: string, periodicidade: Periodicidade): string {
+  return somarMesesIso(data, MESES_POR_PERIODICIDADE[periodicidade])
+}
+
+/**
+ * A fila de exceção — RN-F16, e **derivada**.
+ *
+ * Um lançamento sai dela no instante em que o contrato volta a vigorar, sem que
+ * ninguém o toque. Um campo gravado estaria errado a partir daí, e só uma
+ * varredura o corrigiria — o mesmo defeito de classe de `EM_ATRASO` como status.
+ */
+export function naFilaDeExcecao(l: LancamentoFuturo): boolean {
+  return l.status === 'PROGRAMADO' && l.excecaoConversao !== null
+}
+
+/** Já venceu e continua programado: o que o worker converteria agora. */
+export function elegivelParaConversao(l: LancamentoFuturo, hojeIso = iso(HOJE)): boolean {
+  return l.status === 'PROGRAMADO' && l.dataPrevista <= hojeIso
+}
+
+/**
+ * O impedimento de RN-F16, antes de tentar.
+ *
+ * A prévia **não** converte: converter para simular incrementaria o contador de
+ * tentativas e gravaria a exceção, fazendo quem abre o diálogo e desiste deixar
+ * rastro de uma tentativa que nunca houve.
+ */
+export function impedimentoDeConversao(base: BaseDados, l: LancamentoFuturo): string | null {
+  if (l.status !== 'PROGRAMADO') {
+    return `O lançamento está em ${ROTULO_STATUS_LANCAMENTO[l.status]}: a conversão ocorre uma vez só.`
+  }
+  if (l.contratoId === null) return null
+  const contrato = base.contratos.find((c) => c.id === l.contratoId)
+  if (!contrato) return 'O contrato vinculado não foi encontrado.'
+  if (contrato.status !== 'ATIVO') {
+    return `Contrato ${contrato.numero} está em ${contrato.status}: a conversão não gera título de contrato inativo.`
+  }
+  return null
+}
+
+export interface PreviaConversao {
+  lado: Lado
+  descricao: string
+  valorPrevisto: number
+  dataVencimento: string
+  /** Quantos níveis de alçada o título vai exigir ao nascer. */
+  niveisAprovacao: number
+  impedimento: string | null
+  /** A série vai gerar este próximo, se converter. */
+  proximaDataPrevista: string | null
+}
+
+/** O que a conversão vai criar, antes de criar. Leitura pura. */
+export function previaDeConversao(base: BaseDados, l: LancamentoFuturo): PreviaConversao {
+  const serie = l.recorrenciaId
+    ? base.recorrencias.find((r) => r.id === l.recorrenciaId) ?? null
+    : null
+  return {
+    lado: l.lado,
+    descricao: l.descricao,
+    valorPrevisto: l.valorPrevisto,
+    dataVencimento: l.dataPrevista,
+    niveisAprovacao:
+      l.lado === 'PAGAR' ? niveisExigidos(base, l.valorPrevisto) : niveisEmissao(base, l.valorPrevisto),
+    impedimento: impedimentoDeConversao(base, l),
+    proximaDataPrevista: serie?.ativo ? serie.proximaGeracao : null,
+  }
+}
+
+export interface DadosLancamentoFuturo {
+  tipo: TipoLancamento
+  descricao: string
+  valorPrevisto: number
+  dataPrevista: string
+  fornecedorId?: string | null
+  clienteId?: string | null
+  classificacao?: ClassificacaoPagar | null
+  centroCustoId?: string | null
+  contratoId?: string | null
+  filialId?: string | null
+}
+
+let seqLancamento = 0
+let seqRecorrencia = 0
+
+export function criarLancamentoFuturo(
+  base: BaseDados,
+  criadoPor: string,
+  dados: DadosLancamentoFuturo,
+): Resultado<LancamentoFuturo> {
+  if (dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva o compromisso: alguém vai revisá-lo meses depois.', {
+      campo: 'descricao',
+    })
+  }
+  if (!(dados.valorPrevisto > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valorPrevisto' })
+  }
+
+  const lado = ladoDoTipo(dados.tipo)
+  if (lado === 'PAGAR' && !dados.classificacao) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma despesa prevista precisa de classificação.', {
+      campo: 'classificacao',
+      acoes: ['Escolha despesa fixa, variável ou investimento'],
+    })
+  }
+  if (lado === 'PAGAR' && dados.clienteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Um compromisso a pagar não tem cliente.', { campo: 'clienteId' })
+  }
+  if (lado === 'RECEBER' && !dados.clienteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma receita prevista precisa de cliente.', {
+      campo: 'clienteId',
+      acoes: ['Escolha de quem se espera receber'],
+    })
+  }
+  if (lado === 'RECEBER' && dados.classificacao) {
+    return falha('REGRA_DE_NEGOCIO', 'Receita prevista não tem classificação de despesa.', {
+      campo: 'classificacao',
+    })
+  }
+  if (dados.clienteId && !base.clientes.some((c) => c.id === dados.clienteId)) {
+    return falha('NAO_ENCONTRADO', 'Cliente não encontrado.', { campo: 'clienteId' })
+  }
+  if (dados.centroCustoId) {
+    const centro = base.centrosCusto.find((c) => c.id === dados.centroCustoId)
+    if (!centro) return falha('NAO_ENCONTRADO', 'Centro de custo não encontrado.', { campo: 'centroCustoId' })
+    if (!centro.ativo) {
+      return falha('REGRA_DE_NEGOCIO', `O centro "${centro.codigo} — ${centro.nome}" está inativo.`, {
+        campo: 'centroCustoId',
+      })
+    }
+  }
+
+  const novo: LancamentoFuturo = {
+    id: `lf-n${++seqLancamento}`,
+    tipo: dados.tipo,
+    lado,
+    descricao: dados.descricao.trim(),
+    valorPrevisto: arredondar(dados.valorPrevisto),
+    dataPrevista: dados.dataPrevista,
+    empresaId: null,
+    fornecedorId: dados.fornecedorId ?? null,
+    classificacao: dados.classificacao ?? null,
+    clienteId: dados.clienteId ?? null,
+    centroCustoId: dados.centroCustoId ?? null,
+    contratoId: dados.contratoId ?? null,
+    filialId: dados.filialId ?? null,
+    recorrenciaId: null,
+    status: 'PROGRAMADO',
+    tituloPagarId: null,
+    tituloReceberId: null,
+    convertidoEm: null,
+    excecaoConversao: null,
+    tentativasConversao: 0,
+    criadoPor,
+    criadoEm: iso(HOJE),
+  }
+  base.lancamentosFuturos.unshift(novo)
+  return sucesso(novo)
+}
+
+/**
+ * Editar — RN-F17, só em PROGRAMADO.
+ *
+ * Convertido é registro histórico: "isso foi previsto e virou aquilo". O que se
+ * edita depois é o título gerado, que tem rodada de aprovação e rateio próprios.
+ * Sem a regra, editar o lançamento daria a impressão de mudar a despesa — e a
+ * despesa real, no título, continuaria a anterior.
+ */
+export function editarLancamentoFuturo(
+  base: BaseDados,
+  id: string,
+  dados: Partial<Pick<LancamentoFuturo, 'descricao' | 'valorPrevisto' | 'dataPrevista' | 'centroCustoId' | 'contratoId' | 'filialId'>>,
+): Resultado<LancamentoFuturo> {
+  const l = base.lancamentosFuturos.find((x) => x.id === id)
+  if (!l) return falha('NAO_ENCONTRADO', 'Lançamento futuro não encontrado.')
+  if (l.status !== 'PROGRAMADO') {
+    return falha('REGRA_DE_NEGOCIO', `Um lançamento ${ROTULO_STATUS_LANCAMENTO[l.status]} não se edita.`, {
+      campo: 'status',
+      acoes: ['Edite o título gerado, que é onde a despesa vive'],
+    })
+  }
+  if (dados.valorPrevisto !== undefined && !(dados.valorPrevisto > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valorPrevisto' })
+  }
+  if (dados.descricao !== undefined && dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva o compromisso.', { campo: 'descricao' })
+  }
+
+  if (dados.descricao !== undefined) l.descricao = dados.descricao.trim()
+  if (dados.valorPrevisto !== undefined) l.valorPrevisto = arredondar(dados.valorPrevisto)
+  if (dados.dataPrevista !== undefined) l.dataPrevista = dados.dataPrevista
+  if (dados.centroCustoId !== undefined) l.centroCustoId = dados.centroCustoId
+  if (dados.contratoId !== undefined) l.contratoId = dados.contratoId
+  if (dados.filialId !== undefined) l.filialId = dados.filialId
+  return sucesso(l)
+}
+
+export function cancelarLancamentoFuturo(
+  base: BaseDados,
+  id: string,
+  motivo: string,
+): Resultado<LancamentoFuturo> {
+  const l = base.lancamentosFuturos.find((x) => x.id === id)
+  if (!l) return falha('NAO_ENCONTRADO', 'Lançamento futuro não encontrado.')
+  if (l.status === 'CONVERTIDO') {
+    return falha('REGRA_DE_NEGOCIO', 'Um lançamento já convertido não se cancela.', {
+      campo: 'status',
+      acoes: ['Cancele o título gerado — a previsão sem ele fica órfã'],
+    })
+  }
+  if (l.status === 'CANCELADO') {
+    return falha('REGRA_DE_NEGOCIO', 'Este lançamento já está cancelado.', { campo: 'status' })
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Diga por que o compromisso não vai acontecer.', { campo: 'motivo' })
+  }
+  l.status = 'CANCELADO'
+  return sucesso(l)
+}
+
+export interface ResultadoConversao {
+  lancamento: LancamentoFuturo
+  /** Nulo quando RN-F16 recusou — e a recusa **não** é erro. */
+  tituloPagar: TituloPagar | null
+  tituloReceber: TituloReceber | null
+  excecao: string | null
+  proximoLancamentoId: string | null
+}
+
+/**
+ * Converter — RN-F15, F16 e F18 numa operação.
+ *
+ * **A conversão ocorre uma vez.** O estado é a trava: um convertido é recusado, e
+ * não existe caminho de volta a PROGRAMADO. Duas conversões dariam dois títulos
+ * para o mesmo compromisso, e o segundo pareceria tão legítimo quanto o primeiro.
+ *
+ * **Recusa por vigência não é falha.** Devolve sucesso com `titulo* = null` e o
+ * motivo escrito, e o lançamento fica programado na fila de exceção. Tratá-la
+ * como erro faria a tela acusar problema no comportamento correto.
+ */
+export function converterLancamentoFuturo(
+  base: BaseDados,
+  id: string,
+  criadoPor: string,
+): Resultado<ResultadoConversao> {
+  const l = base.lancamentosFuturos.find((x) => x.id === id)
+  if (!l) return falha('NAO_ENCONTRADO', 'Lançamento futuro não encontrado.')
+  if (l.status !== 'PROGRAMADO') {
+    return falha('REGRA_DE_NEGOCIO', `Um lançamento ${ROTULO_STATUS_LANCAMENTO[l.status]} não se converte.`, {
+      campo: 'status',
+      acoes: ['A conversão ocorre uma vez só — o título já existe'],
+    })
+  }
+
+  // RN-F16: a vigência é checada **agora**, não quando o lançamento foi criado.
+  const impedimento = impedimentoDeConversao(base, l)
+  if (impedimento) {
+    l.excecaoConversao = impedimento
+    l.tentativasConversao += 1
+    return sucesso({
+      lancamento: l,
+      tituloPagar: null,
+      tituloReceber: null,
+      excecao: impedimento,
+      proximoLancamentoId: null,
+    })
+  }
+
+  let tituloPagar: TituloPagar | null = null
+  let tituloReceber: TituloReceber | null = null
+
+  if (l.lado === 'PAGAR') {
+    const r = criarTituloPagar(base, criadoPor, {
+      fornecedorId: l.fornecedorId ?? base.fornecedores[0]?.id ?? '',
+      descricao: l.descricao,
+      classificacao: l.classificacao ?? 'DESPESA_FIXA',
+      filialId: l.filialId,
+      contratoFornecedorRef: null,
+      valorOriginal: l.valorPrevisto,
+      dataEmissao: menorData(iso(HOJE), l.dataPrevista),
+      dataVencimento: l.dataPrevista,
+      parcelas: 1,
+      rateio: l.centroCustoId ? [{ centroCustoId: l.centroCustoId, percentual: 100 }] : [],
+    })
+    if (!r.ok) return r
+    tituloPagar = r.valor
+  } else {
+    const r = criarTituloAvulso(base, criadoPor, {
+      clienteId: l.clienteId!,
+      descricao: l.descricao,
+      valorOriginal: l.valorPrevisto,
+      dataEmissao: menorData(iso(HOJE), l.dataPrevista),
+      dataVencimento: l.dataPrevista,
+      parcelas: 1,
+      rateio: l.centroCustoId ? [{ centroCustoId: l.centroCustoId, percentual: 100 }] : [],
+    })
+    if (!r.ok) return r
+    tituloReceber = r.valor
+    /*
+     * O contrato sobrevive à conversão, e a origem continua AVULSO.
+     *
+     * CONTRATUAL exige competência, e um lançamento futuro não tem uma — ele não
+     * veio de medição. Marcá-lo CONTRATUAL faria uma cobrança de valor digitado
+     * ficar indistinguível da calculada pelo motor de preço.
+     */
+    tituloReceber.contratoId = l.contratoId
+  }
+
+  l.status = 'CONVERTIDO'
+  l.tituloPagarId = tituloPagar?.id ?? null
+  l.tituloReceberId = tituloReceber?.id ?? null
+  l.convertidoEm = iso(HOJE)
+  l.excecaoConversao = null
+
+  // RN-F18: o próximo nasce ao converter o atual, nunca antes.
+  let proximoLancamentoId: string | null = null
+  if (l.recorrenciaId) {
+    const g = gerarProximoLancamento(base, l.recorrenciaId, criadoPor)
+    if (g.ok) proximoLancamentoId = g.valor?.id ?? null
+  }
+
+  return { ok: true, valor: { lancamento: l, tituloPagar, tituloReceber, excecao: null, proximoLancamentoId } }
+}
+
+export interface DadosRecorrencia {
+  lado: Lado
+  descricao: string
+  valorBase: number
+  periodicidade: Periodicidade
+  diaVencimento: number
+  proximaGeracao: string
+  fornecedorId?: string | null
+  clienteId?: string | null
+  classificacao?: ClassificacaoPagar | null
+  centroCustoId?: string | null
+  contratoId?: string | null
+  filialId?: string | null
+}
+
+export function criarRecorrencia(
+  base: BaseDados,
+  dados: DadosRecorrencia,
+): Resultado<Recorrencia> {
+  if (dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva a série.', { campo: 'descricao' })
+  }
+  if (!(dados.valorBase > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valorBase' })
+  }
+  /*
+   * De 1 a 28, e a recusa diz por quê.
+   *
+   * Não é limite técnico: 29, 30 e 31 não existem em todo mês, e "o que fazer em
+   * fevereiro" é regra que ninguém especificou. Escolher aqui — antecipar,
+   * atrasar, cair no último dia — seria decidir no escuro.
+   */
+  if (!Number.isInteger(dados.diaVencimento) || dados.diaVencimento < 1 || dados.diaVencimento > 28) {
+    return falha('REGRA_DE_NEGOCIO', 'O dia do vencimento vai de 1 a 28.', {
+      campo: 'diaVencimento',
+      acoes: ['29, 30 e 31 não existem em todo mês, e o comportamento em fevereiro não está definido'],
+    })
+  }
+  if (dados.lado === 'PAGAR' && !dados.classificacao) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma série a pagar precisa de classificação.', {
+      campo: 'classificacao',
+    })
+  }
+  if (dados.lado === 'PAGAR' && dados.clienteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma série a pagar não tem cliente.', { campo: 'clienteId' })
+  }
+  if (dados.lado === 'RECEBER' && !dados.clienteId) {
+    return falha('REGRA_DE_NEGOCIO', 'Uma série a receber precisa de cliente.', { campo: 'clienteId' })
+  }
+  if (dados.lado === 'RECEBER' && dados.classificacao) {
+    return falha('REGRA_DE_NEGOCIO', 'Série a receber não tem classificação de despesa.', {
+      campo: 'classificacao',
+    })
+  }
+
+  const nova: Recorrencia = {
+    id: `rec-n${++seqRecorrencia}`,
+    lado: dados.lado,
+    descricao: dados.descricao.trim(),
+    valorBase: arredondar(dados.valorBase),
+    periodicidade: dados.periodicidade,
+    diaVencimento: dados.diaVencimento,
+    proximaGeracao: dados.proximaGeracao,
+    ativo: true,
+    empresaId: null,
+    fornecedorId: dados.fornecedorId ?? null,
+    classificacao: dados.classificacao ?? null,
+    clienteId: dados.clienteId ?? null,
+    centroCustoId: dados.centroCustoId ?? null,
+    contratoId: dados.contratoId ?? null,
+    filialId: dados.filialId ?? null,
+  }
+  base.recorrencias.unshift(nova)
+  return sucesso(nova)
+}
+
+/**
+ * Gera **o próximo** lançamento da série. Nunca o lote.
+ *
+ * Gerar todos de uma vez criaria anos de lançamentos no primeiro clique — e cada
+ * um apareceria na projeção como compromisso firme, quando o contrato pode nem
+ * existir mais em dezembro do ano que vem.
+ *
+ * Idempotente por `(recorrência, data prevista)`: chamar duas vezes para a mesma
+ * data não duplica, e a data avança de todo modo.
+ */
+export function gerarProximoLancamento(
+  base: BaseDados,
+  recorrenciaId: string,
+  criadoPor: string,
+): Resultado<LancamentoFuturo | null> {
+  const r = base.recorrencias.find((x) => x.id === recorrenciaId)
+  if (!r) return falha('NAO_ENCONTRADO', 'Recorrência não encontrada.')
+  if (!r.ativo) return sucesso(null)
+
+  const jaExiste = base.lancamentosFuturos.some(
+    (l) => l.recorrenciaId === r.id && l.dataPrevista === r.proximaGeracao,
+  )
+  const data = r.proximaGeracao
+  r.proximaGeracao = avancarPeriodicidade(r.proximaGeracao, r.periodicidade)
+  if (jaExiste) return sucesso(null)
+
+  const novo: LancamentoFuturo = {
+    id: `lf-n${++seqLancamento}`,
+    tipo: r.lado === 'PAGAR' ? 'DESPESA_RECORRENTE' : 'RECEITA_RECORRENTE',
+    lado: r.lado,
+    descricao: r.descricao,
+    valorPrevisto: r.valorBase,
+    dataPrevista: data,
+    empresaId: r.empresaId,
+    fornecedorId: r.fornecedorId,
+    classificacao: r.classificacao,
+    clienteId: r.clienteId,
+    centroCustoId: r.centroCustoId,
+    contratoId: r.contratoId,
+    filialId: r.filialId,
+    recorrenciaId: r.id,
+    status: 'PROGRAMADO',
+    tituloPagarId: null,
+    tituloReceberId: null,
+    convertidoEm: null,
+    excecaoConversao: null,
+    tentativasConversao: 0,
+    criadoPor,
+    criadoEm: iso(HOJE),
+  }
+  base.lancamentosFuturos.unshift(novo)
+  return sucesso(novo)
+}
+
+/** Desliga a série sem apagar o que ela já produziu. */
+export function alternarRecorrencia(base: BaseDados, id: string, ativo: boolean): Resultado<Recorrencia> {
+  const r = base.recorrencias.find((x) => x.id === id)
+  if (!r) return falha('NAO_ENCONTRADO', 'Recorrência não encontrada.')
+  r.ativo = ativo
+  return sucesso(r)
+}
+
+/* ------------------------------------------- Módulo 13: fluxo de caixa */
+
+export interface JanelaProjecao {
+  dias: number
+  cenarioId?: string | null
+  contaId?: string | null
+  filialId?: string | null
+  centroCustoId?: string | null
+}
+
+export interface Projecao {
+  de: string
+  ate: string
+  cenario: CenarioCaixa | null
+  saldoInicial: number
+  totalEntradas: number
+  totalSaidas: number
+  saldoFinal: number
+  menorSaldo: number
+  /** Junto com o valor: a pergunta do painel é "em que dia isto aperta". */
+  diaMenorSaldo: string | null
+  dias: DiaProjetado[]
+}
+
+/** As janelas oferecidas. Livre permitiria projetar o passado, que tem extrato. */
+export const JANELAS_CAIXA = [30, 60, 90, 180] as const
+
+export function cenarioPadrao(base: BaseDados): CenarioCaixa | null {
+  return base.cenariosCaixa.find((c) => c.padrao) ?? null
+}
+
+const EM_ABERTO_PAGAR_PROJECAO: StatusPagar[] = [
+  'PENDENTE',
+  'EM_APROVACAO',
+  'APROVADO',
+  'AGENDADO',
+  'PAGO_PARCIAL',
+]
+
+/**
+ * A projeção — uma função, dois consumidores.
+ *
+ * Quatro fontes: o saldo real das contas, os títulos a pagar em aberto, os a
+ * receber em aberto (líquidos do cenário) e os lançamentos futuros ainda
+ * programados — a intenção que ainda não é título.
+ *
+ * **RN-F19 mora nas listas de status.** CANCELADO e BAIXADO nunca entram, e
+ * BAIXADO é o mais importante dos dois: ele *parece* receita, fecha com quem soma
+ * "encerrados", e nada entrou na conta.
+ *
+ * **RN-F20: a inadimplência do cenário reduz só a entrada.** Aplicá-la à saída
+ * faria o cenário pessimista deixar a operação mais otimista sobre a própria
+ * dívida — o inverso de um teste de estresse, e um erro que passa porque o saldo
+ * do dia continua parecendo razoável.
+ */
+export function projetarCaixa(base: BaseDados, janela: JanelaProjecao, hojeIso = iso(HOJE)): Projecao {
+  const cenario =
+    janela.cenarioId === undefined || janela.cenarioId === null
+      ? cenarioPadrao(base)
+      : base.cenariosCaixa.find((c) => c.id === janela.cenarioId) ?? null
+  const fator = 1 - (cenario?.inadimplencia ?? 0) / 100
+
+  const de = hojeIso
+  const ate = somarDiasIso(hojeIso, janela.dias)
+
+  const contas = base.contasBancarias.filter(
+    (c) => c.status !== 'INATIVA' && (!janela.contaId || c.id === janela.contaId),
+  )
+  const saldoInicial = arredondar(
+    contas.reduce((t, c) => t + saldoDaConta(base, c.id, somarDiasIso(de, -1)), 0),
+  )
+
+  const entradaPorDia = new Map<string, number>()
+  const saidaPorDia = new Map<string, number>()
+  const somar = (mapa: Map<string, number>, dia: string, valor: number) => {
+    mapa.set(dia, arredondar((mapa.get(dia) ?? 0) + valor))
+  }
+
+  const noRecorte = (filialId: string | null, centros: string[]) =>
+    (!janela.filialId || filialId === janela.filialId) &&
+    (!janela.centroCustoId || centros.includes(janela.centroCustoId))
+
+  for (const t of base.titulosPagar) {
+    if (!EM_ABERTO_PAGAR_PROJECAO.includes(t.status)) continue
+    if (t.dataVencimento < de || t.dataVencimento > ate) continue
+    if (ehPaiDeParcelas(base, t)) continue
+    if (!noRecorte(t.filialId, t.rateio.map((r) => r.centroCustoId))) continue
+    somar(saidaPorDia, t.dataVencimento, saldoDoTitulo(t))
+  }
+
+  for (const t of base.titulosReceber) {
+    if (!EM_ABERTO_RECEBER.includes(t.status)) continue
+    if (t.dataVencimento < de || t.dataVencimento > ate) continue
+    if (ehPaiDeParcelasReceber(base, t)) continue
+    if (!noRecorte(t.filialId, t.rateio.map((r) => r.centroCustoId))) continue
+    somar(entradaPorDia, t.dataVencimento, saldoDoTituloReceber(t))
+  }
+
+  /*
+   * O previsto entra no mesmo recorte que o lançado.
+   *
+   * Sem o filtro de filial aqui, o recorte de uma filial mostraria os títulos
+   * dela e os compromissos previstos de **todas** — pior por ser plausível: o
+   * número fica maior, não menor.
+   */
+  for (const l of base.lancamentosFuturos) {
+    if (l.status !== 'PROGRAMADO') continue
+    if (l.dataPrevista < de || l.dataPrevista > ate) continue
+    if (!noRecorte(l.filialId, l.centroCustoId ? [l.centroCustoId] : [])) continue
+    somar(l.lado === 'PAGAR' ? saidaPorDia : entradaPorDia, l.dataPrevista, l.valorPrevisto)
+  }
+
+  const dias: DiaProjetado[] = []
+  let acumulado = saldoInicial
+  let menorSaldo = saldoInicial
+  let diaMenorSaldo: string | null = null
+  let totalEntradas = 0
+  let totalSaidas = 0
+
+  for (let i = 0; i <= janela.dias; i++) {
+    const dia = somarDiasIso(de, i)
+    const entradas = arredondar((entradaPorDia.get(dia) ?? 0) * fator)
+    const saidas = saidaPorDia.get(dia) ?? 0
+    const saldoDia = arredondar(entradas - saidas)
+    acumulado = arredondar(acumulado + saldoDia)
+    totalEntradas = arredondar(totalEntradas + entradas)
+    totalSaidas = arredondar(totalSaidas + saidas)
+    if (acumulado < menorSaldo) {
+      menorSaldo = acumulado
+      diaMenorSaldo = dia
+    }
+    dias.push({ dia, entradas, saidas, saldoDia, saldoAcumulado: acumulado })
+  }
+
+  return {
+    de,
+    ate,
+    cenario,
+    saldoInicial,
+    totalEntradas,
+    totalSaidas,
+    saldoFinal: acumulado,
+    menorSaldo,
+    diaMenorSaldo,
+    dias,
+  }
+}
+
+/**
+ * Alertas — RN-F21 e RN-F22, derivados a cada leitura.
+ *
+ * Nunca gravados: o saldo negativo de terça deixa de existir quando o recebimento
+ * de segunda entra, e nada avisaria a linha gravada.
+ *
+ * O cenário é o **padrão** do locatário, não um escolhido na chamada. RN-F21 fala
+ * em "cenário realista", e o modelo não tem esse conceito — tem cenários nomeados
+ * pelo locatário, um deles marcado como padrão. Casar pelo nome exigiria adivinhar
+ * como o operador vai chamar a linha.
+ */
+export function alertasDeCaixa(base: BaseDados, dias: number, hojeIso = iso(HOJE)): AlertaCaixa[] {
+  const projecao = projetarCaixa(base, { dias }, hojeIso)
+  const limiar = cenarioPadrao(base)?.limiarConcentracao ?? 40
+  const totalSaidas = projecao.totalSaidas
+  const alertas: AlertaCaixa[] = []
+
+  for (const d of projecao.dias) {
+    if (d.saldoAcumulado < 0) {
+      alertas.push({
+        tipo: 'SALDO_NEGATIVO',
+        dia: d.dia,
+        valor: d.saldoAcumulado,
+        detalhe: `Saldo acumulado projetado de ${moedaSimples(d.saldoAcumulado)} em ${d.dia}, no cenário padrão.`,
+      })
+    }
+  }
+  if (totalSaidas > 0) {
+    for (const d of projecao.dias) {
+      const pct = (100 * d.saidas) / totalSaidas
+      if (pct > limiar) {
+        alertas.push({
+          tipo: 'CONCENTRACAO_SAIDA',
+          dia: d.dia,
+          valor: d.saidas,
+          detalhe: `${pct.toFixed(1)}% das saídas da janela concentradas em ${d.dia}.`,
+        })
+      }
+    }
+  }
+  return alertas.sort((a, b) => a.dia.localeCompare(b.dia))
+}
+
+export const ROTULO_STATUS_LANCAMENTO: Record<StatusLancamento, string> = {
+  PROGRAMADO: 'programado',
+  CONVERTIDO: 'convertido',
+  CANCELADO: 'cancelado',
+}
+
+export const ROTULO_TIPO_LANCAMENTO: Record<TipoLancamento, string> = {
+  DESPESA_RECORRENTE: 'despesa recorrente',
+  RECEITA_RECORRENTE: 'receita recorrente',
+  DESPESA_PARCELADA: 'despesa parcelada',
+  RECEITA_PARCELADA: 'receita parcelada',
+  PROVISAO: 'provisão',
+}
+
+export const ROTULO_PERIODICIDADE: Record<Periodicidade, string> = {
+  MENSAL: 'mensal',
+  TRIMESTRAL: 'trimestral',
+  SEMESTRAL: 'semestral',
+  ANUAL: 'anual',
+}
+
 /* ------------------------------------------------------------- utilidades -- */
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+/** Soma dias a AAAA-MM-DD sem passar por fuso horário. */
+function somarDiasIso(data: string, dias: number): string {
+  const [a, m, d] = data.split('-').map(Number) as [number, number, number]
+  return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10)
+}
+
+/** A menor de duas datas ISO. Comparação lexicográfica basta em AAAA-MM-DD. */
+const menorData = (a: string, b: string) => (a <= b ? a : b)
 
 /** Soma meses a uma data AAAA-MM-DD sem passar por fuso horário. */
 function somarMesesIso(data: string, meses: number): string {

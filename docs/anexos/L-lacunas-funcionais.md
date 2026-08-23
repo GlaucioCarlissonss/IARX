@@ -1893,7 +1893,35 @@ de `pagar:*`.
 ## MÓDULO 12: Lançamentos Futuros
 
 ### Status
-- [ ] Novo
+- [x] Novo — **✅ implementado** (migração 0021, API de 13 rotas, worker de
+  conversão, tela com fila de exceção e prévia); ver
+  [Anexo U](U-lancamentos-e-fluxo-de-caixa.md)
+
+**Três desvios do que esta seção especifica, e o motivo de cada um:**
+
+1. **`recorrencia` é uma tabela, não duas.** Onde esta seção pede
+   `recorrencia_pagar` e `recorrencia_receber`, a 0021 tem uma `recorrencia` com
+   discriminador `lado`. É o raciocínio de D-20 aplicado um nível acima: duas
+   tabelas paralelas para o mesmo conceito dão duas respostas para "o que está
+   programado". A diferença entre elas — fornecedor contra cliente — se resolve
+   com colunas nuláveis amarradas ao discriminador, que é o que
+   `lancamento_futuro` já faz nesta mesma seção.
+2. **`titulo_gerado_id` virou duas FK reais** (`titulo_pagar_id` e
+   `titulo_receber_id`) com CHECK de "exatamente uma quando convertido, nenhuma
+   antes". Ver a correção abaixo.
+3. **A projeção do Módulo 12 e a do 13 são a mesma função.** As duas rotas
+   existem — as permissões diferem —, mas a conta acontece uma vez. Esta seção
+   admitia "calculado aqui e lá".
+
+> **Correção de fato.** O texto abaixo justifica `titulo_gerado_id` sem FK
+> dizendo que "outras bases poliformas do sistema já usam" integridade por
+> gatilho. **O precedente não existe.** A única referência polimórfica do esquema
+> é `audit_log` (migração 0003), e ela não tem FK **nem gatilho** — por uma razão
+> oposta: é log, e precisa sobreviver à exclusão da linha referenciada. Nenhuma
+> outra tabela faz o que o texto descreve. Decidido com o operador: duas FK
+> reais, porque um gatilho confere no momento da escrita e não impede o
+> apagamento depois — e "exatamente uma preenchida" passa a ser restrição
+> declarada em vez de convenção.
 
 ### Descrição
 
@@ -1999,27 +2027,50 @@ avulso/provisão.
 - **Habilita:** Módulo 13 (fluxo de caixa projetado)
 
 ### Critérios de Aceite
-- [ ] Dois disparos concorrentes do job de conversão não duplicam o título
-      do mesmo lançamento
-- [ ] Lançamento vinculado a contrato suspenso não converte; aparece na fila
-      de exceção
-- [ ] Lançamento convertido não aceita mais edição
-- [ ] Recorrência gera exatamente o próximo lançamento, nunca o lote inteiro
+- [x] Dois disparos concorrentes do job de conversão não duplicam o título
+      do mesmo lançamento — `for update` dentro de
+      `app.converter_lancamento_futuro`, e a guarda de estado que fecha a porta
+      **sequencial** (um convertido devolvido a `PROGRAMADO` convertia de novo;
+      ver Anexo U §U.5)
+- [x] Lançamento vinculado a contrato suspenso não converte; aparece na fila
+      de exceção — com o motivo escrito, e a fila é filtro derivado, não status
+- [x] Lançamento convertido não aceita mais edição
+- [x] Recorrência gera exatamente o próximo lançamento, nunca o lote inteiro —
+      garantido pelo índice único `(recorrencia_id, data_prevista)`
 
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-23]** A conversão deve **notificar** o responsável financeiro
-  (pedido original faz essa pergunta explicitamente)? Recomendação: sim, via
-  `outbox_evento` — mesmo mecanismo do Módulo 10; o custo marginal de incluir
-  é baixo porque o outbox já existe, e não notificar geração automática de
-  título é o tipo de silêncio que só aparece como problema no fechamento do
-  mês.
+- **[DECISÃO D-23 — ✅ resolvida como sim]** A conversão notifica quem pode
+  decidir o **nível pendente** do título gerado, na rota do lado certo (o
+  parâmetro `rota` que o Módulo 11 acrescentou ao `NotificacaoService`). Não
+  notificar geração automática de título é o tipo de silêncio que só aparece no
+  fechamento do mês.
+
+  Duas ausências deliberadas: título que nasce já aprovado **não** gera aviso
+  (não há decisão pendente, e avisar do que não precisa de ação treina a pessoa a
+  ignorar a caixa); e quem converteu **não** é excluído da lista, porque no worker
+  quem "gerou" foi o relógio, e no caminho manual é o gatilho de segregação que
+  barra a mesma pessoa aprovando o que criou.
+
+- **Pendências que ficam** (ver Anexo U §U.13): job sem agendador externo
+  (`setInterval` do processo, como o de notificação); `dia_vencimento` limitado a
+  28, porque o que fazer com 29/30/31 em fevereiro é regra que ninguém
+  especificou e **não foi inventada**; provisão sem contrapartida contábil; e a
+  recorrência não reajusta por índice, herdando a pendência de D-21.
 
 ---
 
 ## MÓDULO 13: Fluxo de Caixa
 
 ### Status
-- [ ] Novo
+- [x] Novo — **✅ implementado** (migração 0021, API de 4 rotas, tela com gráfico
+  de projeção próprio); ver [Anexo U](U-lancamentos-e-fluxo-de-caixa.md)
+
+**Um desvio:** `nome` do cenário é livre, e o alerta usa o cenário marcado como
+`padrao` — não um casado pelo nome "Realista". O esquema não tem o conceito de
+"realista"; adivinhar que o operador vai usar essa palavra seria inventar regra de
+negócio, e o tipo que quebra em silêncio quando ele escolhe outro nome. Um índice
+único parcial garante um só padrão por locatário: dois fariam o painel abrir
+diferente para duas pessoas no mesmo dia, pela ordem da consulta.
 
 ### Descrição
 
@@ -2293,6 +2344,8 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
 | **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | ✅ Feito (Anexo S) — nove invariantes, alçada configurável, delegação |
 | **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | ✅ Feito (Anexo T) — D-20 fechada, fechamento de competência construído |
+| **12** | **Lançamentos Futuros** | Módulos 10, 11 | Alta | Média-Alta | ✅ Feito (Anexo U) — quatro invariantes, worker de conversão, D-23 fechada |
+| **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Alta | Média | ✅ Feito (Anexo U) — uma projeção só, nenhuma posição diária gravada |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |
 | **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Média | Baixa | 🔲 Novo — só leitura, nenhuma tabela de posição |
 | **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | 🔲 Novo — orçamento + indicadores, tudo calculado |
@@ -2402,6 +2455,7 @@ sem chave estrangeira.
 | ~~D-18~~ | Faixas de alçada configuráveis ou fixas | Configuráveis por locatário — `alcada` já é por tenant |
 | ~~D-19~~ | Provedor de envio de e-mail | SMTP como adaptador; o provedor é configuração, não código — migração 0018 |
 | ~~D-22~~ | Geração de título contratual | No fechamento da competência, na mesma chamada que sela o consumo — migração 0020 (Anexo T) |
+| ~~D-23~~ | Conversão de lançamento futuro notifica? | **Sim** — quem pode decidir o nível pendente do título gerado, na rota do lado certo. Título que nasce aprovado não gera aviso (Anexo U §U.7) |
 
 ### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
@@ -2442,7 +2496,6 @@ diferente:
 | D-05 | Franquia acumulativa existe? | 2 |
 | D-06 | Preço por filial do cliente é necessário? | 3 |
 | D-10 | Cliente abre chamado pelo portal? | 5 |
-| D-23 | Conversão de lançamento futuro notifica o responsável? | 12 |
 | D-25 | Replanejamento de orçamento considera só o pago, ou também o aprovado-não-pago? | 14 |
 | D-26 | Indicador análogo a "custo por paciente": por cliente ativo, por equipamento, ou os dois? | 14 |
 | — | Página A3 conta como 2× A4? | 2, 6 |

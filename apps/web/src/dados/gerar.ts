@@ -49,6 +49,9 @@ import type {
   RecebimentoTitulo,
   StatusReceber,
   TituloReceber,
+  CenarioCaixa,
+  LancamentoFuturo,
+  Recorrencia,
 } from './tipos'
 
 /**
@@ -1447,6 +1450,9 @@ export function gerarBase(semente = 20260730): BaseDados {
       fornecedorId: nf.fornecedorId,
       descricao: `Nota fiscal ${nf.serie}/${nf.numero} — aquisição de parque`,
       classificacao: 'INVESTIMENTO',
+      // Filial rotativa: é o recorte em que a projeção de caixa filtra, e com
+      // todas na mesma o filtro passaria sem provar nada.
+      filialId: FILIAIS[i % FILIAIS.length]?.id ?? null,
       contratoFornecedorRef: null,
       valorOriginal: valor,
       valorAjustado: null,
@@ -1557,6 +1563,9 @@ export function gerarBase(semente = 20260730): BaseDados {
         fornecedorId: fornecedores[(indice + 1) % fornecedores.length]?.id ?? null,
         descricao: r.descricao,
         classificacao: 'DESPESA_FIXA',
+        // Distribuídas entre as filiais, para o recorte da projeção ter o que
+        // separar: com todas na mesma, o filtro passaria sem provar nada.
+        filialId: FILIAIS[indice % FILIAIS.length]?.id ?? null,
         contratoFornecedorRef: null,
         valorOriginal: r.valor,
         valorAjustado: null,
@@ -1598,6 +1607,7 @@ export function gerarBase(semente = 20260730): BaseDados {
       fornecedorId: fornecedorServico.id,
       descricao: 'Contrato de suporte técnico terceirizado — 12 meses',
       classificacao: 'DESPESA_FIXA' as ClassificacaoPagar,
+      filialId: null as string | null,
       contratoFornecedorRef: 'CTR-SUP-0042',
       valorAjustado: null,
       motivoAjuste: null,
@@ -1972,6 +1982,246 @@ export function gerarBase(semente = 20260730): BaseDados {
   ]
 
 
+  /* ------------------------- Módulos 12 e 13: previsto e caixa -------- */
+
+  /*
+   * Cenários: o padrão neutro e um pessimista.
+   *
+   * O padrão é neutro de propósito. É ele que responde quando a projeção é
+   * chamada sem cenário **e** de onde os alertas saem: um padrão de estresse faria
+   * todo alerta soar sempre, e alerta que soa sempre é alerta que ninguém lê.
+   */
+  const cenariosCaixa: CenarioCaixa[] = [
+    { id: 'cen-base', nome: 'Base', inadimplencia: 0, limiarConcentracao: 40, padrao: true },
+    { id: 'cen-estresse', nome: 'Estresse', inadimplencia: 18, limiarConcentracao: 30, padrao: false },
+  ]
+
+  /*
+   * Duas séries: uma a pagar mensal e uma a receber trimestral.
+   *
+   * `proximaGeracao` fica no passado na primeira, de propósito: é o caso em que a
+   * tela tem algo a gerar, e sem ele o botão existiria sem nunca fazer nada.
+   */
+  const recorrencias: Recorrencia[] = [
+    {
+      id: 'rec-aluguel',
+      lado: 'PAGAR',
+      descricao: 'Aluguel do centro de distribuição',
+      valorBase: 18_400,
+      periodicidade: 'MENSAL',
+      diaVencimento: 10,
+      proximaGeracao: iso(somarMeses(HOJE, -1)).slice(0, 8) + '10',
+      ativo: true,
+      empresaId: null,
+      fornecedorId: fornecedores[0]?.id ?? null,
+      classificacao: 'DESPESA_FIXA',
+      clienteId: null,
+      centroCustoId: 'cc-adm',
+      contratoId: null,
+      filialId: FILIAIS[0]?.id ?? null,
+    },
+    {
+      id: 'rec-suporte',
+      lado: 'RECEBER',
+      descricao: 'Suporte estendido trimestral',
+      valorBase: 4_200,
+      periodicidade: 'TRIMESTRAL',
+      diaVencimento: 5,
+      proximaGeracao: iso(somarMeses(HOJE, 1)).slice(0, 8) + '05',
+      ativo: true,
+      empresaId: null,
+      fornecedorId: null,
+      classificacao: null,
+      clienteId: clientes[0]?.id ?? null,
+      centroCustoId: 'cc-com',
+      contratoId: contratos.find((c) => c.status === 'ATIVO')?.id ?? null,
+      filialId: FILIAIS[0]?.id ?? null,
+    },
+  ]
+
+  /*
+   * Lançamentos futuros que cobrem os quatro estados que a tela precisa mostrar:
+   * programado no futuro, elegível hoje, na fila de exceção e já convertido.
+   *
+   * O da fila de exceção depende de um contrato **de verdade** fora de vigência —
+   * sem `?? contratos[0]` de reserva, que foi o defeito do Módulo 11: o fallback
+   * silencioso escolhia um contrato ATIVO e o caso "em disputa" nunca acontecia.
+   */
+  const contratoInativo =
+    contratos.find((c) => c.status === 'SUSPENSO') ??
+    contratos.find((c) => ['ENCERRADO', 'CANCELADO', 'DISTRATADO'].includes(c.status)) ??
+    null
+
+  const lancamentosFuturos: LancamentoFuturo[] = [
+    {
+      id: 'lf-energia',
+      tipo: 'DESPESA_RECORRENTE',
+      lado: 'PAGAR',
+      descricao: 'Energia elétrica do centro de distribuição',
+      valorPrevisto: 7_350,
+      dataPrevista: iso(somarDias(HOJE, 12)),
+      empresaId: null,
+      fornecedorId: fornecedores[1]?.id ?? null,
+      classificacao: 'DESPESA_FIXA',
+      clienteId: null,
+      centroCustoId: 'cc-adm',
+      contratoId: null,
+      filialId: FILIAIS[0]?.id ?? null,
+      recorrenciaId: null,
+      status: 'PROGRAMADO',
+      tituloPagarId: null,
+      tituloReceberId: null,
+      convertidoEm: null,
+      excecaoConversao: null,
+      tentativasConversao: 0,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -20)),
+    },
+    {
+      /* Elegível: já venceu e continua programado. É o que a tela converte. */
+      id: 'lf-seguro',
+      tipo: 'DESPESA_PARCELADA',
+      lado: 'PAGAR',
+      descricao: 'Parcela do seguro da frota',
+      valorPrevisto: 3_180,
+      dataPrevista: iso(somarDias(HOJE, -2)),
+      empresaId: null,
+      fornecedorId: fornecedores[0]?.id ?? null,
+      classificacao: 'DESPESA_VARIAVEL',
+      clienteId: null,
+      centroCustoId: 'cc-oper-campo',
+      contratoId: null,
+      filialId: FILIAIS[1]?.id ?? null,
+      recorrenciaId: null,
+      status: 'PROGRAMADO',
+      tituloPagarId: null,
+      tituloReceberId: null,
+      convertidoEm: null,
+      excecaoConversao: null,
+      tentativasConversao: 0,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -40)),
+    },
+    {
+      /* Provisão: planejamento, sem contrapartida contábil. */
+      id: 'lf-provisao',
+      tipo: 'PROVISAO',
+      lado: 'PAGAR',
+      descricao: 'Provisão para reforma da oficina',
+      valorPrevisto: 96_000,
+      dataPrevista: iso(somarMeses(HOJE, 5)),
+      empresaId: null,
+      fornecedorId: null,
+      classificacao: 'INVESTIMENTO',
+      clienteId: null,
+      centroCustoId: 'cc-oper-campo',
+      contratoId: null,
+      filialId: FILIAIS[0]?.id ?? null,
+      recorrenciaId: null,
+      status: 'PROGRAMADO',
+      tituloPagarId: null,
+      tituloReceberId: null,
+      convertidoEm: null,
+      excecaoConversao: null,
+      tentativasConversao: 0,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -15)),
+    },
+    {
+      /* Receita prevista, ligada a um contrato vigente. */
+      id: 'lf-consultoria',
+      tipo: 'RECEITA_PARCELADA',
+      lado: 'RECEBER',
+      descricao: 'Consultoria de racionalização de impressão',
+      valorPrevisto: 12_800,
+      dataPrevista: iso(somarDias(HOJE, 25)),
+      empresaId: null,
+      fornecedorId: null,
+      classificacao: null,
+      clienteId: clientes[1]?.id ?? clientes[0]?.id ?? null,
+      centroCustoId: 'cc-com',
+      contratoId: contratos.find((c) => c.status === 'ATIVO')?.id ?? null,
+      filialId: FILIAIS[0]?.id ?? null,
+      recorrenciaId: null,
+      status: 'PROGRAMADO',
+      tituloPagarId: null,
+      tituloReceberId: null,
+      convertidoEm: null,
+      excecaoConversao: null,
+      tentativasConversao: 0,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -8)),
+    },
+  ]
+
+  if (contratoInativo) {
+    lancamentosFuturos.push({
+      id: 'lf-excecao',
+      tipo: 'RECEITA_RECORRENTE',
+      lado: 'RECEBER',
+      descricao: 'Mensalidade de suporte — contrato fora de vigência',
+      valorPrevisto: 2_450,
+      dataPrevista: iso(somarDias(HOJE, -6)),
+      empresaId: null,
+      fornecedorId: null,
+      classificacao: null,
+      clienteId: contratoInativo.clienteId,
+      centroCustoId: 'cc-com',
+      contratoId: contratoInativo.id,
+      filialId: contratoInativo.filialId,
+      recorrenciaId: null,
+      status: 'PROGRAMADO',
+      tituloPagarId: null,
+      tituloReceberId: null,
+      convertidoEm: null,
+      /*
+       * A exceção já vem escrita: é o que faz a fila existir na primeira
+       * abertura da tela. Um lançamento que falhou em silêncio não é revisto.
+       */
+      excecaoConversao: `Contrato ${contratoInativo.numero} está em ${contratoInativo.status}: a conversão não gera título de contrato inativo.`,
+      tentativasConversao: 3,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -35)),
+    })
+  }
+
+  /*
+   * Um já convertido, apontando para um título que existe na massa.
+   *
+   * Sem ele a tela nunca mostraria o estado final, e o link "abrir o título
+   * gerado" ficaria sem caso — que é como um caminho de navegação quebra sem
+   * ninguém notar.
+   */
+  const tituloParaVincular = titulosPagar.find((t) => t.tituloPaiId === null && t.parcelaTotal === null)
+  if (tituloParaVincular) {
+    lancamentosFuturos.push({
+      id: 'lf-convertido',
+      tipo: 'DESPESA_RECORRENTE',
+      lado: 'PAGAR',
+      descricao: tituloParaVincular.descricao,
+      valorPrevisto: tituloParaVincular.valorOriginal,
+      dataPrevista: tituloParaVincular.dataVencimento,
+      empresaId: null,
+      fornecedorId: tituloParaVincular.fornecedorId,
+      classificacao: tituloParaVincular.classificacao,
+      clienteId: null,
+      centroCustoId: tituloParaVincular.rateio[0]?.centroCustoId ?? null,
+      contratoId: null,
+      filialId: tituloParaVincular.filialId,
+      recorrenciaId: 'rec-aluguel',
+      status: 'CONVERTIDO',
+      tituloPagarId: tituloParaVincular.id,
+      tituloReceberId: null,
+      convertidoEm: tituloParaVincular.criadoEm,
+      excecaoConversao: null,
+      tentativasConversao: 0,
+      criadoPor: 'usr-admin',
+      criadoEm: iso(somarDias(HOJE, -60)),
+    })
+  }
+
+  lancamentosFuturos.sort((a, b) => a.dataPrevista.localeCompare(b.dataPrevista))
+
   return {
     competencias: comps,
     regioes: REGIOES,
@@ -2003,6 +2253,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     delegacoes,
     titulosReceber,
     competencias_fechamento,
+    recorrencias,
+    lancamentosFuturos,
+    cenariosCaixa,
     indicadores,
   }
 }

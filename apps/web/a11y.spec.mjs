@@ -30,6 +30,8 @@ const ROTAS = [
   { hash: '#/contas-bancarias', nome: 'contas bancárias', titulo: 'Contas bancárias' },
   { hash: '#/contas-pagar', nome: 'contas a pagar', titulo: 'Contas a pagar' },
   { hash: '#/contas-receber', nome: 'contas a receber', titulo: 'Contas a receber' },
+  { hash: '#/lancamentos-futuros', nome: 'lançamentos futuros', titulo: 'Lançamentos futuros' },
+  { hash: '#/fluxo-caixa', nome: 'fluxo de caixa', titulo: 'Fluxo de caixa projetado' },
   { hash: '#/entrar', nome: 'entrar', titulo: 'Entrar' },
 ]
 
@@ -2337,6 +2339,15 @@ async function metrica(page, rotulo) {
 
 const emReais = (t) => Number(String(t).replace(/[^\d,]/g, '').replace(',', '.'))
 
+/**
+ * O seletor de cenário do fluxo de caixa.
+ *
+ * `getByLabel('Cenário')` casa com três coisas: o `<select>`, a região "Cenários
+ * cadastrados" e a legenda da tabela dela. O recorte pela barra de filtros é o que
+ * torna o seletor único — e continua único quando outra seção citar "cenário".
+ */
+const seletorCenario = (page) => page.locator('.filtros').getByLabel('Cenário')
+
 test('o simulador separa recorrente de evento', async ({ page }) => {
   await abrir(page, { hash: '#/comercial' })
 
@@ -2996,6 +3007,316 @@ test('axe em contas a receber e nos diálogos do módulo', async ({ page }) => {
 
 test('contas a receber reflui em 320px sem rolagem horizontal', async ({ page }) => {
   await abrir(page, { hash: '#/contas-receber', largura: 320, altura: 720 })
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a página transborda na largura de 320px').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ==========================================================================
+ * Módulos 12 e 13 — lançamentos futuros e fluxo de caixa projetado
+ *
+ * O que esta seção protege, na tela renderizada:
+ *
+ *  · **A recusa por vigência não parece falha.** Ela é o comportamento correto,
+ *    e a tela precisa dizê-lo — um toast de erro treinaria o operador a esconder
+ *    a mensagem que explica o que fazer com o contrato.
+ *  · **O diálogo de conversão mostra o que vai ser criado antes de criar**, e não
+ *    deixa rastro se o operador desistir.
+ *  · **O cenário de estresse não desconta a própria dívida**, e a tela diz isso
+ *    onde alguém faria a pergunta.
+ *  · **Nada disso é guardado**: a projeção e os alertas são recalculados, e a
+ *    tela afirma a ausência em texto, porque é a garantia que não se vê.
+ * ========================================================================== */
+
+test('a fila de exceção aparece com o motivo, e é um filtro e não uma situação', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+
+  // O aviso existe porque um lançamento que falhou em silêncio não é revisto.
+  await expect(page.getByText(/lançamento\(s\) não converteram/)).toBeVisible()
+
+  await page.getByLabel('Só a fila de exceção').check()
+  const tabela = page.getByRole('table').first()
+  // O motivo nomeia o estado do contrato: a massa pode ter suspenso, encerrado
+  // ou distratado, e o que importa é que a frase diga qual.
+  await expect(tabela).toContainText(/está em (SUSPENSO|ENCERRADO|CANCELADO|DISTRATADO)/)
+
+  // Nenhuma situação se chama "em exceção": ela é derivada do motivo escrito.
+  await expect(page.getByLabel('Situação')).not.toContainText('exceção')
+})
+
+test('o diálogo de conversão mostra o que vai ser criado antes de criar', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByLabel('Só o que já venceu').check()
+
+  await page.getByRole('table').first().getByRole('row').nth(1)
+    .getByRole('button', { name: /^Converter/ }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('A conversão ocorre uma vez.')).toBeVisible()
+  await expect(dialogo.getByText('Vai gerar')).toBeVisible()
+  await expect(dialogo.getByText('Aprovações necessárias')).toBeVisible()
+  // A tela precisa dizer que a geração automática não dispensa quem confere:
+  // senão o título nascendo travado em aprovação é surpresa.
+  await expect(dialogo).toContainText(/nenhuma — o valor está abaixo|não dispensa quem confere/)
+  await expect(dialogo.getByText(/registro histórico/)).toBeVisible()
+})
+
+test('a conversão de contrato fora de vigência avisa sem chamar de erro', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByLabel('Só a fila de exceção').check()
+
+  const linha = page.getByRole('table').first().getByRole('row').nth(1)
+  await linha.getByRole('button', { name: /^Converter/ }).click()
+
+  const dialogo = page.getByRole('dialog')
+  // O impedimento aparece **antes** de tentar, e o botão fica indisponível.
+  await expect(dialogo.getByText('A conversão vai ser recusada')).toBeVisible()
+  await expect(dialogo.getByText(/continua programado e converte sozinho/)).toBeVisible()
+  await expect(dialogo.getByRole('button', { name: 'Gerar o título' })).toBeDisabled()
+})
+
+test('a prévia da conversão não conta tentativa', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByLabel('Só a fila de exceção').check()
+
+  const antes = await page.getByRole('table').first().getByRole('row').nth(1).innerText()
+  await page.getByRole('table').first().getByRole('row').nth(1)
+    .getByRole('button', { name: /^Converter/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Voltar' }).click()
+
+  // Abrir e desistir não muda o contador: se a prévia "simulasse" convertendo, ele
+  // subiria por curiosidade.
+  const depois = await page.getByRole('table').first().getByRole('row').nth(1).innerText()
+  expect(depois).toBe(antes)
+})
+
+test('convertido não oferece editar nem cancelar', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByLabel('Situação').selectOption('CONVERTIDO')
+
+  const linha = page.getByRole('table').first().getByRole('row').nth(1)
+  await expect(linha).toContainText(/virou título em/)
+  await expect(linha.getByRole('button', { name: /^Editar/ })).toHaveCount(0)
+  await expect(linha.getByRole('button', { name: /^Converter/ })).toHaveCount(0)
+})
+
+test('o dia do vencimento da série para em 28, e a tela diz a razão', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByRole('button', { name: 'Nova série' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  const campo = dialogo.getByLabel('Dia do vencimento')
+  await expect(campo).toHaveAttribute('max', '28')
+  // A dica dá a razão real, e não "limite do sistema": 29, 30 e 31 não existem
+  // em todo mês, e fevereiro é uma regra que ninguém especificou.
+  await expect(dialogo.getByText(/não existem em todo mês/)).toBeVisible()
+})
+
+test('a série gera um período por clique, nunca o lote', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+
+  const cartao = page.getByRole('region', { name: 'Séries recorrentes' })
+  await expect(cartao.getByText(/um<\/strong> período por vez|um período por/)).toBeVisible()
+
+  const linha = cartao.getByRole('row').nth(1)
+  /*
+   * A célula é lida por posição, e **antes** do clique. Regex sobre o texto da
+   * linha casava com "dia 10" e com o valor base, que também são números; e ler
+   * depois do clique compararia o novo valor consigo mesmo.
+   */
+  const celulaGeradas = () => cartao.getByRole('row').nth(1).getByRole('cell').nth(2)
+  const antes = Number(await celulaGeradas().innerText())
+
+  await linha.getByRole('button', { name: /^Gerar próximo/ }).click()
+
+  /*
+   * `getByRole('region', { name: 'Avisos do sistema' })`, e não `role=status`:
+   * as tabelas expõem o contador "N registros" como live region, e um seletor
+   * por papel casaria com elas antes do aviso.
+   */
+  await expect(page.getByRole('region', { name: 'Avisos do sistema' })).toContainText(
+    /programado|desativada/,
+    { timeout: 4000 },
+  )
+
+  // Sobe em **um**: a diferença entre gerar o período e gerar o lote.
+  await expect(celulaGeradas()).toHaveText(String(antes + 1), { timeout: 4000 })
+})
+
+test('o formulário mostra o lado de um conjunto de campos por vez', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  await page.getByRole('button', { name: 'Novo lançamento' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  // Despesa: fornecedor e classificação, nunca cliente. Campo desabilitado ainda
+  // é campo, e sugeriria que o compromisso pode ter os dois.
+  await expect(dialogo.getByRole('combobox', { name: 'Fornecedor' })).toBeVisible()
+  await expect(dialogo.getByRole('group', { name: 'Classificação' })).toBeVisible()
+  await expect(dialogo.getByRole('combobox', { name: 'Cliente' })).toHaveCount(0)
+
+  /*
+   * `Combo` renderiza um combobox com listbox, não um `<select>`: `selectOption`
+   * falha nele. O `aria-label` da lista repete o do campo, então o seletor é por
+   * papel para não casar com os dois.
+   */
+  const tipo = dialogo.getByRole('combobox', { name: 'Tipo' })
+  await tipo.click()
+  await tipo.fill('receita recorrente')
+  await dialogo.getByRole('listbox', { name: 'Tipo' }).getByRole('option').first().click()
+  await expect(dialogo.getByRole('combobox', { name: 'Cliente' })).toBeVisible()
+  await expect(dialogo.getByRole('combobox', { name: 'Fornecedor' })).toHaveCount(0)
+  await expect(dialogo.getByRole('group', { name: 'Classificação' })).toHaveCount(0)
+})
+
+test('a projeção do planejamento vem da mesma função do painel', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+  const regiao = page.getByRole('region', { name: /Efeito no caixa/ })
+  await expect(regiao.getByText(/uma função só, para as duas telas/)).toBeVisible()
+  // E a tela afirma a ausência de posição guardada, porque é a garantia que não
+  // se vê olhando o número.
+  await expect(regiao.getByText('calculado agora, nunca guardado')).toBeVisible()
+})
+
+test('o fluxo de caixa diz que a janela começa hoje', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  await expect(page.getByText(/o passado tem extrato, não projeção/)).toBeVisible()
+  const janela = page.getByLabel('Janela')
+  await expect(janela).toContainText('30 dias')
+  await expect(janela).toContainText('180 dias')
+})
+
+test('o cenário de estresse reduz a entrada e não a saída', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  const entradaAntes = emReais(await metrica(page, 'Entradas previstas'))
+  const saidaAntes = emReais(await metrica(page, 'Saídas previstas'))
+
+  // O seletor traz o padrão primeiro; qualquer outra opção é um cenário nomeado.
+  await seletorCenario(page).selectOption({ index: 1 })
+
+  const entradaDepois = emReais(await metrica(page, 'Entradas previstas'))
+  const saidaDepois = emReais(await metrica(page, 'Saídas previstas'))
+
+  expect(entradaDepois).toBeLessThan(entradaAntes)
+  /*
+   * A saída não muda, e é o ponto de RN-F20. Descontar a própria dívida faria o
+   * cenário de estresse deixar a operação mais otimista sobre si mesma — e o erro
+   * passa porque o saldo do dia continua parecendo razoável.
+   */
+  expect(saidaDepois).toBe(saidaAntes)
+  await expect(page.locator('.grade--metricas').first()).toContainText(
+    'o cenário não desconta a própria dívida',
+  )
+})
+
+test('o gráfico da projeção traz a alternativa em tabela e a região negativa hachurada', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  const figura = page.locator('figure').first()
+  // A conclusão vai no título acessível, não só nos eixos.
+  await expect(figura.locator('svg')).toHaveAttribute('role', 'img')
+  // `<title>` de SVG não é HTMLElement, então `innerText` não se aplica.
+  const titulo = await figura.locator('svg title').textContent()
+  expect(titulo).toMatch(/Saldo projetado/)
+  expect(titulo).toMatch(/A tabela abaixo traz os mesmos valores/)
+
+  await figura.getByText('Ver os mesmos dados em tabela').click()
+  await expect(figura.getByRole('table')).toContainText('Saldo acumulado')
+})
+
+test('o menor saldo vem com o dia em que acontece', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+  // A pergunta do painel é "em que dia isto aperta": o valor sozinho obrigaria a
+  // varrer a curva para achar onde ele cai.
+  const bloco = await page.locator('.grade--metricas').first().innerText()
+  expect(bloco).toContain('Menor saldo da janela')
+  expect(bloco).toMatch(/em \d{2}\/\d{2}\/\d{4}|é o saldo de hoje/)
+})
+
+test('os alertas dizem que não são gravados, e usam o cenário padrão', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  const regiao = page.getByRole('region', { name: 'Alertas' })
+  await expect(regiao.getByText('derivados da projeção, nunca gravados')).toBeVisible()
+  await expect(regiao.getByText(/ficaria desatualizado no instante seguinte/)).toBeVisible()
+  // O limiar sai do cadastro, não de uma constante no código.
+  await expect(regiao.getByText(/limiar de concentração vem do cadastro/)).toBeVisible()
+})
+
+test('trocar o cenário muda o gráfico e não muda os alertas', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  const regiao = page.getByRole('region', { name: 'Alertas' })
+  const antes = await regiao.innerText()
+
+  await seletorCenario(page).selectOption({ index: 1 })
+  const entradas = emReais(await metrica(page, 'Entradas previstas'))
+  expect(entradas).toBeGreaterThanOrEqual(0)
+
+  /*
+   * Os alertas seguem o cenário **padrão**, e por isso não mudam.
+   * Ligá-los ao seletor faria o alarme depender de quem abriu a tela: quem
+   * estivesse olhando o pessimista veria alertas que o colega não vê.
+   */
+  expect(await regiao.innerText()).toBe(antes)
+})
+
+test('a tabela de cenários explica que a inadimplência só vale para entradas', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa' })
+
+  const regiao = page.getByRole('region', { name: 'Cenários cadastrados' })
+  await expect(regiao.getByText(/só às entradas/)).toBeVisible()
+  await expect(regiao.getByText(/inverso de um teste de estresse/)).toBeVisible()
+  // Um cenário é o padrão, e é ele que abre a tela e alimenta os alertas.
+  await expect(regiao.getByText('abre a tela e alimenta os alertas')).toBeVisible()
+})
+
+test('axe nos diálogos de lançamentos futuros', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros' })
+
+  await page.getByRole('button', { name: 'Novo lançamento' }).click()
+  let v = await violacoes(page)
+  expect(v, `novo lançamento:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Nova série' }).click()
+  v = await violacoes(page)
+  expect(v, `nova série:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click()
+
+  await page.getByLabel('Só o que já venceu').check()
+  await page.getByRole('table').first().getByRole('row').nth(1)
+    .getByRole('button', { name: /^Converter/ }).click()
+  v = await violacoes(page)
+  expect(v, `conversão:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Voltar' }).click()
+
+  await page.getByRole('table').first().getByRole('row').nth(1)
+    .getByRole('button', { name: /^Cancelar/ }).click()
+  v = await violacoes(page)
+  expect(v, `cancelamento:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('lançamentos futuros reflui em 320px sem rolagem horizontal', async ({ page }) => {
+  await abrir(page, { hash: '#/lancamentos-futuros', largura: 320, altura: 720 })
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a página transborda na largura de 320px').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('fluxo de caixa reflui em 320px sem rolagem horizontal', async ({ page }) => {
+  await abrir(page, { hash: '#/fluxo-caixa', largura: 320, altura: 720 })
 
   const transborda = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,

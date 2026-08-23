@@ -20,6 +20,8 @@ import { CentrosCusto } from './telas/CentrosCusto'
 import { ContasBancarias } from './telas/ContasBancarias'
 import { ContasPagar } from './telas/ContasPagar'
 import { ContasReceber } from './telas/ContasReceber'
+import { LancamentosFuturos } from './telas/LancamentosFuturos'
+import { FluxoCaixa } from './telas/FluxoCaixa'
 import type { Permissao } from './lib/permissoes'
 import type { ReactNode } from 'react'
 
@@ -157,6 +159,22 @@ export function Rotas() {
           element={
             <Protegida permissao="receber:ler">
               <ContasReceber />
+            </Protegida>
+          }
+        />
+        <Route
+          path="lancamentos-futuros"
+          element={
+            <Protegida permissao="financeiro:lancamento_manual">
+              <LancamentosFuturos />
+            </Protegida>
+          }
+        />
+        <Route
+          path="fluxo-caixa"
+          element={
+            <Protegida permissao="financeiro:painel_executivo">
+              <FluxoCaixa />
             </Protegida>
           }
         />

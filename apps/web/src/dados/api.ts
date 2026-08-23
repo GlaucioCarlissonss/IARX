@@ -115,6 +115,9 @@ export const api = {
   centrosCusto: () => responder(() => [...BASE.centrosCusto]),
   titulosPagar: () => responder(() => [...BASE.titulosPagar]),
   titulosReceber: () => responder(() => [...BASE.titulosReceber]),
+  lancamentosFuturos: () => responder(() => [...BASE.lancamentosFuturos]),
+  recorrencias: () => responder(() => [...BASE.recorrencias]),
+  cenariosCaixa: () => responder(() => [...BASE.cenariosCaixa]),
   competenciasFechamento: () => responder(() => [...BASE.competencias_fechamento]),
   delegacoes: () => responder(() => [...BASE.delegacoes]),
   contasBancarias: () => responder(() => [...BASE.contasBancarias]),
@@ -221,6 +224,29 @@ export const api = {
     executar(() => cmd.fecharCompetencia(BASE, competencia, fechadoPor)),
   revogarDelegacao: (delegacaoId: string, deleganteId: string) =>
     executar(() => cmd.revogarDelegacao(BASE, delegacaoId, deleganteId)),
+
+  /*
+   * Lançamentos futuros e caixa (Módulos 12 e 13).
+   *
+   * A projeção **não** está aqui: ela é leitura derivada da base, e passá-la pela
+   * fachada assíncrona daria a impressão de que existe uma posição guardada em
+   * algum lugar. As telas chamam `projetarCaixa(base, …)` sobre `baseSincrona()`,
+   * que é o que corresponde à verdade — a projeção é recalculada a cada abertura,
+   * porque a posição de amanhã muda a cada baixa de hoje.
+   */
+  criarLancamentoFuturo: (criadoPor: string, d: cmd.DadosLancamentoFuturo) =>
+    executar(() => cmd.criarLancamentoFuturo(BASE, criadoPor, d)),
+  editarLancamentoFuturo: (id: string, d: Parameters<typeof cmd.editarLancamentoFuturo>[2]) =>
+    executar(() => cmd.editarLancamentoFuturo(BASE, id, d)),
+  cancelarLancamentoFuturo: (id: string, motivo: string) =>
+    executar(() => cmd.cancelarLancamentoFuturo(BASE, id, motivo)),
+  converterLancamentoFuturo: (id: string, criadoPor: string) =>
+    executar(() => cmd.converterLancamentoFuturo(BASE, id, criadoPor)),
+  criarRecorrencia: (d: cmd.DadosRecorrencia) => executar(() => cmd.criarRecorrencia(BASE, d)),
+  gerarProximoLancamento: (recorrenciaId: string, criadoPor: string) =>
+    executar(() => cmd.gerarProximoLancamento(BASE, recorrenciaId, criadoPor)),
+  alternarRecorrencia: (id: string, ativo: boolean) =>
+    executar(() => cmd.alternarRecorrencia(BASE, id, ativo)),
 
   /*
    * Autenticação passa por `responder`, e não por `executar`.

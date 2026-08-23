@@ -566,6 +566,9 @@ export interface BaseDados {
   delegacoes: DelegacaoAprovacao[]
   titulosReceber: TituloReceber[]
   competencias_fechamento: CompetenciaFechamento[]
+  recorrencias: Recorrencia[]
+  lancamentosFuturos: LancamentoFuturo[]
+  cenariosCaixa: CenarioCaixa[]
   indicadores: Indicadores
 }
 
@@ -735,6 +738,13 @@ export interface TituloPagar {
   fornecedorId: string | null
   descricao: string
   classificacao: ClassificacaoPagar
+  /*
+   * Filial, pelo mesmo motivo que `TituloReceber` tem a dela: é o recorte em que
+   * a projeção de caixa filtra. Sem a coluna aqui, um recorte por filial somaria
+   * as entradas daquela filial e as saídas de **todas** — e o erro é plausível,
+   * porque o resultado fica mais pessimista, não mais otimista.
+   */
+  filialId: string | null
   contratoFornecedorRef: string | null
   valorOriginal: number
   /** Multa, juro ou desconto negociado. Nulo = nunca ajustado. */
@@ -856,6 +866,144 @@ export interface TituloReceber {
   rateio: RateioReceber[]
   aprovacoes: AprovacaoReceber[]
   recebimentos: RecebimentoTitulo[]
+}
+
+/* ------------------------------ Módulos 12 e 13: previsto e caixa */
+
+export type Lado = 'PAGAR' | 'RECEBER'
+export type Periodicidade = 'MENSAL' | 'TRIMESTRAL' | 'SEMESTRAL' | 'ANUAL'
+/*
+ * A classificação de um lançamento é a **mesma** de um título a pagar.
+ *
+ * Não há `ClassificacaoLancamento` própria de propósito: a união seria idêntica,
+ * e duas cópias do mesmo conjunto divergem no dia em que alguém acrescenta um
+ * valor a uma delas. Ela só existe do lado a pagar — uma receita prevista não tem
+ * classificação de despesa, e é por isso que o campo é nulável.
+ */
+
+export type TipoLancamento =
+  | 'DESPESA_RECORRENTE'
+  | 'RECEITA_RECORRENTE'
+  | 'DESPESA_PARCELADA'
+  | 'RECEITA_PARCELADA'
+  /** Planejamento, não partida dobrada: sem contrapartida contábil. */
+  | 'PROVISAO'
+
+export type StatusLancamento = 'PROGRAMADO' | 'CONVERTIDO' | 'CANCELADO'
+
+/**
+ * Recorrência — o **molde** do compromisso periódico.
+ *
+ * Uma forma só, com discriminador `lado`, e não `RecorrenciaPagar` +
+ * `RecorrenciaReceber`: duas formas paralelas para o mesmo conceito dariam duas
+ * respostas para "o que está programado". É o raciocínio de D-20 um nível acima.
+ *
+ * `diaVencimento` vai de 1 a 28. Não é limite técnico: 29, 30 e 31 não existem em
+ * todo mês, e o que fazer em fevereiro é regra que ninguém especificou.
+ */
+export interface Recorrencia {
+  id: string
+  lado: Lado
+  descricao: string
+  valorBase: number
+  periodicidade: Periodicidade
+  diaVencimento: number
+  proximaGeracao: string
+  ativo: boolean
+  empresaId: string | null
+  fornecedorId: string | null
+  classificacao: ClassificacaoPagar | null
+  clienteId: string | null
+  centroCustoId: string | null
+  contratoId: string | null
+  filialId: string | null
+}
+
+/**
+ * Lançamento futuro — a **instância**, e a camada de intenção.
+ *
+ * Existe separado do título porque um compromisso previsto se edita à vontade, e
+ * um título já criado carrega rodada de aprovação e rateio. Criar o título antes
+ * da hora põe em aprovação um compromisso que ainda não existe.
+ *
+ * **Duas referências, não um id polimórfico com um campo de tipo ao lado.**
+ * Exatamente uma preenchida quando CONVERTIDO, nenhuma antes — e é o `nenhuma
+ * antes` que impede o estado mais difícil de diagnosticar: a conversão parecendo
+ * feita sem ter sido.
+ *
+ * **Sem campo de atraso e sem `naFilaDeExcecao`.** Atraso é `dataPrevista <=
+ * hoje` com o lançamento programado; a fila é `excecaoConversao` preenchida. Um
+ * lançamento sai da fila no instante em que o contrato volta a vigorar, sem que
+ * ninguém o toque — um booleano gravado estaria errado a partir daí.
+ */
+export interface LancamentoFuturo {
+  id: string
+  tipo: TipoLancamento
+  /** Consequência de `tipo`, nunca uma segunda escolha. Ver `ladoDoTipo()`. */
+  lado: Lado
+  descricao: string
+  valorPrevisto: number
+  dataPrevista: string
+  empresaId: string | null
+  fornecedorId: string | null
+  classificacao: ClassificacaoPagar | null
+  clienteId: string | null
+  centroCustoId: string | null
+  contratoId: string | null
+  filialId: string | null
+  recorrenciaId: string | null
+  status: StatusLancamento
+  tituloPagarId: string | null
+  tituloReceberId: string | null
+  convertidoEm: string | null
+  /** RN-F16: por que a conversão foi recusada. Preenchido = fila de exceção. */
+  excecaoConversao: string | null
+  tentativasConversao: number
+  criadoPor: string
+  criadoEm: string
+}
+
+/**
+ * Cenário de caixa.
+ *
+ * `inadimplencia` se aplica **só a entradas** (RN-F20). Aplicá-la às saídas faria
+ * o cenário pessimista deixar a operação mais otimista sobre a própria dívida — o
+ * inverso de um teste de estresse.
+ */
+export interface CenarioCaixa {
+  id: string
+  nome: string
+  /** Percentual, de 0 a 100. */
+  inadimplencia: number
+  /** Limiar de concentração de saídas num único dia, em % da janela — RN-F22. */
+  limiarConcentracao: number
+  /** Um só por locatário: dois fariam o painel abrir diferente para duas pessoas. */
+  padrao: boolean
+}
+
+/**
+ * Um dia da projeção — **calculado, nunca guardado**.
+ *
+ * Não existe coleção de `DiaProjetado` em `BaseDados`, e a ausência é o ponto: a
+ * posição de amanhã muda a cada baixa registrada hoje. Guardá-la seria a mesma
+ * classe de defeito que guardar saldo de conta.
+ */
+export interface DiaProjetado {
+  dia: string
+  entradas: number
+  saidas: number
+  saldoDia: number
+  saldoAcumulado: number
+}
+
+export type TipoAlertaCaixa = 'SALDO_NEGATIVO' | 'CONCENTRACAO_SAIDA'
+
+/** Alerta derivado da projeção a cada leitura, nunca gravado. */
+export interface AlertaCaixa {
+  tipo: TipoAlertaCaixa
+  dia: string
+  valor: number
+  detalhe: string
 }
 
 /** Uma competência de medição e o seu estado de fechamento. */

@@ -294,3 +294,189 @@ export function BarrasHorizontais({
     </table>
   )
 }
+
+/* ------------------------------------------------------- projeção de caixa */
+
+export interface PontoProjecao {
+  dia: string
+  entradas: number
+  saidas: number
+  saldoAcumulado: number
+}
+
+/**
+ * Projeção diária de caixa, com a linha do zero e a região negativa marcada.
+ *
+ * **Por que não é `BarrasMensais` nem `Sparkline`.** As duas são chaveadas por
+ * competência (AAAA-MM) e desenham só valores positivos: o eixo começa em zero e
+ * cresce. A pergunta desta figura é outra — "em que dia o saldo fica negativo" —,
+ * e um gráfico que não desenha abaixo de zero responde a ela desenhando o
+ * negativo como se fosse pequeno e positivo. Era mais barato reaproveitar; seria
+ * mais barato e errado.
+ *
+ * O segundo canal além da cor (WCAG 1.4.1) é a **hachura** na região negativa e a
+ * linha do zero em traço cheio: quem não distingue a cor da linha ainda vê onde
+ * ela cruza. E o dia de menor saldo ganha um marcador próprio, porque é a
+ * informação que se procura no gráfico — sem ele, achá-la exige seguir a curva.
+ */
+export function ProjecaoCaixa({
+  titulo,
+  pontos,
+  formatarValor,
+  altura = 220,
+}: {
+  titulo: string
+  pontos: PontoProjecao[]
+  formatarValor: (v: number) => string
+  altura?: number
+}) {
+  const id = useId()
+  if (pontos.length < 2) return null
+
+  const w = 760
+  const padBaixo = 26
+  const padTopo = 10
+  const alturaPlot = altura - padBaixo - padTopo
+
+  const saldos = pontos.map((p) => p.saldoAcumulado)
+  const max = Math.max(...saldos, 0)
+  const min = Math.min(...saldos, 0)
+  const faixa = max - min || 1
+
+  const px = (i: number) => (i / (pontos.length - 1)) * w
+  const py = (v: number) => padTopo + alturaPlot - ((v - min) / faixa) * alturaPlot
+  const yZero = py(0)
+
+  const linha = pontos
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${px(i).toFixed(1)},${py(p.saldoAcumulado).toFixed(1)}`)
+    .join(' ')
+
+  const menor = pontos.reduce((m, p) => (p.saldoAcumulado < m.saldoAcumulado ? p : m), pontos[0]!)
+  const indiceMenor = pontos.indexOf(menor)
+  const negativos = pontos.filter((p) => p.saldoAcumulado < 0)
+
+  const resumo = negativos.length
+    ? `Saldo projetado fica negativo em ${negativos.length} dia(s); o pior é ${menor.dia}, com ${formatarValor(menor.saldoAcumulado)}.`
+    : `Saldo projetado permanece positivo em toda a janela; o menor é ${formatarValor(menor.saldoAcumulado)} em ${menor.dia}.`
+
+  return (
+    <figure className="pilha g3" style={{ margin: 0 }}>
+      <Rolagem rotulo={titulo}>
+        <svg
+          className="grafico"
+          viewBox={`0 0 ${w} ${altura}`}
+          role="img"
+          aria-labelledby={`${id}-titulo`}
+          style={{ minWidth: 520 }}
+        >
+          <title id={`${id}-titulo`}>{`${titulo}. ${resumo} A tabela abaixo traz os mesmos valores.`}</title>
+
+          <defs>
+            {/* Hachura: o segundo canal da região negativa, além da cor. */}
+            <pattern id={`${id}-hachura`} width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="0" y2="6" stroke="var(--cor-critico)" strokeWidth="1.5" opacity="0.35" />
+            </pattern>
+          </defs>
+
+          {/* A faixa abaixo de zero, hachurada. Só existe se houver negativo. */}
+          {min < 0 && (
+            <rect
+              x="0"
+              y={yZero}
+              width={w}
+              height={Math.max(0, padTopo + alturaPlot - yZero)}
+              fill={`url(#${id}-hachura)`}
+            />
+          )}
+
+          {/* A linha do zero, em traço cheio: é a referência que a figura existe para mostrar. */}
+          <line x1="0" x2={w} y1={yZero} y2={yZero} stroke="var(--cor-text-muted)" strokeWidth="1.5" />
+
+          <path d={linha} fill="none" stroke="var(--cor-serie-1)" strokeWidth="2" strokeLinejoin="round" />
+
+          {/* O dia de menor saldo: a informação que se procura no gráfico. */}
+          <circle
+            cx={px(indiceMenor)}
+            cy={py(menor.saldoAcumulado)}
+            r="4"
+            fill={menor.saldoAcumulado < 0 ? 'var(--cor-critico)' : 'var(--cor-serie-1)'}
+            stroke="var(--cor-surface)"
+            strokeWidth="1.5"
+          />
+
+          {[0, Math.floor(pontos.length / 2), pontos.length - 1].map((i) => (
+            <text
+              key={i}
+              x={Math.min(Math.max(px(i), 22), w - 22)}
+              y={altura - 8}
+              textAnchor="middle"
+              fontSize="11"
+              fill="var(--cor-text-muted)"
+            >
+              {pontos[i]!.dia.slice(5)}
+            </text>
+          ))}
+        </svg>
+      </Rolagem>
+
+      <div className="legenda">
+        <span className="legenda__item">
+          <span
+            className="legenda__marca"
+            style={{ background: 'var(--cor-serie-1)', borderRadius: '999px', height: 3 }}
+            aria-hidden="true"
+          />
+          Saldo acumulado projetado
+        </span>
+        {min < 0 && (
+          <span className="legenda__item">
+            <span
+              className="legenda__marca"
+              style={{ background: 'var(--cor-critico)', opacity: 0.35, borderRadius: '2px', height: 10 }}
+              aria-hidden="true"
+            />
+            Região negativa <span className="texto-atenuado">(hachurada)</span>
+          </span>
+        )}
+      </div>
+
+      <details>
+        <summary className="texto-atenuado" style={{ cursor: 'pointer' }}>
+          Ver os mesmos dados em tabela
+        </summary>
+        <Rolagem rotulo={`${titulo} em tabela`}>
+          <table style={{ marginTop: 'var(--e2)' }}>
+            <caption>{titulo} — movimento e saldo por dia</caption>
+            <thead>
+              <tr>
+                <th scope="col">Dia</th>
+                <th scope="col" className="numerico">Entradas</th>
+                <th scope="col" className="numerico">Saídas</th>
+                <th scope="col" className="numerico">Saldo acumulado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/*
+                * Só os dias com movimento, mais o último.
+                *
+                * Cento e oitenta linhas em que a maioria é "0, 0, mesmo saldo"
+                * não é alternativa acessível: é a mesma figura, ilegível de outro
+                * modo. O último entra sempre porque é o fecho da janela.
+                */}
+              {pontos
+                .filter((p, i) => p.entradas !== 0 || p.saidas !== 0 || i === pontos.length - 1)
+                .map((p) => (
+                  <tr key={p.dia}>
+                    <th scope="row">{p.dia}</th>
+                    <td className="numerico dado">{formatarValor(p.entradas)}</td>
+                    <td className="numerico dado">{formatarValor(p.saidas)}</td>
+                    <td className="numerico dado">{formatarValor(p.saldoAcumulado)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </Rolagem>
+      </details>
+    </figure>
+  )
+}
