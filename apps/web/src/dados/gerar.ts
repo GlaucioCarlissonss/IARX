@@ -44,6 +44,11 @@ import type {
   RateioPagar,
   StatusPagar,
   TituloPagar,
+  AprovacaoReceber,
+  CompetenciaFechamento,
+  RecebimentoTitulo,
+  StatusReceber,
+  TituloReceber,
 } from './tipos'
 
 /**
@@ -1247,9 +1252,35 @@ export function gerarBase(semente = 20260730): BaseDados {
    * sejam — troque os três números aqui e a prévia de alçada acompanha.
    */
   const alcadas: FaixaAlcada[] = [
-    { id: 'alc-1', perfilId: 'perf-operacao', limiteValor: 5_000 },
-    { id: 'alc-2', perfilId: 'perf-financeiro', limiteValor: 25_000 },
-    { id: 'alc-3', perfilId: 'perf-admin', limiteValor: 120_000 },
+    { id: 'alc-1', perfilId: 'perf-operacao', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 5_000, limitePercentual: null },
+    { id: 'alc-2', perfilId: 'perf-financeiro', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 25_000, limitePercentual: null },
+    { id: 'alc-3', perfilId: 'perf-admin', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 120_000, limitePercentual: null },
+
+    /*
+     * Alçada de emissão de cobrança, com faixas **mais baixas** que as de
+     * pagamento, e de propósito.
+     *
+     * Não é assimetria por descuido: uma despesa de dez mil é rotina numa
+     * locadora que compra parque; uma cobrança de dez mil errada vai para o
+     * cliente e custa a relação comercial. As faixas são deste arquivo, e a
+     * interface prova que a contagem segue o cadastro — troque os números e a
+     * prévia acompanha.
+     */
+    { id: 'alc-4', perfilId: 'perf-operacao', tipo: 'EMISSAO_FATURA', limiteValor: 2_000, limitePercentual: null },
+    { id: 'alc-5', perfilId: 'perf-financeiro', tipo: 'EMISSAO_FATURA', limiteValor: 20_000, limitePercentual: null },
+    { id: 'alc-6', perfilId: 'perf-admin', tipo: 'EMISSAO_FATURA', limiteValor: 100_000, limitePercentual: null },
+
+    /*
+     * Desconto é percentual, e só dois perfis o têm.
+     *
+     * Um teto em reais faria 5% num contrato grande ultrapassar o limite e 50%
+     * num pequeno passar batido — o inverso do que a alçada quer controlar. E o
+     * perfil de operação fica **sem nenhuma**, para a tela ter o caso de quem
+     * não concede desconto: zero significa "não concede", não "concede
+     * qualquer um".
+     */
+    { id: 'alc-7', perfilId: 'perf-financeiro', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 10 },
+    { id: 'alc-8', perfilId: 'perf-admin', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 25 },
   ]
 
   /*
@@ -1270,8 +1301,18 @@ export function gerarBase(semente = 20260730): BaseDados {
   let seqTit = 0
   const titId = () => `tpg-${String(++seqTit).padStart(4, '0')}`
 
-  const niveisPara = (valor: number) =>
-    Math.min([...new Set(alcadas.map((a) => a.limiteValor))].filter((l) => l < valor).length, 3)
+  /** Níveis exigidos por um valor, num tipo de alçada. Espelha o banco. */
+  const niveisDe = (valor: number, tipo: FaixaAlcada['tipo']) =>
+    Math.min(
+      [
+        ...new Set(
+          alcadas.filter((a) => a.tipo === tipo && a.limiteValor !== null).map((a) => a.limiteValor!),
+        ),
+      ].filter((l) => l < valor).length,
+      3,
+    )
+
+  const niveisPara = (valor: number) => niveisDe(valor, 'APROVACAO_PAGAMENTO')
 
   /** Abre uma rodada de aprovação com as decisões já tomadas que se pedir. */
   function rodada(
@@ -1622,6 +1663,294 @@ export function gerarBase(semente = 20260730): BaseDados {
 
   titulosPagar.sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
 
+  /* --------------------------------------- contas a receber (Módulo 11) */
+
+  /*
+   * Os títulos CONTRATUAL são **derivados das faturas já geradas**, um por
+   * fatura.
+   *
+   * Isto é a mitigação de uma lacuna aceita, e vale dizer com clareza: no banco
+   * e na API a decisão D-20 foi aplicada — existe `titulo_receber` e não existe
+   * tabela de fatura. Na base de demonstração, a tela de Faturamento continua
+   * lendo `faturas`, então as duas coleções coexistem. Derivando uma da outra
+   * num gerador só, os dois números não podem divergir enquanto a lacuna
+   * existir; se a fatura fosse sorteada e o título também, a mesma competência
+   * mostraria receitas diferentes em duas telas — e as duas pareceriam certas.
+   *
+   * O mapa de status é uma tradução, não uma escolha nova. `EM_ATRASO` **não**
+   * tem correspondente: atraso é vencimento menor que hoje com o título em
+   * aberto, e é calculado por quem exibe.
+   */
+  const titulosReceber: TituloReceber[] = []
+  let seqReceber = 0
+  const receberId = () => `trc-${String(++seqReceber).padStart(4, '0')}`
+  let numeroTitulo = 0
+
+  const statusDaFatura = (f: Fatura): StatusReceber => {
+    switch (f.status) {
+      case 'PREVISTA':
+      case 'EM_FECHAMENTO':
+        return 'PENDENTE_APROVACAO'
+      case 'EMITIDA':
+      // Vencido e em aberto continua APROVADO: o atraso é a data, não o estado.
+      case 'EM_ATRASO':
+        return 'APROVADO'
+      case 'PARCIAL':
+        return 'RECEBIDO_PARCIAL'
+      case 'PAGA':
+        return 'RECEBIDO'
+      case 'CANCELADA':
+        return 'CANCELADO'
+    }
+  }
+
+  const aprovadorEmissaoN1 =
+    lancadores.find((u) => u.perfilIds.includes('perf-operacao'))?.id ?? 'usr-admin'
+  const aprovadorEmissaoN2 =
+    lancadores.find((u) => u.perfilIds.includes('perf-financeiro'))?.id ?? 'usr-admin'
+
+  /*
+   * A competência corrente **não** gera título, e é o que a torna "aberta".
+   *
+   * Uma competência aberta tem medição e nenhuma cobrança: a cobrança nasce do
+   * fechamento. Derivando título para todas as faturas — como a primeira versão
+   * fazia —, a competência corrente já vinha coberta, e o diálogo de fechar
+   * competência dizia sempre "nada a gerar". A tela existia e não podia ser
+   * exercitada; foi um teste que pediu "gere e me mostre o resultado" que expôs
+   * isso.
+   */
+  const competenciaAberta = comps[comps.length - 1]
+
+  faturas.forEach((f, i) => {
+    if (f.competencia === competenciaAberta) return
+    const status = statusDaFatura(f)
+    const liquido = cent(f.valorLiquido)
+    const emissao = f.emissao
+    const contrato = contratos.find((c) => c.id === f.contratoId)
+
+    /*
+     * Piso de um nível no contratual, como no banco: a alçada decide **quantos**
+     * conferem, não **se** alguém confere. Uma cobrança de trezentos reais saiu
+     * do mesmo cálculo automático que uma de trinta mil.
+     */
+    const niveis = Math.max(1, niveisDe(liquido, 'EMISSAO_FATURA'))
+    const decididos =
+      status === 'PENDENTE_APROVACAO'
+        ? []
+        : [
+            { aprovadorId: aprovadorEmissaoN1, em: emissao },
+            { aprovadorId: aprovadorEmissaoN2, em: emissao },
+            { aprovadorId: 'usr-admin', em: emissao },
+          ]
+
+    const aprovacoes: AprovacaoReceber[] = Array.from({ length: niveis }, (_, n) => {
+      const d = decididos[n]
+      return {
+        nivel: n + 1,
+        rodada: 1,
+        aprovadorId: d?.aprovadorId ?? null,
+        decisao: d ? 'APROVADO' : null,
+        decididoEm: d?.em ?? null,
+        justificativa: null,
+        delegadoDe: null,
+      }
+    })
+
+    const recebimentos: RecebimentoTitulo[] =
+      f.valorPago > 0
+        ? [
+            {
+              id: `rcb-${String(i + 1).padStart(4, '0')}`,
+              valorRecebido: cent(f.valorPago),
+              dataRecebimento: f.status === 'PAGA' ? f.vencimento : iso(somarDias(HOJE, -5)),
+              contaId: 'cb-oper',
+              forma: i % 3 === 0 ? 'BOLETO' : i % 3 === 1 ? 'PIX' : 'TRANSFERENCIA',
+              movimentacaoId: null,
+              estornadoEm: null,
+              estornoMotivo: null,
+            },
+          ]
+        : []
+
+    titulosReceber.push({
+      id: receberId(),
+      numeroTitulo: ++numeroTitulo,
+      clienteId: f.clienteId,
+      filialId: contrato?.filialId ?? null,
+      contratoId: f.contratoId,
+      competencia: f.competencia,
+      origem: 'CONTRATUAL',
+      descricao: `Locação e consumo — contrato ${contrato?.numero ?? '—'}, competência ${f.competencia}`,
+      valorOriginal: cent(f.valorBruto),
+      desconto: cent(f.desconto),
+      descontoMotivo: f.desconto > 0 ? 'Desconto comercial vigente na competência' : null,
+      descontoPor: f.desconto > 0 ? aprovadorEmissaoN2 : null,
+      dataEmissao: emissao,
+      dataVencimento: f.vencimento,
+      status,
+      baixaMotivo: null,
+      baixadoEm: null,
+      excecaoGeracao: null,
+      tituloPaiId: null,
+      parcelaNumero: null,
+      parcelaTotal: null,
+      // Quem "gerou" é quem fechou a competência. É o que faz a segregação
+      // valer: essa pessoa não aparece como aprovadora possível.
+      criadoPor: 'usr-admin',
+      criadoEm: emissao,
+      rateio: [{ centroCustoId: 'cc-com', percentual: 100 }],
+      aprovacoes,
+      recebimentos,
+    })
+  })
+
+  /*
+   * Casos que a derivação das faturas nunca produz, e que a tela erra se ninguém
+   * os exercitar.
+   */
+  const clienteAvulso = clientes[0]
+  if (clienteAvulso) {
+    /*
+     * 1. Um contratual EM_DISPUTA, com o motivo escrito (RN-F11).
+     *
+     * O contrato tem de estar **de fato** fora de vigência. A primeira versão
+     * procurava `SUSPENSO` com `?? contratos[0]` de reserva, e como a massa não
+     * gera nenhum suspenso, o resultado era um registro que se contradizia:
+     * "em disputa porque o contrato estava em ATIVO no fechamento". Uma reserva
+     * silenciosa produz dado que parece válido e afirma o contrário de si mesmo
+     * — foi o teste de ponta a ponta que leu a frase e a acusou.
+     */
+    const contratoSuspenso = contratos.find((c) =>
+      ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO'].includes(c.status),
+    )
+    if (contratoSuspenso) {
+      titulosReceber.push({
+        id: receberId(),
+        numeroTitulo: ++numeroTitulo,
+        clienteId: contratoSuspenso.clienteId,
+        filialId: contratoSuspenso.filialId,
+        contratoId: contratoSuspenso.id,
+        competencia: comps[comps.length - 1]!,
+        origem: 'CONTRATUAL',
+        descricao: `Locação e consumo — contrato ${contratoSuspenso.numero}, competência ${comps[comps.length - 1]}`,
+        valorOriginal: 4_180,
+        desconto: 0,
+        descontoMotivo: null,
+        descontoPor: null,
+        dataEmissao: iso(somarDias(HOJE, -8)),
+        dataVencimento: iso(somarDias(HOJE, 22)),
+        status: 'EM_DISPUTA',
+        baixaMotivo: null,
+        baixadoEm: null,
+        excecaoGeracao: `Contrato ${contratoSuspenso.numero} estava em ${contratoSuspenso.status} no fechamento.`,
+        tituloPaiId: null,
+        parcelaNumero: null,
+        parcelaTotal: null,
+        criadoPor: 'usr-admin',
+        criadoEm: iso(somarDias(HOJE, -8)),
+        rateio: [{ centroCustoId: 'cc-com', percentual: 100 }],
+        aprovacoes: [],
+        recebimentos: [],
+      })
+    }
+
+    // 2. Um BAIXADO: encerrado sem entrada de caixa. É o caso que o relatório
+    //    erra somando com RECEBIDO, e sem um na massa a distinção não aparece.
+    titulosReceber.push({
+      id: receberId(),
+      numeroTitulo: ++numeroTitulo,
+      clienteId: clienteAvulso.id,
+      filialId: null,
+      contratoId: null,
+      competencia: null,
+      origem: 'AVULSO',
+      descricao: 'Reposição de suprimento fora de contrato',
+      valorOriginal: 890,
+      desconto: 0,
+      descontoMotivo: null,
+      descontoPor: null,
+      dataEmissao: iso(somarMeses(HOJE, -4)),
+      dataVencimento: iso(somarMeses(HOJE, -3)),
+      status: 'BAIXADO',
+      baixaMotivo: 'Perda reconhecida: cliente em recuperação judicial, crédito habilitado.',
+      baixadoEm: iso(somarMeses(HOJE, -1)),
+      tituloPaiId: null,
+      parcelaNumero: null,
+      parcelaTotal: null,
+      excecaoGeracao: null,
+      criadoPor: aprovadorEmissaoN2,
+      criadoEm: iso(somarMeses(HOJE, -4)),
+      rateio: [{ centroCustoId: 'cc-com', percentual: 100 }],
+      aprovacoes: [],
+      recebimentos: [],
+    })
+
+    // 3. Avulsos: um aprovado em aberto, um esperando decisão, um rejeitado.
+    const avulsos: { descricao: string; valor: number; status: StatusReceber; rejeitado?: boolean }[] = [
+      { descricao: 'Projeto de reestruturação do parque instalado', valor: 34_500, status: 'PENDENTE_APROVACAO' },
+      { descricao: 'Treinamento de operadores no cliente', valor: 1_250, status: 'APROVADO' },
+      { descricao: 'Recuperação de equipamento danificado', valor: 6_800, status: 'PENDENTE', rejeitado: true },
+    ]
+    avulsos.forEach((a, i) => {
+      const niveis = niveisDe(a.valor, 'EMISSAO_FATURA')
+      const aprovacoes: AprovacaoReceber[] = Array.from({ length: Math.max(niveis, 1) }, (_, n) => ({
+        nivel: n + 1,
+        rodada: 1,
+        aprovadorId: a.rejeitado && n === 0 ? aprovadorEmissaoN1 : null,
+        decisao: a.rejeitado && n === 0 ? 'REJEITADO' : null,
+        decididoEm: a.rejeitado && n === 0 ? iso(somarDias(HOJE, -2)) : null,
+        justificativa:
+          a.rejeitado && n === 0
+            ? 'Valor divergente do orçamento aprovado pelo cliente; reenviar com o aditivo.'
+            : null,
+        delegadoDe: null,
+      }))
+
+      titulosReceber.push({
+        id: receberId(),
+        numeroTitulo: ++numeroTitulo,
+        clienteId: clientes[i % clientes.length]!.id,
+        filialId: null,
+        contratoId: null,
+        competencia: null,
+        origem: 'AVULSO',
+        descricao: a.descricao,
+        valorOriginal: a.valor,
+        desconto: 0,
+        descontoMotivo: null,
+        descontoPor: null,
+        dataEmissao: iso(somarDias(HOJE, -10 - i)),
+        dataVencimento: iso(somarDias(HOJE, 20 - i * 15)),
+        status: a.status,
+        baixaMotivo: null,
+        baixadoEm: null,
+        excecaoGeracao: null,
+        tituloPaiId: null,
+        parcelaNumero: null,
+        parcelaTotal: null,
+        criadoPor: lancador(i),
+        criadoEm: iso(somarDias(HOJE, -10 - i)),
+        rateio: [{ centroCustoId: 'cc-com', percentual: 100 }],
+        aprovacoes: a.status === 'APROVADO' && niveis === 0 ? [] : aprovacoes,
+        recebimentos: [],
+      })
+    })
+  }
+
+  titulosReceber.sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
+
+  /*
+   * Estado de fechamento das competências.
+   *
+   * As fechadas são as anteriores à corrente: é o que uma operação real tem, e é
+   * o que faz a tela poder oferecer "fechar" só onde faz sentido. Sem isto, o
+   * botão apareceria para um mês já selado.
+   */
+  const competencias_fechamento: CompetenciaFechamento[] = comps.map((c, i) => ({
+    competencia: c,
+    fechadoEm: i < comps.length - 1 ? `${c}-28` : null,
+  }))
+
   /*
    * Uma delegação vigente.
    *
@@ -1672,6 +2001,8 @@ export function gerarBase(semente = 20260730): BaseDados {
     alcadas,
     titulosPagar,
     delegacoes,
+    titulosReceber,
+    competencias_fechamento,
     indicadores,
   }
 }

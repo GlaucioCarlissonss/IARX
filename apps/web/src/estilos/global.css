@@ -2661,3 +2661,40 @@ textarea {
   outline: 2px solid var(--cor-focus-ring);
   outline-offset: 2px;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Refluxo em tela estreita — Módulo 11                                       */
+/*                                                                            */
+/* Dois transbordos que o teste de 320px encontrou na tela de contas a         */
+/* receber, e que valem para qualquer tela com a mesma forma: uma barra de     */
+/* ações com dois botões de rótulo longo, e uma linha com quatro filtros.      */
+/*                                                                            */
+/* As regras vivem dentro da consulta de mídia de propósito. Aplicá-las sempre */
+/* mudaria o layout de todas as telas em monitor — a barra de ações passaria a  */
+/* poder quebrar onde hoje ela não quebra —, e isso é outra decisão. Abaixo de  */
+/* 560px empilhar é a única leitura possível.                                  */
+/* -------------------------------------------------------------------------- */
+@media (max-width: 560px) {
+  /* A barra de ações do cabeçalho quebra em vez de empurrar a página. */
+  .pagina__cabeca .linha {
+    flex-wrap: wrap;
+  }
+
+  /*
+   * Cada filtro ocupa a linha inteira.
+   *
+   * `min-width: 0` é o que faz a diferença: sem ele, um `<select>` reivindica a
+   * largura da sua opção mais longa como mínimo intrínseco, e "Contratual
+   * (gerada do contrato)" estoura o corpo da página sem que nenhuma regra de
+   * largura pareça errada.
+   */
+  .filtros > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .filtros select,
+  .filtros input {
+    max-width: 100%;
+    min-width: 0;
+  }
+}

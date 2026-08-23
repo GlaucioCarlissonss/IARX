@@ -27,8 +27,15 @@ import type {
   PrecisaoGeo,
   RateioPagar,
   StatusPagar,
+  TipoAlcada,
   TituloPagar,
   Usuario,
+  AprovacaoReceber,
+  FormaRecebimento,
+  OrigemReceber,
+  RateioReceber,
+  StatusReceber,
+  TituloReceber,
 } from './tipos'
 
 /**
@@ -2596,13 +2603,28 @@ export function cancelarNota(base: BaseDados, notaId: string, motivo: string): R
  * existe.
  */
 export function niveisExigidos(base: BaseDados, valor: number): number {
-  const limites = [...new Set(base.alcadas.map((a) => a.limiteValor))]
-  return Math.min(limites.filter((l) => l < valor).length, 3)
+  return Math.min(limitesAlcada(base).filter((l) => l < valor).length, 3)
 }
 
-/** As faixas distintas, em ordem. A tela usa para explicar de onde vem o número. */
-export function limitesAlcada(base: BaseDados): number[] {
-  return [...new Set(base.alcadas.map((a) => a.limiteValor))].sort((a, b) => a - b)
+/**
+ * As faixas distintas de um tipo, em ordem. A tela usa para explicar de onde vem
+ * o número.
+ *
+ * O filtro por tipo não é zelo: sem ele, um limite de aprovação de compra
+ * contaria como nível de emissão de fatura, e uma cobrança exigiria três
+ * aprovações porque alguém cadastrou uma alçada de ordem de compra.
+ */
+export function limitesAlcada(
+  base: BaseDados,
+  tipo: TipoAlcada = 'APROVACAO_PAGAMENTO',
+): number[] {
+  return [
+    ...new Set(
+      base.alcadas
+        .filter((a) => a.tipo === tipo && a.limiteValor !== null)
+        .map((a) => a.limiteValor as number),
+    ),
+  ].sort((a, b) => a - b)
 }
 
 /**
@@ -2611,13 +2633,18 @@ export function limitesAlcada(base: BaseDados): number[] {
  * O posto é a **posição** da faixa, não o valor: é o que permite ao cadastro
  * mudar de 50 mil para 80 mil sem reescrever a regra de quem decide o quê.
  */
-export function postoAlcada(base: BaseDados, usuarioId: string): number {
+export function postoAlcada(
+  base: BaseDados,
+  usuarioId: string,
+  tipo: TipoAlcada = 'APROVACAO_PAGAMENTO',
+): number {
   const usuario = base.usuarios.find((u) => u.id === usuarioId)
   if (!usuario) return 0
-  const limites = limitesAlcada(base)
+  const limites = limitesAlcada(base, tipo)
   const meus = base.alcadas
-    .filter((a) => usuario.perfilIds.includes(a.perfilId))
-    .map((a) => limites.indexOf(a.limiteValor) + 1)
+    .filter((a) => a.tipo === tipo && a.limiteValor !== null && usuario.perfilIds.includes(a.perfilId))
+    .map((a) => limites.indexOf(a.limiteValor as number) + 1)
+    .filter((p) => p > 0)
   return meus.length === 0 ? 0 : Math.max(...meus)
 }
 
@@ -3273,6 +3300,850 @@ export const ROTULO_STATUS: Record<StatusPagar, string> = {
   CANCELADO: 'cancelado',
   EM_DISPUTA: 'em disputa',
   REJEITADO: 'rejeitado',
+}
+
+/* ----------------------------------------------------- contas a receber -- */
+
+/**
+ * As cinco regras do Módulo 11, replicadas aqui.
+ *
+ * No servidor são gatilhos da migração 0020 — o banco é a autoridade. O que
+ * existe aqui é a mesma regra escrita uma segunda vez para que a tela recuse
+ * antes de pedir, com a mensagem certa. A duplicação é assumida e tem
+ * contrapartida: os testes de banco e os desta suíte falham juntos se a regra
+ * mudar num lado só.
+ */
+
+/** Níveis exigidos pela alçada de emissão. Zero é legítimo para avulso. */
+export function niveisEmissao(base: BaseDados, valor: number): number {
+  return Math.min(limitesAlcada(base, 'EMISSAO_FATURA').filter((l) => l < valor).length, 3)
+}
+
+/**
+ * Níveis de um título, com o piso do contratual — RN-F10.
+ *
+ * A alçada decide **quantos** conferem, não **se** alguém confere. Um contratual
+ * de valor baixo saiu do mesmo cálculo automático que um de valor alto, e é o
+ * cálculo que ninguém leu. Sem o piso, um locatário cuja menor faixa está acima
+ * do ticket médio veria toda a cobrança recorrente ser emitida sozinha.
+ */
+export function niveisDoTitulo(base: BaseDados, titulo: {
+  origem: OrigemReceber
+  valorOriginal: number
+  desconto: number
+}): number {
+  const niveis = niveisEmissao(base, titulo.valorOriginal - titulo.desconto)
+  return titulo.origem === 'CONTRATUAL' ? Math.max(1, niveis) : niveis
+}
+
+export function postoEmissao(base: BaseDados, usuarioId: string): number {
+  return postoAlcada(base, usuarioId, 'EMISSAO_FATURA')
+}
+
+/** Teto de desconto em percentual. Zero = não concede, não "concede qualquer um". */
+export function limiteDesconto(base: BaseDados, usuarioId: string): number {
+  const usuario = base.usuarios.find((u) => u.id === usuarioId)
+  if (!usuario) return 0
+  const tetos = base.alcadas
+    .filter((a) => a.tipo === 'DESCONTO' && usuario.perfilIds.includes(a.perfilId))
+    .map((a) => a.limitePercentual ?? 0)
+  return tetos.length === 0 ? 0 : Math.max(...tetos)
+}
+
+export function podeDecidirEmissao(
+  base: BaseDados,
+  usuarioId: string,
+  nivel: number,
+  emIso = iso(HOJE),
+): boolean {
+  if (postoEmissao(base, usuarioId) >= nivel) return true
+  // A delegação da 0019 vale para os dois lados: quem cobre as férias de alguém
+  // cobre as decisões dele, não metade delas.
+  return delegacoesVigentes(base, usuarioId, emIso).some((d) => d.nivel >= nivel)
+}
+
+/** O nível pendente da rodada corrente, ou null. */
+export function nivelPendenteReceber(titulo: TituloReceber): AprovacaoReceber | null {
+  const rodada = Math.max(0, ...titulo.aprovacoes.map((a) => a.rodada))
+  const daRodada = titulo.aprovacoes
+    .filter((a) => a.rodada === rodada)
+    .sort((a, b) => a.nivel - b.nivel)
+  for (const ap of daRodada) {
+    if (ap.decisao === null) return ap
+    if (ap.decisao === 'REJEITADO') return null
+  }
+  return null
+}
+
+export function valorLiquidoDe(titulo: TituloReceber): number {
+  return arredondar(titulo.valorOriginal - titulo.desconto)
+}
+
+export function totalRecebido(titulo: TituloReceber): number {
+  return arredondar(
+    titulo.recebimentos.filter((r) => r.estornadoEm === null).reduce((t, r) => t + r.valorRecebido, 0),
+  )
+}
+
+/** Saldo em aberto. Derivado, nunca gravado. */
+export function saldoDoTituloReceber(titulo: TituloReceber): number {
+  return arredondar(valorLiquidoDe(titulo) - totalRecebido(titulo))
+}
+
+/** Em aberto: o que ainda representa entrada de caixa esperada. */
+const EM_ABERTO_RECEBER: StatusReceber[] = [
+  'PENDENTE_APROVACAO',
+  'PENDENTE',
+  'APROVADO',
+  'RECEBIDO_PARCIAL',
+  'EM_DISPUTA',
+]
+
+/**
+ * Em atraso — **calculado**, nunca um status.
+ *
+ * O modelo simulado de `Fatura` guarda `EM_ATRASO` e `diasAtraso` como campos:
+ * no dia seguinte ao vencimento os dois estão errados, e só um job noturno os
+ * corrigiria. Aqui a data faz o trabalho e a resposta está certa sempre.
+ */
+export function emAtraso(titulo: TituloReceber, hojeIso = iso(HOJE)): boolean {
+  return EM_ABERTO_RECEBER.includes(titulo.status) && titulo.dataVencimento < hojeIso
+}
+
+export function ehPaiDeParcelasReceber(base: BaseDados, titulo: TituloReceber): boolean {
+  return base.titulosReceber.some((t) => t.tituloPaiId === titulo.id)
+}
+
+export function parcelasReceberDe(base: BaseDados, paiId: string): TituloReceber[] {
+  return base.titulosReceber
+    .filter((t) => t.tituloPaiId === paiId)
+    .sort((a, b) => (a.parcelaNumero ?? 0) - (b.parcelaNumero ?? 0))
+}
+
+/**
+ * A fila do aprovador de emissão.
+ *
+ * A terceira condição é a que costuma faltar: **quem gerou não aparece**. No
+ * fechamento automático quem gera é quem disparou o fechamento, então é esta
+ * cláusula que impede a mesma pessoa de fechar a competência e liberar as
+ * cobranças que ela produziu.
+ */
+export function filaDeEmissao(base: BaseDados, usuarioId: string): TituloReceber[] {
+  return base.titulosReceber.filter((t) => {
+    if (t.status !== 'PENDENTE_APROVACAO') return false
+    if (t.criadoPor === usuarioId) return false
+    const pendente = nivelPendenteReceber(t)
+    return pendente !== null && podeDecidirEmissao(base, usuarioId, pendente.nivel)
+  })
+}
+
+/**
+ * Receita **realizada** de uma competência — RN-F14.
+ *
+ * Soma recebimentos, não títulos encerrados. É aqui que a regra deixa de ser
+ * intenção: um BAIXADO não tem recebimento, então não pode entrar nesta conta
+ * por nenhum caminho. Somar "encerrados" inflaria a receita justamente onde
+ * ninguém confere, porque o total continuaria fechando consigo mesmo.
+ */
+export function receitaRealizada(base: BaseDados, competencia: string): number {
+  return arredondar(
+    base.titulosReceber
+      .filter((t) => t.competencia === competencia)
+      .reduce((total, t) => total + totalRecebido(t), 0),
+  )
+}
+
+/** Total encerrado sem entrada de caixa. Métrica própria, nunca somada à receita. */
+export function totalBaixadoSemRecebimento(base: BaseDados, competencia?: string): number {
+  return arredondar(
+    base.titulosReceber
+      .filter((t) => t.status === 'BAIXADO' && (!competencia || t.competencia === competencia))
+      .reduce((total, t) => total + saldoDoTituloReceber(t), 0),
+  )
+}
+
+export interface DadosTituloAvulso {
+  clienteId: string
+  descricao: string
+  valorOriginal: number
+  dataEmissao: string
+  dataVencimento: string
+  parcelas: number
+  rateio: RateioReceber[]
+}
+
+let seqReceberNovo = 0
+let seqRecebimento = 0
+let ultimoNumeroTitulo = 0
+
+/** Próximo número sequencial do locatário. Sem lacuna, como no banco. */
+function proximoNumeroTitulo(base: BaseDados): number {
+  if (ultimoNumeroTitulo === 0) {
+    ultimoNumeroTitulo = Math.max(0, ...base.titulosReceber.map((t) => t.numeroTitulo))
+  }
+  return ++ultimoNumeroTitulo
+}
+
+function aprovacoesNovas(niveis: number): AprovacaoReceber[] {
+  return Array.from({ length: niveis }, (_, i) => ({
+    nivel: i + 1,
+    rodada: 1,
+    aprovadorId: null,
+    decisao: null,
+    decididoEm: null,
+    justificativa: null,
+    delegadoDe: null,
+  }))
+}
+
+/**
+ * Lança um título **avulso**. Não há caminho para criar um contratual à mão.
+ *
+ * O contratual nasce do fechamento de competência, com o valor vindo do motor de
+ * preço. Um caminho manual permitiria uma cobrança contratual com valor
+ * digitado, e ela seria indistinguível da calculada.
+ */
+export function criarTituloAvulso(
+  base: BaseDados,
+  criadoPor: string,
+  dados: DadosTituloAvulso,
+): Resultado<TituloReceber> {
+  if (dados.descricao.trim().length < 3) {
+    return falha('REGRA_DE_NEGOCIO', 'Descreva a cobrança: o cliente vai ler isto.', {
+      campo: 'descricao',
+    })
+  }
+  if (!(dados.valorOriginal > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor tem de ser positivo.', { campo: 'valorOriginal' })
+  }
+  if (dados.dataVencimento < dados.dataEmissao) {
+    return falha('REGRA_DE_NEGOCIO', 'O vencimento não pode ser anterior à emissão.', {
+      campo: 'dataVencimento',
+    })
+  }
+  if (dados.parcelas < 1 || dados.parcelas > 120) {
+    return falha('REGRA_DE_NEGOCIO', 'O parcelamento vai de 1 a 120 parcelas.', { campo: 'parcelas' })
+  }
+  if (!base.clientes.some((c) => c.id === dados.clienteId)) {
+    return falha('NAO_ENCONTRADO', 'Cliente não encontrado.', { campo: 'clienteId' })
+  }
+
+  const soma = arredondar(dados.rateio.reduce((t, r) => t + r.percentual, 0))
+  if (dados.rateio.length > 0 && Math.abs(soma - 100) > 0.005) {
+    return falha('REGRA_DE_NEGOCIO', `O rateio soma ${soma}% — tem de fechar em 100%.`, {
+      campo: 'rateio',
+      acoes: ['Ajuste os percentuais', 'Ou remova o rateio inteiro'],
+    })
+  }
+  if (new Set(dados.rateio.map((r) => r.centroCustoId)).size !== dados.rateio.length) {
+    return falha('REGRA_DE_NEGOCIO', 'O mesmo centro de custo aparece duas vezes no rateio.', {
+      campo: 'rateio',
+      acoes: ['Some os percentuais numa linha só'],
+    })
+  }
+  for (const r of dados.rateio) {
+    const centro = base.centrosCusto.find((c) => c.id === r.centroCustoId)
+    if (!centro) return falha('NAO_ENCONTRADO', 'Centro de custo não encontrado.', { campo: 'rateio' })
+    if (!centro.ativo) {
+      return falha('REGRA_DE_NEGOCIO', `O centro "${centro.codigo} — ${centro.nome}" está inativo.`, {
+        campo: 'rateio',
+        acoes: ['Escolha um centro ativo'],
+      })
+    }
+  }
+
+  const niveis = niveisEmissao(base, dados.valorOriginal)
+  const status: StatusReceber = niveis === 0 ? 'APROVADO' : 'PENDENTE_APROVACAO'
+  const parcelado = dados.parcelas > 1
+  const agora = iso(HOJE)
+
+  const pai: TituloReceber = {
+    id: `trc-n${++seqReceberNovo}`,
+    numeroTitulo: proximoNumeroTitulo(base),
+    clienteId: dados.clienteId,
+    filialId: null,
+    contratoId: null,
+    competencia: null,
+    origem: 'AVULSO',
+    descricao: dados.descricao.trim(),
+    valorOriginal: arredondar(dados.valorOriginal),
+    desconto: 0,
+    descontoMotivo: null,
+    descontoPor: null,
+    dataEmissao: dados.dataEmissao,
+    dataVencimento: dados.dataVencimento,
+    status,
+    baixaMotivo: null,
+    baixadoEm: null,
+    excecaoGeracao: null,
+    tituloPaiId: null,
+    parcelaNumero: null,
+    parcelaTotal: parcelado ? dados.parcelas : null,
+    criadoPor,
+    criadoEm: agora,
+    rateio: dados.rateio.map((r) => ({ ...r })),
+    aprovacoes: aprovacoesNovas(niveis),
+    recebimentos: [],
+  }
+  base.titulosReceber.unshift(pai)
+
+  if (parcelado) {
+    // A última absorve a diferença de arredondamento: é a soma das parcelas que
+    // o cliente vai pagar, e ela tem de fechar com o total.
+    const base100 = Math.floor((dados.valorOriginal * 100) / dados.parcelas)
+    for (let i = 1; i <= dados.parcelas; i++) {
+      const centavos =
+        i < dados.parcelas
+          ? base100
+          : Math.round(dados.valorOriginal * 100) - base100 * (dados.parcelas - 1)
+      base.titulosReceber.unshift({
+        ...pai,
+        id: `trc-n${++seqReceberNovo}`,
+        numeroTitulo: proximoNumeroTitulo(base),
+        descricao: `${pai.descricao} (${i}/${dados.parcelas})`,
+        valorOriginal: arredondar(centavos / 100),
+        dataVencimento: somarMesesIso(dados.dataVencimento, i - 1),
+        tituloPaiId: pai.id,
+        parcelaNumero: i,
+        parcelaTotal: dados.parcelas,
+        // As parcelas herdam o status do pai e não têm rodada própria: quem
+        // aprova é ele, e é o valor dele que a alçada avalia.
+        aprovacoes: [],
+        recebimentos: [],
+        rateio: pai.rateio.map((r) => ({ ...r })),
+      })
+    }
+  }
+
+  return sucesso(pai)
+}
+
+function propagarStatusReceber(base: BaseDados, paiId: string, status: StatusReceber): void {
+  for (const p of base.titulosReceber) {
+    if (p.tituloPaiId !== paiId) continue
+    if (!['PENDENTE_APROVACAO', 'PENDENTE', 'APROVADO'].includes(p.status)) continue
+    p.status = status
+  }
+}
+
+/** Decide um nível de emissão. */
+export function decidirEmissao(
+  base: BaseDados,
+  tituloId: string,
+  nivel: number,
+  aprovadorId: string,
+  dados: DadosDecisao,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status !== 'PENDENTE_APROVACAO') {
+    return falha('REGRA_DE_NEGOCIO', `Um título ${ROTULO_STATUS_RECEBER[titulo.status]} não está em aprovação.`)
+  }
+
+  // A regra que faz o fluxo significar algo. No fechamento automático, quem
+  // gerou é quem disparou o fechamento.
+  if (titulo.criadoPor === aprovadorId) {
+    return falha('REGRA_DE_NEGOCIO', 'Quem gerou a cobrança não pode aprová-la.', {
+      acoes: ['Peça a decisão a outro aprovador do mesmo nível'],
+    })
+  }
+
+  const pendente = nivelPendenteReceber(titulo)
+  if (!pendente) return falha('REGRA_DE_NEGOCIO', 'Não há nível pendente neste título.')
+  if (pendente.nivel !== nivel) {
+    return falha('REGRA_DE_NEGOCIO', `O nível ${pendente.nivel} ainda não decidiu.`, {
+      acoes: [`Aguarde a decisão do nível ${pendente.nivel}`],
+    })
+  }
+  if (!podeDecidirEmissao(base, aprovadorId, nivel)) {
+    return falha('REGRA_DE_NEGOCIO', `Seu perfil não tem alçada de emissão para o nível ${nivel}.`, {
+      acoes: ['Peça ao administrador para configurar a faixa de alçada', 'Ou solicite uma delegação'],
+    })
+  }
+  if (dados.decisao === 'REJEITADO' && dados.justificativa.trim().length < 10) {
+    return falha('REGRA_DE_NEGOCIO', 'A rejeição exige justificativa: sem ela o solicitante reenvia igual.', {
+      campo: 'justificativa',
+    })
+  }
+
+  const proprio = postoEmissao(base, aprovadorId) >= nivel
+  const porDelegacao = proprio
+    ? null
+    : (delegacoesVigentes(base, aprovadorId).find((d) => d.nivel >= nivel)?.deleganteId ?? null)
+
+  pendente.aprovadorId = aprovadorId
+  pendente.decisao = dados.decisao
+  pendente.decididoEm = iso(HOJE)
+  pendente.justificativa = dados.justificativa.trim() || null
+  pendente.delegadoDe = porDelegacao
+
+  if (dados.decisao === 'REJEITADO') {
+    titulo.status = 'PENDENTE'
+    propagarStatusReceber(base, titulo.id, 'PENDENTE')
+    return sucesso(titulo)
+  }
+  if (nivelPendenteReceber(titulo) === null) {
+    titulo.status = 'APROVADO'
+    propagarStatusReceber(base, titulo.id, 'APROVADO')
+  }
+  return sucesso(titulo)
+}
+
+/** Reenvia depois da rejeição: rodada nova, a antiga preservada. */
+export function reenviarTituloReceber(
+  base: BaseDados,
+  tituloId: string,
+  solicitanteId: string,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status !== 'PENDENTE') {
+    return falha('REGRA_DE_NEGOCIO', 'Só um título pendente é reenviado para aprovação.')
+  }
+  if (titulo.criadoPor !== solicitanteId) {
+    return falha('REGRA_DE_NEGOCIO', 'O reenvio é de quem lançou a cobrança.')
+  }
+
+  const rodada = Math.max(0, ...titulo.aprovacoes.map((a) => a.rodada)) + 1
+  // Piso do contratual também no reenvio: senão o caminho para burlar RN-F10
+  // seria "rejeite e reenvie".
+  const niveis = niveisDoTitulo(base, titulo)
+  if (niveis === 0) {
+    titulo.status = 'APROVADO'
+    propagarStatusReceber(base, titulo.id, 'APROVADO')
+    return sucesso(titulo)
+  }
+  for (let n = 1; n <= niveis; n++) {
+    titulo.aprovacoes.push({
+      nivel: n,
+      rodada,
+      aprovadorId: null,
+      decisao: null,
+      decididoEm: null,
+      justificativa: null,
+      delegadoDe: null,
+    })
+  }
+  titulo.status = 'PENDENTE_APROVACAO'
+  propagarStatusReceber(base, titulo.id, 'PENDENTE_APROVACAO')
+  return sucesso(titulo)
+}
+
+/**
+ * Aplica desconto — RN-F12.
+ *
+ * A alçada é percentual, e o operador informa o valor absoluto: ele negocia
+ * "R$ 300 de abatimento", e a conversão para percentual é do sistema. Pedir o
+ * percentual na entrada faria essa conta de cabeça.
+ */
+export function aplicarDesconto(
+  base: BaseDados,
+  tituloId: string,
+  usuarioId: string,
+  desconto: number,
+  motivo: string,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (['RECEBIDO', 'CANCELADO', 'BAIXADO'].includes(titulo.status)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Um título ${ROTULO_STATUS_RECEBER[titulo.status]} não recebe desconto.`,
+      { acoes: ['Estorne o recebimento antes de renegociar o valor'] },
+    )
+  }
+  if (!(desconto > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O desconto tem de ser positivo.', { campo: 'desconto' })
+  }
+  if (desconto >= titulo.valorOriginal) {
+    return falha('REGRA_DE_NEGOCIO', 'Desconto que zera a cobrança é cancelamento, e tem caminho próprio.', {
+      campo: 'desconto',
+      acoes: ['Use o cancelamento, que exige permissão de cancelar'],
+    })
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do desconto — é o que explica cobrar menos.', {
+      campo: 'motivo',
+    })
+  }
+  const recebido = totalRecebido(titulo)
+  if (titulo.valorOriginal - desconto < recebido) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Já foram recebidos ${moedaSimples(recebido)}: o desconto não pode ficar abaixo disso.`,
+      { campo: 'desconto', acoes: ['Estorne o recebimento antes de reduzir o valor'] },
+    )
+  }
+
+  const percentual = arredondar((100 * desconto) / titulo.valorOriginal)
+  const teto = limiteDesconto(base, usuarioId)
+  if (percentual > teto) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Desconto de ${percentual}% acima da sua alçada de ${teto}%.`,
+      {
+        campo: 'desconto',
+        acoes: [
+          teto === 0
+            ? 'Seu perfil não concede desconto — peça a quem tem alçada'
+            : `Peça a concessão a quem tem alçada maior que ${teto}%`,
+          'A aprovação da emissão não cobre o desconto',
+        ],
+      },
+    )
+  }
+
+  titulo.desconto = arredondar(desconto)
+  titulo.descontoMotivo = motivo.trim()
+  titulo.descontoPor = usuarioId
+  if (saldoDoTituloReceber(titulo) === 0 && titulo.recebimentos.length > 0) titulo.status = 'RECEBIDO'
+  return sucesso(titulo)
+}
+
+export interface DadosRecebimento {
+  valorRecebido: number
+  dataRecebimento: string
+  contaId: string
+  forma: FormaRecebimento
+}
+
+/**
+ * Registra o recebimento e credita a conta, no mesmo ato.
+ *
+ * Espelho de `pagarTitulo`, com o sinal invertido. Separar os dois deixaria um
+ * título quitado que não entrou em conta nenhuma — e a conciliação passaria a
+ * ter uma linha a menos sem que nada parecesse errado.
+ */
+export function receberTitulo(
+  base: BaseDados,
+  tituloId: string,
+  dados: DadosRecebimento,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+
+  if (ehPaiDeParcelasReceber(base, titulo)) {
+    return falha('REGRA_DE_NEGOCIO', 'Um título parcelado é recebido nas parcelas, não no total.', {
+      acoes: ['Abra o parcelamento e receba a parcela'],
+    })
+  }
+  if (!['APROVADO', 'RECEBIDO_PARCIAL'].includes(titulo.status)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Um título ${ROTULO_STATUS_RECEBER[titulo.status]} não recebe baixa — a aprovação da cobrança vem antes do dinheiro.`,
+      { acoes: ['Conclua a aprovação da emissão'] },
+    )
+  }
+  if (!(dados.valorRecebido > 0)) {
+    return falha('REGRA_DE_NEGOCIO', 'O valor recebido tem de ser positivo.', { campo: 'valorRecebido' })
+  }
+  const saldo = saldoDoTituloReceber(titulo)
+  if (dados.valorRecebido > saldo + 0.005) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `O saldo em aberto é ${moedaSimples(saldo)} — o recebimento não pode excedê-lo.`,
+      {
+        campo: 'valorRecebido',
+        acoes: [
+          `Receba no máximo ${moedaSimples(saldo)}`,
+          'Recebimento a mais não vira crédito: registre a diferença como título próprio',
+        ],
+      },
+    )
+  }
+
+  const movimento = lancarMovimentacao(base, dados.contaId, {
+    tipo: 'ENTRADA',
+    valor: dados.valorRecebido,
+    dataMovimento: dados.dataRecebimento,
+    descricao: `Recebimento — ${titulo.descricao}`,
+  })
+  if (!movimento.ok) return movimento
+
+  titulo.recebimentos.push({
+    id: `rcb-n${++seqRecebimento}`,
+    valorRecebido: arredondar(dados.valorRecebido),
+    dataRecebimento: dados.dataRecebimento,
+    contaId: dados.contaId,
+    forma: dados.forma,
+    movimentacaoId: movimento.valor.id,
+    estornadoEm: null,
+    estornoMotivo: null,
+  })
+  titulo.status = saldoDoTituloReceber(titulo) === 0 ? 'RECEBIDO' : 'RECEBIDO_PARCIAL'
+  return sucesso(titulo)
+}
+
+export function estornarRecebimento(
+  base: BaseDados,
+  tituloId: string,
+  recebimentoId: string,
+  motivo: string,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  const recebimento = titulo.recebimentos.find((r) => r.id === recebimentoId)
+  if (!recebimento) return falha('NAO_ENCONTRADO', 'Recebimento não encontrado.')
+  if (recebimento.estornadoEm) {
+    return falha('REGRA_DE_NEGOCIO', 'Este recebimento já foi estornado.', {
+      acoes: ['Estorno não se estorna — registre um recebimento novo'],
+    })
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do estorno.', { campo: 'motivo' })
+  }
+
+  if (recebimento.movimentacaoId) {
+    const devolucao = estornarMovimentacao(base, recebimento.movimentacaoId, motivo)
+    if (!devolucao.ok) return devolucao
+  }
+  recebimento.estornadoEm = iso(HOJE)
+  recebimento.estornoMotivo = motivo.trim()
+  titulo.status = totalRecebido(titulo) === 0 ? 'APROVADO' : 'RECEBIDO_PARCIAL'
+  return sucesso(titulo)
+}
+
+/**
+ * Baixa sem recebimento — RN-F14.
+ *
+ * Encerra o título **sem** entrada de caixa: perda reconhecida, acordo que zerou
+ * o saldo por outro instrumento, valor que não compensa cobrar. O motivo é o
+ * único registro de por que o valor não entrou, e por isso é mais longo que o
+ * dos outros — vai ser lido meses depois por quem tenta explicar uma diferença
+ * de receita.
+ */
+export function baixarSemRecebimento(
+  base: BaseDados,
+  tituloId: string,
+  motivo: string,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (motivo.trim().length < 10) {
+    return falha('REGRA_DE_NEGOCIO', 'A baixa sem recebimento exige motivo de ao menos 10 caracteres.', {
+      campo: 'motivo',
+      acoes: ['É o único registro de por que este valor não entrou'],
+    })
+  }
+  if (!['APROVADO', 'RECEBIDO_PARCIAL', 'EM_DISPUTA'].includes(titulo.status)) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Um título ${ROTULO_STATUS_RECEBER[titulo.status]} não se baixa sem recebimento.`,
+    )
+  }
+  if (saldoDoTituloReceber(titulo) === 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Não há saldo em aberto para baixar.', {
+      acoes: ['O título já está quitado — baixá-lo apagaria o registro de que o dinheiro entrou'],
+    })
+  }
+
+  titulo.status = 'BAIXADO'
+  titulo.baixaMotivo = motivo.trim()
+  titulo.baixadoEm = iso(HOJE)
+  return sucesso(titulo)
+}
+
+export function cancelarTituloReceber(
+  base: BaseDados,
+  tituloId: string,
+  motivo: string,
+  cancelarParcelas = false,
+): Resultado<TituloReceber> {
+  const titulo = base.titulosReceber.find((t) => t.id === tituloId)
+  if (!titulo) return falha('NAO_ENCONTRADO', 'Título não encontrado.')
+  if (titulo.status === 'CANCELADO') {
+    return falha('REGRA_DE_NEGOCIO', 'Este título já está cancelado.')
+  }
+  if (motivo.trim().length < 5) {
+    return falha('REGRA_DE_NEGOCIO', 'Informe o motivo do cancelamento.', { campo: 'motivo' })
+  }
+  if (totalRecebido(titulo) > 0) {
+    return falha('REGRA_DE_NEGOCIO', 'Um título com recebimento não é cancelado.', {
+      acoes: ['Estorne o recebimento primeiro'],
+    })
+  }
+
+  const parcelas = parcelasReceberDe(base, titulo.id)
+  const recebidas = parcelas.filter((p) => totalRecebido(p) > 0)
+  if (parcelas.length > 0 && !cancelarParcelas) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `Este título tem ${parcelas.length} parcela(s). Confirme o cancelamento em cascata.`,
+      { acoes: ['Marque "cancelar as parcelas pendentes"'] },
+    )
+  }
+  if (recebidas.length > 0) {
+    return falha(
+      'REGRA_DE_NEGOCIO',
+      `${recebidas.length} parcela(s) já foram recebidas e não podem ser canceladas.`,
+      { acoes: ['Estorne os recebimentos antes de cancelar o parcelamento'] },
+    )
+  }
+
+  for (const p of parcelas) p.status = 'CANCELADO'
+  titulo.status = 'CANCELADO'
+  return sucesso(titulo)
+}
+
+/* ------------------------------------------- fechamento de competência */
+
+export interface PreviaFechamentoCompetencia {
+  competencia: string
+  contratos: number
+  titulosAGerar: number
+  jaExistentes: number
+  valorTotal: number
+  excecoes: { contratoId: string; contratoNumero: string; motivo: string }[]
+}
+
+/**
+ * O que o fechamento vai fazer, **antes** de fazer.
+ *
+ * Só leitura: pode ser chamada quantas vezes a tela quiser. É o que permite
+ * responder "isto vai gerar 12 cobranças, 2 delas em disputa" antes de o
+ * operador confirmar — e cobrança errada, ao contrário de despesa errada, chega
+ * ao cliente.
+ */
+export function previaFechamento(base: BaseDados, competencia: string): PreviaFechamentoCompetencia {
+  const excecoes: PreviaFechamentoCompetencia['excecoes'] = []
+  let aGerar = 0
+  let jaExistentes = 0
+  let total = 0
+
+  const semVigencia = ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO']
+  const candidatos = base.contratos.filter((c) =>
+    base.faturas.some((f) => f.contratoId === c.id && f.competencia === competencia),
+  )
+
+  for (const c of candidatos) {
+    const fatura = base.faturas.find((f) => f.contratoId === c.id && f.competencia === competencia)!
+    if (base.titulosReceber.some((t) => t.contratoId === c.id && t.competencia === competencia)) {
+      jaExistentes += 1
+      continue
+    }
+    aGerar += 1
+    total += arredondar(fatura.valorLiquido)
+    if (semVigencia.includes(c.status)) {
+      excecoes.push({
+        contratoId: c.id,
+        contratoNumero: c.numero,
+        motivo: `Contrato em ${c.status} no fechamento de ${competencia}.`,
+      })
+    }
+  }
+
+  return {
+    competencia,
+    contratos: candidatos.length,
+    titulosAGerar: aGerar,
+    jaExistentes,
+    valorTotal: arredondar(total),
+    excecoes,
+  }
+}
+
+export interface ResultadoFechamentoCompetencia {
+  competencia: string
+  titulosCriados: number
+  emDisputa: number
+  jaExistiam: number
+}
+
+/**
+ * Sela a competência e gera as cobranças, num ato.
+ *
+ * Idempotente pela chave (contrato, competência): reprocessar um mês é rotina —
+ * alguém corrige uma leitura e refecha —, e a cobrança em dobro chegaria ao
+ * cliente. Selar sem gerar deixaria um mês fechado que nunca foi cobrado; gerar
+ * sem selar deixaria a base do valor cobrado podendo mudar depois da cobrança.
+ */
+export function fecharCompetencia(
+  base: BaseDados,
+  competencia: string,
+  fechadoPor: string,
+): Resultado<ResultadoFechamentoCompetencia> {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(competencia)) {
+    return falha('REGRA_DE_NEGOCIO', 'Competência inválida: use AAAA-MM.', { campo: 'competencia' })
+  }
+  const registro = base.competencias_fechamento.find((c) => c.competencia === competencia)
+  if (registro?.fechadoEm) {
+    return falha('REGRA_DE_NEGOCIO', `A competência ${competencia} já está fechada.`, {
+      acoes: ['Um refechamento não duplica cobrança, mas também não muda nada'],
+    })
+  }
+
+  const previa = previaFechamento(base, competencia)
+  let criados = 0
+  let emDisputa = 0
+  const semVigencia = ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO']
+
+  for (const c of base.contratos) {
+    const fatura = base.faturas.find((f) => f.contratoId === c.id && f.competencia === competencia)
+    if (!fatura) continue
+    if (base.titulosReceber.some((t) => t.contratoId === c.id && t.competencia === competencia)) continue
+
+    const excecao = semVigencia.includes(c.status)
+      ? `Contrato ${c.numero} estava em ${c.status} no fechamento de ${competencia}.`
+      : null
+    const bruto = arredondar(fatura.valorBruto)
+    const desconto = arredondar(fatura.desconto)
+    // RN-F10, com o piso: a alçada decide quantos conferem, não se alguém confere.
+    const niveis = Math.max(1, niveisEmissao(base, bruto - desconto))
+
+    base.titulosReceber.unshift({
+      id: `trc-n${++seqReceberNovo}`,
+      numeroTitulo: proximoNumeroTitulo(base),
+      clienteId: c.clienteId,
+      filialId: c.filialId,
+      contratoId: c.id,
+      competencia,
+      origem: 'CONTRATUAL',
+      descricao: `Locação e consumo — contrato ${c.numero}, competência ${competencia}`,
+      valorOriginal: bruto,
+      desconto,
+      descontoMotivo: desconto > 0 ? `Desconto comercial vigente em ${competencia}` : null,
+      descontoPor: null,
+      dataEmissao: fatura.emissao,
+      dataVencimento: fatura.vencimento,
+      status: excecao ? 'EM_DISPUTA' : 'PENDENTE_APROVACAO',
+      baixaMotivo: null,
+      baixadoEm: null,
+      excecaoGeracao: excecao,
+      tituloPaiId: null,
+      parcelaNumero: null,
+      parcelaTotal: null,
+      criadoPor: fechadoPor,
+      criadoEm: iso(HOJE),
+      rateio: [{ centroCustoId: 'cc-com', percentual: 100 }],
+      // Título em disputa não abre rodada: não se aprova a emissão de uma
+      // cobrança que já se sabe estar errada.
+      aprovacoes: excecao ? [] : aprovacoesNovas(niveis),
+      recebimentos: [],
+    })
+    criados += 1
+    if (excecao) emDisputa += 1
+  }
+
+  if (registro) registro.fechadoEm = iso(HOJE)
+  else base.competencias_fechamento.push({ competencia, fechadoEm: iso(HOJE) })
+
+  return sucesso({
+    competencia,
+    titulosCriados: criados,
+    emDisputa,
+    jaExistiam: previa.jaExistentes,
+  })
+}
+
+export const ROTULO_STATUS_RECEBER: Record<StatusReceber, string> = {
+  PENDENTE_APROVACAO: 'em aprovação',
+  PENDENTE: 'pendente',
+  APROVADO: 'aprovado',
+  RECEBIDO_PARCIAL: 'recebido em parte',
+  RECEBIDO: 'recebido',
+  CANCELADO: 'cancelado',
+  EM_DISPUTA: 'em disputa',
+  BAIXADO: 'baixado sem recebimento',
 }
 
 /* ------------------------------------------------------------- utilidades -- */

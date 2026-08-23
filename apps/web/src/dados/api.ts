@@ -114,6 +114,8 @@ export const api = {
   usuarios: () => responder(() => [...BASE.usuarios]),
   centrosCusto: () => responder(() => [...BASE.centrosCusto]),
   titulosPagar: () => responder(() => [...BASE.titulosPagar]),
+  titulosReceber: () => responder(() => [...BASE.titulosReceber]),
+  competenciasFechamento: () => responder(() => [...BASE.competencias_fechamento]),
   delegacoes: () => responder(() => [...BASE.delegacoes]),
   contasBancarias: () => responder(() => [...BASE.contasBancarias]),
   extrato: (contaId: string) =>
@@ -192,6 +194,31 @@ export const api = {
     executar(() => cmd.cancelarTituloPagar(BASE, tituloId, motivo, cancelarParcelas)),
   criarDelegacao: (deleganteId: string, d: cmd.DadosDelegacao) =>
     executar(() => cmd.criarDelegacao(BASE, deleganteId, d)),
+
+  /*
+   * Contas a receber. Cada escrita recebe quem a está fazendo, pela mesma razão
+   * do Módulo 10: a segregação depende de comparar quem gerou com quem decide, e
+   * a alçada de desconto depende de saber de quem é o teto. Na API real esses
+   * valores vêm do token, nunca do corpo.
+   */
+  criarTituloAvulso: (criadoPor: string, d: cmd.DadosTituloAvulso) =>
+    executar(() => cmd.criarTituloAvulso(BASE, criadoPor, d)),
+  decidirEmissao: (tituloId: string, nivel: number, aprovadorId: string, d: cmd.DadosDecisao) =>
+    executar(() => cmd.decidirEmissao(BASE, tituloId, nivel, aprovadorId, d)),
+  reenviarTituloReceber: (tituloId: string, solicitanteId: string) =>
+    executar(() => cmd.reenviarTituloReceber(BASE, tituloId, solicitanteId)),
+  aplicarDesconto: (tituloId: string, usuarioId: string, desconto: number, motivo: string) =>
+    executar(() => cmd.aplicarDesconto(BASE, tituloId, usuarioId, desconto, motivo)),
+  receberTitulo: (tituloId: string, d: cmd.DadosRecebimento) =>
+    executar(() => cmd.receberTitulo(BASE, tituloId, d)),
+  estornarRecebimento: (tituloId: string, recebimentoId: string, motivo: string) =>
+    executar(() => cmd.estornarRecebimento(BASE, tituloId, recebimentoId, motivo)),
+  baixarSemRecebimento: (tituloId: string, motivo: string) =>
+    executar(() => cmd.baixarSemRecebimento(BASE, tituloId, motivo)),
+  cancelarTituloReceber: (tituloId: string, motivo: string, cancelarParcelas: boolean) =>
+    executar(() => cmd.cancelarTituloReceber(BASE, tituloId, motivo, cancelarParcelas)),
+  fecharCompetencia: (competencia: string, fechadoPor: string) =>
+    executar(() => cmd.fecharCompetencia(BASE, competencia, fechadoPor)),
   revogarDelegacao: (delegacaoId: string, deleganteId: string) =>
     executar(() => cmd.revogarDelegacao(BASE, delegacaoId, deleganteId)),
 

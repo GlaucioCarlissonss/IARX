@@ -29,6 +29,7 @@ const ROTAS = [
   { hash: '#/centros-custo', nome: 'centros de custo', titulo: 'Centros de custo' },
   { hash: '#/contas-bancarias', nome: 'contas bancárias', titulo: 'Contas bancárias' },
   { hash: '#/contas-pagar', nome: 'contas a pagar', titulo: 'Contas a pagar' },
+  { hash: '#/contas-receber', nome: 'contas a receber', titulo: 'Contas a receber' },
   { hash: '#/entrar', nome: 'entrar', titulo: 'Entrar' },
 ]
 
@@ -2738,6 +2739,263 @@ test('axe em contas a pagar e nos diálogos do módulo', async ({ page }) => {
 
 test('contas a pagar reflui em 320px sem rolagem horizontal', async ({ page }) => {
   await abrir(page, { hash: '#/contas-pagar', largura: 320, altura: 720 })
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a página transborda na largura de 320px').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ----------------------------------------------------- contas a receber (11) */
+
+/**
+ * O que estes testes existem para provar, na tela montada:
+ *
+ *  · **`BAIXADO` nunca aparece somado a `RECEBIDO`.** É o erro que um painel
+ *    financeiro comete de graça, e o que o comete não vê: a soma de
+ *    "encerrados" fecha consigo mesma, então a receita aparece inflada
+ *    exatamente onde ninguém confere.
+ *  · **O fechamento diz o que vai fazer antes de fazer.** Cobrança errada, ao
+ *    contrário de despesa errada, chega ao cliente.
+ *  · **O atraso é a data**, não um campo — a lista o calcula e o diz por texto.
+ */
+
+test('a receita recebida e o baixado sem receber são métricas separadas', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+
+  const metricas = await page.locator('.grade--metricas').first().innerText()
+  expect(metricas).toContain('Baixado sem receber')
+  expect(metricas).toContain('não conta como receita')
+
+  // Os dois números existem e são diferentes: se a tela somasse um no outro, a
+  // métrica de baixa não teria por que existir.
+  const recebido = emReais(await metrica(page, 'Recebido em'))
+  const baixado = emReais(await metrica(page, 'Baixado sem receber'))
+  expect(baixado).toBeGreaterThan(0)
+  expect(recebido).not.toBe(baixado)
+})
+
+test('a cobrança baixada diz que não é receita, no detalhe', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByLabel('Situação').selectOption('BAIXADO')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('Encerrada sem entrada de caixa')).toBeVisible()
+  await expect(dialogo.getByText(/não.*conta como receita realizada/)).toBeVisible()
+  // O motivo é o único registro de por que o valor não entrou.
+  await expect(dialogo.getByText(/recuperação judicial/)).toBeVisible()
+})
+
+test('a cobrança em disputa mostra o motivo já na lista', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+
+  // Uma cobrança em disputa que parece normal é cobrada por engano — então o
+  // motivo aparece na linha, não só no detalhe.
+  await expect(page.getByText(/cobrança\(s\) em disputa/).first()).toBeVisible()
+  await page.getByLabel('Situação').selectOption('EM_DISPUTA')
+  // A forma da frase, não o estado exato: o que importa é que ela nomeie o
+  // estado do contrato, e a massa pode ter suspenso, encerrado ou distratado.
+  await expect(page.getByRole('table')).toContainText(
+    /estava em (SUSPENSO|ENCERRADO|CANCELADO|DISTRATADO) no fechamento/,
+  )
+})
+
+test('o atraso é dito por texto, não só pela cor da data', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByLabel('Só as vencidas em aberto').check()
+
+  const tabela = page.getByRole('table')
+  await expect(tabela).toContainText(/dia\(s\) em atraso/)
+  // Nenhuma situação se chama "em atraso": ele é calculado da data.
+  await expect(page.getByLabel('Situação')).not.toContainText('Em atraso')
+})
+
+test('o fechamento mostra o que vai gerar, e as exceções, antes de confirmar', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByRole('button', { name: 'Fechar competência' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('Selar é definitivo para a base do cálculo')).toBeVisible()
+  await expect(dialogo.getByText(/cobrança\(s\)<\/strong> a gerar|a gerar, somando/)).toBeVisible()
+
+  // O botão diz quantas vai gerar: confirmar sem saber o número é o que a
+  // prévia existe para evitar.
+  const confirmar = dialogo.getByRole('button', { name: /Fechar e gerar \d+ cobrança/ })
+  await expect(confirmar).toBeEnabled()
+
+  await confirmar.click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('region', { name: 'Avisos do sistema' }).getByText(/cobrança\(s\) geradas/),
+  ).toBeVisible()
+})
+
+test('a cobrança contratual gerada nasce esperando aprovação', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByRole('button', { name: 'Fechar competência' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: /Fechar e gerar/ }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.getByLabel('Situação').selectOption('PENDENTE_APROVACAO')
+  await page.getByLabel('Origem').selectOption('CONTRATUAL')
+  const tabela = page.getByRole('table')
+  await expect(tabela).toContainText('Em aprovação')
+  // A alçada decide quantos conferem, não se alguém confere: sempre há nível.
+  await expect(tabela).toContainText(/aguarda nível 1 de \d/)
+})
+
+test('a prévia de alçada avisa que o contratual sempre passa por alguém', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByRole('button', { name: 'Cobrança avulsa' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Valor', { exact: true }).fill('500')
+  await expect(dialogo.getByText('Nenhuma aprovação necessária.')).toBeVisible()
+  // Sem esta frase, o operador concluiria que a cobrança recorrente também sai
+  // sozinha — o contrário do que a regra garante.
+  await expect(dialogo.getByText(/passa por ao menos um nível sempre/)).toBeVisible()
+
+  await dialogo.getByLabel('Valor', { exact: true }).fill('50000')
+  await expect(dialogo.getByText(/2 nível\(is\) de aprovação/)).toBeVisible()
+})
+
+test('o desconto mostra o percentual e barra acima do teto', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByLabel('Situação').selectOption('APROVADO')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Aplicar desconto' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByRole('heading', { name: 'Aplicar desconto' })).toBeVisible()
+  // O administrador da demonstração concede até 25%.
+  await expect(dialogo.getByText(/Seu teto é 25%/)).toBeVisible()
+
+  // O percentual aparece enquanto se digita o valor: é ele que a alçada compara.
+  await dialogo.getByLabel('Desconto', { exact: true }).fill('1')
+  await expect(dialogo.getByText(/% do valor original/)).toBeVisible()
+})
+
+test('decidir a emissão mostra de onde veio o número', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Decidir/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByRole('heading', { name: /Aprovar emissão/ })).toBeVisible()
+  // Aprovar um número sem a memória de cálculo é assinar em branco.
+  await expect(dialogo.getByText('Depois deste nível')).toBeVisible()
+
+  await dialogo.getByRole('button', { name: 'Aprovar emissão', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByRole('region', { name: 'Avisos do sistema' }).getByText(/aprovado/i).first(),
+  ).toBeVisible()
+})
+
+test('a fila não oferece a cobrança que o próprio usuário gerou', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+
+  await page.getByRole('button', { name: 'Cobrança avulsa' }).click()
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Descrição').fill('Projeto lançado por quem também aprova')
+  await dialogo.getByLabel('Valor', { exact: true }).fill('80000')
+  await dialogo.getByRole('button', { name: 'Lançar cobrança' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  // Em aprovação, e ainda assim fora da fila de quem a lançou.
+  await page.getByPlaceholder('Buscar cobrança…').fill('Projeto lançado por quem')
+  await expect(page.getByRole('table')).toContainText('Em aprovação')
+
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+  await expect(page.getByRole('heading', { name: /Minha fila de aprovação/ })).toBeVisible()
+  // A asserção é sobre a região, não sobre a tabela: a fila pode ficar vazia, e
+  // aí não existe tabela nenhuma — o estado vazio é a própria prova.
+  await expect(page.locator('main')).not.toContainText('Projeto lançado por quem também aprova')
+})
+
+test('a baixa sem recebimento avisa que não é receber', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByLabel('Situação').selectOption('APROVADO')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Baixar sem receber' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('Isto não é receber')).toBeVisible()
+  await expect(dialogo.getByText(/não.*entra na receita realizada/)).toBeVisible()
+
+  // Motivo curto é recusado: é o único registro de por que o valor não entrou.
+  await dialogo.getByLabel('Motivo').fill('perda')
+  await dialogo.getByRole('button', { name: 'Baixar sem receber' }).click()
+  await expect(dialogo.getByText(/ao menos 10 caracteres/).first()).toBeVisible()
+
+  await dialogo.getByLabel('Motivo').fill('acordo comercial encerrou o saldo por outro instrumento')
+  await dialogo.getByRole('button', { name: 'Baixar sem receber' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('o recebimento não excede o saldo, e o parcial é anunciado antes', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  await page.getByLabel('Situação').selectOption('APROVADO')
+
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Receber/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo.getByText('A baixa e o extrato nascem juntos')).toBeVisible()
+
+  const saldo = emReais(await dialogo.getByLabel('Valor recebido').inputValue())
+  expect(saldo).toBeGreaterThan(0)
+
+  await dialogo.getByLabel('Valor recebido').fill(String(saldo + 1000))
+  await dialogo.getByRole('button', { name: 'Registrar entrada' }).click()
+  await expect(dialogo.getByText(/O saldo em aberto é/).first()).toBeVisible()
+
+  await dialogo.getByLabel('Valor recebido').fill(String(Math.floor(saldo / 2)))
+  await expect(dialogo.getByText(/Recebimento parcial: restariam/)).toBeVisible()
+  await dialogo.getByRole('button', { name: 'Registrar entrada' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('sem permissão de aprovar cobrança, a tela não oferece decidir', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+
+  // O perfil de suporte tem leitura e não aprova cobrança: a lista continua
+  // visível, e é só a ação que sai. Esconder a tela inteira faria quem confere
+  // a cobrança perder o acesso de leitura que ele legitimamente tem.
+  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Supervisor de Suporte' })
+  await expect(page.getByRole('button', { name: /^Decidir/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Cobrança avulsa' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Fechar competência' })).toHaveCount(0)
+})
+
+test('axe em contas a receber e nos diálogos do módulo', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  let v = await violacoes(page)
+  expect(v, `lista:\n  ${descrever(v)}`).toEqual([])
+
+  await page.getByRole('button', { name: 'Cobrança avulsa' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Acrescentar centro' }).click()
+  v = await violacoes(page)
+  expect(v, `nova cobrança:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click()
+
+  await page.getByRole('button', { name: 'Fechar competência' }).click()
+  v = await violacoes(page)
+  expect(v, `fechamento:\n  ${descrever(v)}`).toEqual([])
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click()
+
+  await page.getByRole('button', { name: /Ver a minha fila/ }).click()
+  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Decidir/ }).click()
+  v = await violacoes(page)
+  expect(v, `decisão de emissão:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('contas a receber reflui em 320px sem rolagem horizontal', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber', largura: 320, altura: 720 })
 
   const transborda = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,

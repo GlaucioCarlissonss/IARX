@@ -564,6 +564,8 @@ export interface BaseDados {
   alcadas: FaixaAlcada[]
   titulosPagar: TituloPagar[]
   delegacoes: DelegacaoAprovacao[]
+  titulosReceber: TituloReceber[]
+  competencias_fechamento: CompetenciaFechamento[]
   indicadores: Indicadores
 }
 
@@ -661,10 +663,26 @@ export type FormaPagamento = 'TRANSFERENCIA' | 'BOLETO' | 'PIX' | 'CHEQUE'
  * código seria inventar regra de negócio: cada operação tem os seus, e mudá-los
  * é ato de administração, não implantação.
  */
+export type TipoAlcada = 'APROVACAO_PAGAMENTO' | 'EMISSAO_FATURA' | 'DESCONTO'
+
 export interface FaixaAlcada {
   id: string
   perfilId: string
-  limiteValor: number
+  /**
+   * O tipo existe na tabela `alcada` desde a migração 0002, e passou a importar
+   * aqui quando o segundo módulo começou a usá-la.
+   *
+   * Enquanto só contas a pagar consultava a alçada, o tipo era implícito e a
+   * omissão não doía. Com contas a receber, uma faixa sem tipo faria o limite de
+   * aprovação de pagamento contar como nível de emissão de fatura — os dois
+   * fluxos passariam a se contaminar, e o sintoma seria uma cobrança exigindo
+   * três aprovações porque alguém cadastrou uma alçada de compra.
+   */
+  tipo: TipoAlcada
+  /** Faixa em reais. Nulo em alçada percentual. */
+  limiteValor: number | null
+  /** Teto percentual — usado por `DESCONTO`. Nulo em alçada de valor. */
+  limitePercentual: number | null
 }
 
 /** Uma linha de rateio. Percentual, não valor fixo — decisão D-16. */
@@ -751,6 +769,100 @@ export interface DelegacaoAprovacao {
   inicio: string
   fim: string
   motivo: string
+}
+
+/* ---------------------------------------------------- contas a receber */
+
+export type OrigemReceber = 'CONTRATUAL' | 'AVULSO'
+
+export type StatusReceber =
+  | 'PENDENTE_APROVACAO'
+  | 'PENDENTE'
+  | 'APROVADO'
+  | 'RECEBIDO_PARCIAL'
+  | 'RECEBIDO'
+  | 'CANCELADO'
+  | 'EM_DISPUTA'
+  /** Encerrado **sem** entrada de caixa. Nunca somado com RECEBIDO (RN-F14). */
+  | 'BAIXADO'
+
+export type FormaRecebimento = 'TRANSFERENCIA' | 'BOLETO' | 'PIX' | 'CHEQUE'
+
+export interface RateioReceber {
+  centroCustoId: string
+  percentual: number
+}
+
+export interface AprovacaoReceber {
+  nivel: number
+  rodada: number
+  aprovadorId: string | null
+  decisao: 'APROVADO' | 'REJEITADO' | null
+  decididoEm: string | null
+  justificativa: string | null
+  delegadoDe: string | null
+}
+
+export interface RecebimentoTitulo {
+  id: string
+  valorRecebido: number
+  dataRecebimento: string
+  contaId: string
+  forma: FormaRecebimento
+  movimentacaoId: string | null
+  estornadoEm: string | null
+  estornoMotivo: string | null
+}
+
+/**
+ * Título a receber — D-20: "fatura" e "contas a receber" são a mesma linha.
+ *
+ * `origem = 'CONTRATUAL'` é a cobrança gerada do contrato e do consumo;
+ * `'AVULSO'` é o lançamento manual.
+ *
+ * **Sem campo de saldo e sem `emAtraso`.** Saldo é `saldoDoTituloReceber()`,
+ * derivado dos recebimentos não estornados; atraso é `vencimento < hoje` com o
+ * título em aberto. O modelo simulado de `Fatura` guarda `status: 'EM_ATRASO'` e
+ * `diasAtraso` — no dia seguinte ao vencimento os dois estão errados, e só um
+ * job noturno os corrigiria. É o mesmo defeito de classe que guardar saldo.
+ */
+export interface TituloReceber {
+  id: string
+  /** Sequencial por locatário. **Não** é número de NF-e/NFS-e. */
+  numeroTitulo: number
+  clienteId: string
+  filialId: string | null
+  contratoId: string | null
+  competencia: string | null
+  origem: OrigemReceber
+  descricao: string
+  valorOriginal: number
+  desconto: number
+  descontoMotivo: string | null
+  descontoPor: string | null
+  dataEmissao: string
+  dataVencimento: string
+  status: StatusReceber
+  /** RN-F14: por que o título foi encerrado sem entrada de caixa. */
+  baixaMotivo: string | null
+  baixadoEm: string | null
+  /** RN-F11: por que este título nasceu em disputa. */
+  excecaoGeracao: string | null
+  tituloPaiId: string | null
+  parcelaNumero: number | null
+  parcelaTotal: number | null
+  criadoPor: string
+  criadoEm: string
+  rateio: RateioReceber[]
+  aprovacoes: AprovacaoReceber[]
+  recebimentos: RecebimentoTitulo[]
+}
+
+/** Uma competência de medição e o seu estado de fechamento. */
+export interface CompetenciaFechamento {
+  competencia: string
+  /** Nulo enquanto o consumo não foi selado. */
+  fechadoEm: string | null
 }
 
 /* ------------------------------------------------- tabelas comerciais */
