@@ -40,5 +40,17 @@ echo "== executando testes de integração"
 export DATABASE_URL="postgresql://iarx_app:${SENHA_APP}@${PGHOST:-127.0.0.1}:${PGPORT:-5432}/${DB}"
 export IARX_JWT_SEGREDO="${IARX_JWT_SEGREDO:-segredo-de-teste-nao-use-em-producao}"
 export NODE_ENV=test
+# O laço de fundo do worker fica desligado, e os testes chamam `drenar()`
+# diretamente. Com ele ativo, cada asserção sobre a fila viraria uma corrida
+# contra um temporizador de 15s: hoje a suíte roda em 8s e a corrida nunca
+# acontece, e é exatamente esse tipo de margem que vence sozinha quando a suíte
+# cresce — falhando de forma intermitente, no CI, longe de quem a criou.
+export NOTIFICACAO_WORKER=desligado
 
-node --test "dist-test/test/*.test.js"
+# Concorrência 1 de propósito.
+#
+# Os arquivos compartilham **um** banco de teste. Em paralelo, o worker de
+# notificação de um arquivo drena a fila que o outro acabou de enfileirar, e a
+# asserção falha de forma intermitente — a pior classe de teste instável,
+# porque parece defeito do código.
+node --test --test-concurrency=1 "dist-test/test/*.test.js"

@@ -124,6 +124,13 @@ export const PERMISSOES = [
   'pagar:criar',
   'pagar:aprovar',
   'pagar:baixar',
+  // Novas do Módulo 10. `cancelar` é separada de `criar` porque cancelar um
+  // título já aprovado desfaz o trabalho de quem aprovou; `delegar_aprovacao`
+  // é separada de `aprovar` porque quem aprova não precisa poder transferir a
+  // própria autoridade — e transferir é o caminho mais curto para contornar a
+  // segregação de funções.
+  'pagar:cancelar',
+  'pagar:delegar_aprovacao',
   'conciliacao:executar',
   'financeiro:lancamento_manual',
   'financeiro:painel_executivo',

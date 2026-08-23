@@ -4,6 +4,8 @@ import { SignJWT } from 'jose'
 import type { AddressInfo } from 'node:net'
 import { dvChaveNfe, type Permissao } from '@iarx/contracts'
 import { AppModule } from '../src/app.module.js'
+import type { ResultadoDrenagem } from '../src/modulos/notificacao/notificacao.worker.js'
+import type { Remetente } from '../src/modulos/notificacao/remetente.js'
 
 export const TENANT_A = '11111111-1111-4111-8111-111111111111'
 export const TENANT_B = '22222222-2222-4222-8222-222222222222'
@@ -231,3 +233,44 @@ export function unidades(n: number, prefixo = 'NF') {
 
 /** Empresa do tenant A na massa de teste — toda conta bancária pertence a uma PJ. */
 export const EMPRESA_A = '11111111-1111-4111-8111-1111111111e1'
+
+/* --------------------------------------------- Módulo 10: contas a pagar */
+
+/** Aprovadores com posto 1, 2 e 3 — os limites vêm de `semear.sql`. */
+export const APROVADOR_N1 = '11111111-1111-4111-8111-111111110011'
+export const APROVADOR_N2 = '11111111-1111-4111-8111-111111110012'
+export const APROVADOR_N3 = '11111111-1111-4111-8111-111111110013'
+
+export const CENTRO_OPER = '11111111-1111-4111-8111-11111111cc01'
+export const CENTRO_ADM = '11111111-1111-4111-8111-11111111cc02'
+export const CONTA_OPERACAO = '11111111-1111-4111-8111-11111111cb01'
+
+/**
+ * Drena a fila de notificação **até esvaziar**, somando os lotes.
+ *
+ * `drenar` reserva um lote limitado (20, por padrão) na ordem de
+ * `proxima_tentativa_em`: quem entrou primeiro sai primeiro. É o comportamento
+ * correto em produção — e uma armadilha no teste, porque a suíte compartilha um
+ * banco. Um arquivo que enfileirou trinta avisos deixa o aviso do teste
+ * seguinte fora do primeiro lote, e a asserção falha dizendo "não foi enviado"
+ * quando o que houve foi "ainda está na fila". São defeitos diferentes, e o
+ * teste que os confunde acusa o código errado.
+ *
+ * O limite de voltas não é decoração: uma notificação que voltasse para a fila
+ * pronta a ser reservada de novo faria este laço girar para sempre, e o teste
+ * penduraria em vez de falhar.
+ */
+export async function drenarTudo(
+  worker: { drenar(r: Remetente): Promise<ResultadoDrenagem> },
+  remetente: Remetente,
+): Promise<ResultadoDrenagem> {
+  const total: ResultadoDrenagem = { reservadas: 0, enviadas: 0, falhas: 0 }
+  for (let volta = 0; volta < 50; volta++) {
+    const lote = await worker.drenar(remetente)
+    total.reservadas += lote.reservadas
+    total.enviadas += lote.enviadas
+    total.falhas += lote.falhas
+    if (lote.reservadas === 0) return total
+  }
+  throw new Error('a fila de notificação não esvaziou em 50 lotes')
+}

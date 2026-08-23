@@ -161,6 +161,59 @@ insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo
   ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110001',
    '11111111-1111-4111-8111-1111111150a1', 'TENANT');
 
+-- -----------------------------------------------------------------------------
+-- Alçada de aprovação de pagamento, e três aprovadores com postos distintos.
+--
+-- Os limites (10 mil / 50 mil / 250 mil) são massa deste arquivo, não regra de
+-- negócio da IARX: o que os testes provam é que a **contagem de níveis** segue
+-- os limites cadastrados, quaisquer que sejam. Sem eles, `alcada` continuaria
+-- vazia e todo título seria aprovado automaticamente — o cenário que não
+-- exercita nada do Módulo 10.
+-- -----------------------------------------------------------------------------
+insert into public.perfil (id, tenant_id, nome, tipo, is_sistema, permissoes) values
+  ('11111111-1111-4111-8111-1111111150a2', '11111111-1111-4111-8111-111111111111',
+   'Gestor de Aprovação', 'INTERNO', false, array['pagar:ler', 'pagar:aprovar']),
+  ('11111111-1111-4111-8111-1111111150a3', '11111111-1111-4111-8111-111111111111',
+   'Financeiro de Aprovação', 'INTERNO', false, array['pagar:ler', 'pagar:aprovar']),
+  ('11111111-1111-4111-8111-1111111150a4', '11111111-1111-4111-8111-111111111111',
+   'Diretoria de Aprovação', 'INTERNO', false, array['pagar:ler', 'pagar:aprovar']);
+
+insert into public.alcada (tenant_id, perfil_id, tipo, limite_valor) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a2',
+   'APROVACAO_PAGAMENTO', 10000),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a3',
+   'APROVACAO_PAGAMENTO', 50000),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a4',
+   'APROVACAO_PAGAMENTO', 250000);
+
+insert into public.usuario (id, tenant_id, nome, email) values
+  ('11111111-1111-4111-8111-111111110011', '11111111-1111-4111-8111-111111111111',
+   'Gestor Alfa', 'gestor@alfa.local'),
+  ('11111111-1111-4111-8111-111111110012', '11111111-1111-4111-8111-111111111111',
+   'Financeiro Alfa', 'financeiro@alfa.local'),
+  ('11111111-1111-4111-8111-111111110013', '11111111-1111-4111-8111-111111111111',
+   'Diretor Alfa', 'diretor@alfa.local');
+
+insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110011',
+   '11111111-1111-4111-8111-1111111150a2', 'TENANT'),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110012',
+   '11111111-1111-4111-8111-1111111150a3', 'TENANT'),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110013',
+   '11111111-1111-4111-8111-1111111150a4', 'TENANT');
+
+-- Centro de custo e conta, para o título ter onde ratear e de onde sair.
+insert into public.centro_custo (id, tenant_id, codigo, nome) values
+  ('11111111-1111-4111-8111-11111111cc01', '11111111-1111-4111-8111-111111111111', 'OPER', 'Operação'),
+  ('11111111-1111-4111-8111-11111111cc02', '11111111-1111-4111-8111-111111111111', 'ADM', 'Administrativo');
+
+insert into public.conta_bancaria
+  (id, tenant_id, empresa_id, banco_codigo, agencia, numero, tipo, apelido,
+   saldo_inicial, data_saldo_inicial) values
+  ('11111111-1111-4111-8111-11111111cb01', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-1111111111e1', '341', '0912', '45871-3', 'CORRENTE',
+   'Operação', 1000000, date '2026-01-01');
+
 insert into public.fornecedor (id, tenant_id, documento, razao_social, nome_fantasia, uf) values
   ('11111111-1111-4111-8111-11111111f001', '11111111-1111-4111-8111-111111111111',
    '11444777000161', 'PRINTECH DISTRIBUICAO LTDA', 'Printech', 'SP'),

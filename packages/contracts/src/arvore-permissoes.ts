@@ -175,6 +175,7 @@ const ROTULO_ACAO: Record<string, string> = {
   patrimonial_editar: 'Editar dados patrimoniais',
   movimentar: 'Movimentar',
   transferir: 'Transferir',
+  delegar_aprovacao: 'Delegar aprovação',
   transferencia_aceitar: 'Aceitar transferência',
   bloquear: 'Bloquear',
   desbloquear: 'Desbloquear',

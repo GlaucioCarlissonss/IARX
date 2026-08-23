@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { NotificacaoWorker } from '../src/modulos/notificacao/notificacao.worker.js'
 import { RemetenteRegistro, remetenteDoAmbiente } from '../src/modulos/notificacao/remetente.js'
 import type { Remetente } from '../src/modulos/notificacao/remetente.js'
-import { chamar, subirApi, token, type Servidor } from './apoio.js'
+import { chamar, drenarTudo, subirApi, token, type Servidor } from './apoio.js'
 
 /**
  * Integração do subsistema de notificação, contra PostgreSQL real.
@@ -95,7 +95,7 @@ describe('recuperação de senha entra na fila', () => {
     })
     assert.equal(r.status, 202)
 
-    const lote = await worker.drenar(remetente)
+    const lote = await drenarTudo(worker, remetente)
     assert.ok(lote.reservadas >= 1, 'a recuperação não entrou na fila')
     assert.ok(lote.enviadas >= 1)
     assert.equal(lote.falhas, 0)
@@ -119,7 +119,7 @@ describe('recuperação de senha entra na fila', () => {
 
     // Se a fila crescesse só para o e-mail existente, o **tempo** de resposta
     // entregaria o que a mensagem esconde.
-    const lote = await worker.drenar(remetente)
+    const lote = await drenarTudo(worker, remetente)
     assert.equal(
       remetente.enviadas.filter((m) => m.para === 'nao.existe@alfa.local').length,
       0,
@@ -134,7 +134,7 @@ describe('worker da fila', () => {
     const remetente = new RemetenteRegistro(50, () => undefined)
 
     await chamar(api, 'POST', '/api/v1/auth/recuperacao', { corpo: { email: 'operador@alfa.local' } })
-    const primeiro = await worker.drenar(remetente)
+    const primeiro = await drenarTudo(worker, remetente)
     assert.ok(primeiro.enviadas >= 1)
 
     // Duas cópias de um aviso de aprovação de pagamento parecem dois pagamentos.
