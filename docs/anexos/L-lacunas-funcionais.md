@@ -1705,7 +1705,8 @@ critério original, que expôs a contradição.
 ## MÓDULO 11: Contas a Receber
 
 ### Status
-- [ ] Novo — **unifica com a persistência de fatura, que também não existe**
+- [x] Novo — **✅ implementado** (migração 0020, API de 14 rotas, tela com
+      fechamento de competência); ver [Anexo T](T-contas-a-receber.md)
 
 ### Descrição
 
@@ -1771,10 +1772,18 @@ titulo_receber_recebimento
 ```
 
 `consumo_competencia` (0013) não muda: continua sendo a fonte do valor
-CONTRATUAL. O que muda é que, ao fechar a competência
-(`app.fechar_competencia`, já existente), em vez de o front-end simular uma
-fatura, o banco passa a **gerar a linha em `titulo_receber`** com
+CONTRATUAL. O que muda é que, ao fechar a competência, em vez de o front-end
+simular uma fatura, o banco passa a **gerar a linha em `titulo_receber`** com
 `origem = 'CONTRATUAL'`.
+
+> **Correção deste levantamento.** A frase acima dizia
+> "(`app.fechar_competencia`, já existente)". **A função não existia.** O que a
+> migração 0013 tinha era a coluna `consumo_competencia.fechado_em`, o
+> `fechado_por` e o gatilho `app.bloquear_competencia_fechada`, que impede
+> alterar linha fechada — a trava, sem a chave: nenhum caminho do sistema chegava
+> a preencher a coluna. A função foi construída na 0020, junto da geração dos
+> títulos, conforme D-22 já recomendava. Ver [Anexo T](T-contas-a-receber.md)
+> §T.3.
 
 ### Regras de Negócio
 
@@ -1871,11 +1880,13 @@ de `pagar:*`.
   é uma dependência de rede num motor que hoje roda inteiramente dentro do
   banco, e o índice publicado tem defasagem de divulgação que precisaria de
   tratamento de qualquer forma.
-- **[DECISÃO D-22]** Geração automática de título contratual ocorre **ao
-  fechar a competência** (proposto acima, reaproveita o gatilho que já existe)
-  ou em **ciclo mensal separado, X dias antes do vencimento**? Recomendação:
-  ao fechar a competência — criar um segundo agendador só para isso duplicaria
-  o conceito de "quando processar o mês" que o fechamento já resolve.
+- **[DECISÃO D-22 — RESOLVIDA]** A geração ocorre **ao fechar a competência**,
+  na mesma chamada que sela o consumo. Criar um segundo agendador duplicaria o
+  conceito de "quando processar o mês" que o fechamento já resolve. E a ordem
+  dentro da função importa: sela **por último**, para que um erro na geração
+  deixe o mês aberto em vez de trancado e sem título. `app.fechar_competencia`
+  foi construída na migração 0020 — ela não existia, ao contrário do que a
+  descrição deste módulo afirmava.
 
 ---
 
@@ -2281,7 +2292,7 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | **8** | **Centros de Custo** | — | Alta | Baixa | ✅ Feito (Anexo R) |
 | **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
 | **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | ✅ Feito (Anexo S) — nove invariantes, alçada configurável, delegação |
-| **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | 🔲 Novo — unifica com a persistência de fatura (D-20) |
+| **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | ✅ Feito (Anexo T) — D-20 fechada, fechamento de competência construído |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |
 | **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Média | Baixa | 🔲 Novo — só leitura, nenhuma tabela de posição |
 | **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | 🔲 Novo — orçamento + indicadores, tudo calculado |
@@ -2290,9 +2301,10 @@ Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12
 14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
 terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 
-Executado até aqui: **4, 4.5, 8, 9 e 10**. O próximo é o 11 (contas a receber),
-que é também o que fecha D-20 — a fatura hoje é calculada e não persistida, e
-"contas a receber" e "fatura emitida" são a mesma linha vista de dois ângulos.
+Executado até aqui: **4, 4.5, 8, 9, 10 e 11**. O próximo é o 12 (lançamentos
+futuros), que converte recorrência em título — e é ele que cria
+`recorrencia_receber`, a tabela que `titulo_receber.recorrencia_id` já referencia
+sem chave estrangeira.
 
 ---
 
@@ -2388,6 +2400,8 @@ que é também o que fecha D-20 — a fatura hoje é calculada e não persistida
 | ~~D-21~~ | Índice de reajuste: API externa ou manual | Cadastro manual mensal |
 | ~~D-16~~ | Rateio entre centros de custo | Percentual; soma obrigatória de 100% |
 | ~~D-18~~ | Faixas de alçada configuráveis ou fixas | Configuráveis por locatário — `alcada` já é por tenant |
+| ~~D-19~~ | Provedor de envio de e-mail | SMTP como adaptador; o provedor é configuração, não código — migração 0018 |
+| ~~D-22~~ | Geração de título contratual | No fechamento da competência, na mesma chamada que sela o consumo — migração 0020 (Anexo T) |
 
 ### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
@@ -2418,7 +2432,7 @@ diferente:
 | D-09 | Portal em subdomínio ou rota `/portal` | Afeta CSP, cookies e operação |
 | D-11 | Telemetria de contador | DCA na rede do cliente, API do fabricante, ou manual |
 | D-17 | Formato de importação de extrato bancário | OFX primeiro; CNAB se/quando houver cobrança registrada — Módulo 9 |
-| D-22 | Geração de título contratual: no fechamento ou em ciclo separado? | No fechamento — Módulo 11 |
+| ~~D-22~~ | Geração de título contratual: no fechamento ou em ciclo separado? | **Resolvida**: no fechamento, `app.fechar_competencia` — Módulo 11 (Anexo T) |
 | D-24 | Fluxo de caixa integra com ERP/Open Finance ou só títulos internos? | Só títulos internos — Módulo 13 |
 
 ### De negócio — precisam de resposta da operação
@@ -2428,7 +2442,6 @@ diferente:
 | D-05 | Franquia acumulativa existe? | 2 |
 | D-06 | Preço por filial do cliente é necessário? | 3 |
 | D-10 | Cliente abre chamado pelo portal? | 5 |
-| D-19 | Provedor de envio de e-mail para notificação de aprovação | 10, 12 |
 | D-23 | Conversão de lançamento futuro notifica o responsável? | 12 |
 | D-25 | Replanejamento de orçamento considera só o pago, ou também o aprovado-não-pago? | 14 |
 | D-26 | Indicador análogo a "custo por paciente": por cliente ativo, por equipamento, ou os dois? | 14 |
