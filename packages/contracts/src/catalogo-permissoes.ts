@@ -120,6 +120,20 @@ export const PERMISSOES = [
   'receber:ler',
   'receber:baixar',
   'receber:negociar',
+  // Novas do Módulo 11, cada uma por uma razão concreta.
+  //
+  // `criar` é lançar título avulso — operação, distinta de `ler`, que é
+  // conferência. `aprovar` existe porque **quem gera a pré-cobrança não a
+  // aprova**: no fechamento automático quem "gera" é quem disparou o
+  // fechamento, e sem a separação essa pessoa liberaria a própria cobrança.
+  // `cancelar` é separada de `criar` pela mesma razão de `pagar:cancelar`:
+  // cancelar um título já aprovado desfaz o trabalho de quem aprovou.
+  //
+  // `receber:negociar` (que já existia) é a de desconto e de baixa sem
+  // recebimento — as duas ações que reduzem o que se cobra sem cancelar.
+  'receber:criar',
+  'receber:aprovar',
+  'receber:cancelar',
   'pagar:ler',
   'pagar:criar',
   'pagar:aprovar',

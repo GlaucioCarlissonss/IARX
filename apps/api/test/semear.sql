@@ -269,3 +269,96 @@ insert into public.nota_fiscal_compra
   ('22222222-2222-4222-8222-22222222e001', '22222222-2222-4222-8222-222222222222',
    '22222222-2222-4222-8222-22222222f001', '22222222-2222-4222-8222-2222222222f1',
    '77777', '1', '55', '2026-05-10', '2026-05-12', 1000, 1000, 'PENDENTE_CONFERENCIA', 'MANUAL');
+
+-- =============================================================================
+-- Contas a receber (Módulo 11)
+--
+-- Nada aqui é regra de negócio da IARX. Os limites de alçada de emissão
+-- (2 mil / 20 mil), o preço mensal e o teto de desconto de 10% são massa deste
+-- arquivo: o que os testes provam é que o cálculo segue o que está cadastrado.
+-- =============================================================================
+
+-- Alçada de emissão sobre os **mesmos** três perfis que já têm alçada de
+-- pagamento. É coerente com D-20 e com como uma operação real se organiza: quem
+-- responde por valor responde por valor, dos dois lados do caixa.
+insert into public.alcada (tenant_id, perfil_id, tipo, limite_valor) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a2',
+   'EMISSAO_FATURA', 2000),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a3',
+   'EMISSAO_FATURA', 20000);
+
+-- Alçada de desconto **só** no perfil financeiro. O gestor fica sem nenhuma, de
+-- propósito: é o caso negativo da RN-F12, e sem ele o teste provaria apenas que
+-- um teto alto passa.
+insert into public.alcada (tenant_id, perfil_id, tipo, limite_percentual) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a3',
+   'DESCONTO', 10);
+
+-- Tabela de preço: nasce em RASCUNHO e só depois é ativada, porque os itens de
+-- uma tabela vigente são imutáveis (RN-L22).
+insert into public.tabela_preco
+  (id, tenant_id, nome, vigencia_inicio, status, abrangencia) values
+  ('11111111-1111-4111-8111-11111111a701', '11111111-1111-4111-8111-111111111111',
+   'Preço geral 2026', '2026-01-01', 'RASCUNHO', 'GERAL');
+insert into public.tabela_preco_item
+  (tenant_id, tabela_preco_id, categoria_id, valor_mensal) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-11111111a701',
+   '11111111-1111-4111-8111-1111111111c1', 289);
+update public.tabela_preco
+   set status = 'ATIVA', ativada_em = '2026-01-01T09:00:00-03:00'
+ where id = '11111111-1111-4111-8111-11111111a701';
+
+-- Um contrato SUSPENSO com item e consumo: é a massa que RN-F11 exige. Sem ele
+-- o fechamento nunca produziria um título EM_DISPUTA, e o caminho ficaria sem
+-- teste — que é como uma regra de exceção morre.
+insert into public.contrato
+  (id, tenant_id, numero, empresa_id, filial_id, cliente_id, status, data_inicio, data_fim, created_at) values
+  ('11111111-1111-4111-8111-1111111170a5', '11111111-1111-4111-8111-111111111111', 'SP-2026-0400',
+   '11111111-1111-4111-8111-1111111111e1', '11111111-1111-4111-8111-1111111111f1',
+   '11111111-1111-4111-8111-11111111c101',
+   'SUSPENSO', '2026-01-01', '2026-12-31', '2026-01-06T09:00:00-03:00');
+
+insert into public.equipamento
+  (id, tenant_id, patrimonio, numero_serie, modelo_id, categoria_id, filial_id, status, created_at) values
+  ('11111111-1111-4111-8111-11111111a004', '11111111-1111-4111-8111-111111111111', '10425', 'KYO-A-0004',
+   '11111111-1111-4111-8111-1111111111d1', '11111111-1111-4111-8111-1111111111c1',
+   '11111111-1111-4111-8111-1111111111f1', 'LOCADO', '2026-01-09T10:00:00-03:00');
+
+insert into public.contrato_item
+  (id, tenant_id, contrato_id, equipamento_id, modalidade_cobranca, valor_unitario,
+   franquia_quantidade, franquia_escopo, valor_excedente_unitario,
+   vigencia_inicio, vigencia_fim, status) values
+  ('11111111-1111-4111-8111-11111111a801', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-1111111170a5', '11111111-1111-4111-8111-11111111a004',
+   'FRANQUIA_EXCEDENTE', 289.0000, 3000, 'ITEM', 0.0800,
+   '2026-01-01T00:00:00-03:00', '2026-12-31T23:59:59-03:00', 'ATIVO');
+
+/*
+ * Consumo de 2026-06 nos dois contratos, **aberto** (fechado_em nulo).
+ *
+ * O item do contrato ATIVO fica em 4.000 páginas com franquia de 3.000, então
+ * 1.000 excedentes × R$ 0,08 = R$ 80 sobre a mensalidade de R$ 289 → R$ 369.
+ * O do SUSPENSO fica sem excedente: R$ 289. Os números são deste arquivo, e o
+ * que os testes verificam é que a conta segue o cadastro.
+ */
+insert into public.consumo_competencia
+  (tenant_id, competencia, equipamento_id, contrato_item_id, cliente_id,
+   leitura_inicial_mono, leitura_final_mono, franquia_mono) values
+  ('11111111-1111-4111-8111-111111111111', '2026-06',
+   '11111111-1111-4111-8111-11111111a001',
+   (select id from public.contrato_item
+     where contrato_id = '11111111-1111-4111-8111-1111111170a1' limit 1),
+   '11111111-1111-4111-8111-11111111c101', 100000, 104000, 3000),
+  ('11111111-1111-4111-8111-111111111111', '2026-06',
+   '11111111-1111-4111-8111-11111111a004',
+   '11111111-1111-4111-8111-11111111a801',
+   '11111111-1111-4111-8111-11111111c101', 500000, 502000, 3000);
+
+-- Conta de recebimento, separada da de pagamento: entrada e saída na mesma
+-- conta esconderiam o erro de sinal que o teste de baixa procura.
+insert into public.conta_bancaria
+  (id, tenant_id, empresa_id, banco_codigo, agencia, numero, tipo, apelido,
+   saldo_inicial, data_saldo_inicial) values
+  ('11111111-1111-4111-8111-11111111cb02', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-1111111111e1', '001', '3155', '77012-4', 'CORRENTE',
+   'Recebimentos', 0, '2026-01-01');

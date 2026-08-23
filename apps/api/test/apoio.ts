@@ -244,6 +244,18 @@ export const APROVADOR_N3 = '11111111-1111-4111-8111-111111110013'
 export const CENTRO_OPER = '11111111-1111-4111-8111-11111111cc01'
 export const CENTRO_ADM = '11111111-1111-4111-8111-11111111cc02'
 export const CONTA_OPERACAO = '11111111-1111-4111-8111-11111111cb01'
+export const CONTA_RECEBIMENTO = '11111111-1111-4111-8111-11111111cb02'
+
+/* --------------------------------------------------- contas a receber */
+
+export const CLIENTE_ALFA = '11111111-1111-4111-8111-11111111c101'
+export const CLIENTE_GAMA = '11111111-1111-4111-8111-11111111c102'
+/** ATIVO, com consumo de 2026-06: gera título contratual sem exceção. */
+export const CONTRATO_COM_CONSUMO = '11111111-1111-4111-8111-1111111170a1'
+/** SUSPENSO, com consumo de 2026-06: gera título EM_DISPUTA (RN-F11). */
+export const CONTRATO_SUSPENSO = '11111111-1111-4111-8111-1111111170a5'
+/** A competência semeada com consumo aberto. */
+export const COMPETENCIA_ABERTA = '2026-06'
 
 /**
  * Drena a fila de notificação **até esvaziar**, somando os lotes.

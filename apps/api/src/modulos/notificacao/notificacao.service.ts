@@ -167,9 +167,18 @@ export class NotificacaoService {
       vencimento: string
       nivel: number
       solicitante: string
+      /**
+       * Tela que abre o título. Padrão `contas-pagar` por compatibilidade.
+       *
+       * Estava fixo, e com o Módulo 11 isso passou a ser um defeito concreto: o
+       * aviso de aprovação de uma **cobrança** levaria o aprovador à tela de
+       * contas a pagar, onde o título não existe. O parâmetro é a rota, não a
+       * URL inteira, para que a montagem continue num lugar só.
+       */
+      rota?: 'contas-pagar' | 'contas-receber'
     },
   ): Promise<{ email: string; caixa: string }> {
-    const url = `${baseDaAplicacao()}/#/contas-pagar?titulo=${encodeURIComponent(dados.tituloId)}`
+    const url = `${baseDaAplicacao()}/#/${dados.rota ?? 'contas-pagar'}?titulo=${encodeURIComponent(dados.tituloId)}`
     const primeiro = dados.aprovadorNome.split(' ')[0] ?? dados.aprovadorNome
     const assunto = `Aprovação nível ${dados.nivel}: ${dinheiroBr(dados.valor)} — ${dados.descricao}`
 
@@ -226,9 +235,10 @@ export class NotificacaoService {
       decididoPor: string
       /** Obrigatório na rejeição: recusa sem justificativa não é resposta. */
       justificativa?: string | null
+      rota?: 'contas-pagar' | 'contas-receber'
     },
   ): Promise<{ email: string; caixa: string }> {
-    const url = `${baseDaAplicacao()}/#/contas-pagar?titulo=${encodeURIComponent(dados.tituloId)}`
+    const url = `${baseDaAplicacao()}/#/${dados.rota ?? 'contas-pagar'}?titulo=${encodeURIComponent(dados.tituloId)}`
     const primeiro = dados.solicitanteNome.split(' ')[0] ?? dados.solicitanteNome
     const veredito = dados.aprovado ? 'aprovado' : 'rejeitado'
     const assunto = `Título ${veredito}: ${dinheiroBr(dados.valor)} — ${dados.descricao}`

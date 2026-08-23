@@ -96,7 +96,11 @@ describe('RN-028 — isolamento entre tenants', () => {
     const rA = await chamar(api, 'GET', '/api/v1/equipamentos?limit=50', { token: tA })
     assert.equal(rA.status, 200)
     const patrimoniosA = rA.corpo.data.map((e: { patrimonio: string }) => e.patrimonio)
-    assert.deepEqual([...patrimoniosA].sort(), ['10422', '10423', '10424'])
+    // 10425 entrou com a massa do Módulo 11 (o contrato suspenso precisa de um
+    // ativo próprio: a exclusion constraint da RN-001 impede reusar um que já
+    // está alocado). A lista é exaustiva de propósito — é ela que prova que
+    // nada do tenant B aparece.
+    assert.deepEqual([...patrimoniosA].sort(), ['10422', '10423', '10424', '10425'])
 
     const tB = await token({ tenant: TENANT_B, usuario: USUARIO_B, permissoes: [...LEITOR] })
     const rB = await chamar(api, 'GET', '/api/v1/equipamentos?limit=50', { token: tB })
@@ -442,7 +446,7 @@ describe('paginação por cursor', () => {
       if (!cursor) break
     }
 
-    assert.deepEqual([...vistos].sort(), ['10422', '10423', '10424'])
+    assert.deepEqual([...vistos].sort(), ['10422', '10423', '10424', '10425'])
     assert.equal(new Set(vistos).size, vistos.length, 'nenhum registro pode aparecer em duas páginas')
     assert.equal(cursor, null, 'a última página não deve oferecer próximo cursor')
   })

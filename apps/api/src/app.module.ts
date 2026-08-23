@@ -26,6 +26,12 @@ import {
   ContasPagarController,
   DelegacoesController,
 } from './modulos/contas-pagar/contas-pagar.controller.js'
+import {
+  CompetenciasController,
+  ContasReceberController,
+} from './modulos/contas-receber/contas-receber.controller.js'
+import { ContasReceberRepositorio } from './modulos/contas-receber/contas-receber.repositorio.js'
+import { ContasReceberService } from './modulos/contas-receber/contas-receber.service.js'
 import { ContasPagarRepositorio } from './modulos/contas-pagar/contas-pagar.repositorio.js'
 import { ContasPagarService } from './modulos/contas-pagar/contas-pagar.service.js'
 import { NotificacaoController } from './modulos/notificacao/notificacao.controller.js'
@@ -69,6 +75,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     NotificacaoController,
     ContasPagarController,
     DelegacoesController,
+    ContasReceberController,
+    CompetenciasController,
   ],
   providers: [
     BancoService,
@@ -88,6 +96,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     NotificacaoWorker,
     ContasPagarRepositorio,
     ContasPagarService,
+    ContasReceberRepositorio,
+    ContasReceberService,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },
