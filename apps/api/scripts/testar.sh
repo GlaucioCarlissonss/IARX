@@ -46,6 +46,11 @@ export NODE_ENV=test
 # acontece, e é exatamente esse tipo de margem que vence sozinha quando a suíte
 # cresce — falhando de forma intermitente, no CI, longe de quem a criou.
 export NOTIFICACAO_WORKER=desligado
+# Mesma razão para o worker de conversão, e aqui a corrida é pior: ele **cria
+# títulos**. Um tick de fundo no meio da suíte converteria o lançamento que o
+# teste acabou de semear, e a asserção "ainda está programado" falharia
+# apontando o código em vez do temporizador.
+export CONVERSAO_WORKER=desligado
 
 # Concorrência 1 de propósito.
 #

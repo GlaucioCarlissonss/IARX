@@ -34,6 +34,19 @@ import { ContasReceberRepositorio } from './modulos/contas-receber/contas-recebe
 import { ContasReceberService } from './modulos/contas-receber/contas-receber.service.js'
 import { ContasPagarRepositorio } from './modulos/contas-pagar/contas-pagar.repositorio.js'
 import { ContasPagarService } from './modulos/contas-pagar/contas-pagar.service.js'
+import {
+  LancamentosFuturosController,
+  RecorrenciasController,
+} from './modulos/lancamentos-futuros/lancamentos-futuros.controller.js'
+import { LancamentosFuturosRepositorio } from './modulos/lancamentos-futuros/lancamentos-futuros.repositorio.js'
+import { LancamentosFuturosService } from './modulos/lancamentos-futuros/lancamentos-futuros.service.js'
+import { ConversaoWorker } from './modulos/lancamentos-futuros/conversao.worker.js'
+import {
+  CenariosCaixaController,
+  FluxoCaixaController,
+} from './modulos/fluxo-caixa/fluxo-caixa.controller.js'
+import { FluxoCaixaRepositorio } from './modulos/fluxo-caixa/fluxo-caixa.repositorio.js'
+import { FluxoCaixaService } from './modulos/fluxo-caixa/fluxo-caixa.service.js'
 import { NotificacaoController } from './modulos/notificacao/notificacao.controller.js'
 import { NotificacaoService } from './modulos/notificacao/notificacao.service.js'
 import { NotificacaoWorker } from './modulos/notificacao/notificacao.worker.js'
@@ -77,6 +90,10 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     DelegacoesController,
     ContasReceberController,
     CompetenciasController,
+    LancamentosFuturosController,
+    RecorrenciasController,
+    FluxoCaixaController,
+    CenariosCaixaController,
   ],
   providers: [
     BancoService,
@@ -98,6 +115,11 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     ContasPagarService,
     ContasReceberRepositorio,
     ContasReceberService,
+    LancamentosFuturosRepositorio,
+    LancamentosFuturosService,
+    ConversaoWorker,
+    FluxoCaixaRepositorio,
+    FluxoCaixaService,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },

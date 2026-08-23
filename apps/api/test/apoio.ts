@@ -257,6 +257,26 @@ export const CONTRATO_SUSPENSO = '11111111-1111-4111-8111-1111111170a5'
 /** A competência semeada com consumo aberto. */
 export const COMPETENCIA_ABERTA = '2026-06'
 
+/* ------------------------- Módulos 12 e 13: previsto e caixa */
+
+/** Mensal a pagar, com a próxima geração atrasada de propósito. */
+export const RECORRENCIA_PAGAR = '11111111-1111-4111-8111-11111111dd01'
+/** Trimestral a receber, ligada ao contrato ATIVO. */
+export const RECORRENCIA_RECEBER = '11111111-1111-4111-8111-11111111dd02'
+export const RECORRENCIA_TENANT_B = '22222222-2222-4222-8222-22222222dd01'
+
+/** Elegível hoje, sem contrato e abaixo da menor faixa: converte e nasce APROVADO. */
+export const LANCAMENTO_ELEGIVEL = '11111111-1111-4111-8111-11111111de01'
+/** Ligado ao contrato SUSPENSO: RN-F16 recusa e escreve o motivo. */
+export const LANCAMENTO_SUSPENSO = '11111111-1111-4111-8111-11111111de02'
+/** Previsto para 2027: o contraponto que prova que a fila é por data. */
+export const LANCAMENTO_FUTURO_DISTANTE = '11111111-1111-4111-8111-11111111de03'
+
+/** Padrão e neutro: é ele que responde sem cenário, e de onde saem os alertas. */
+export const CENARIO_PADRAO = '11111111-1111-4111-8111-11111111ce01'
+/** 30% de inadimplência — RN-F20 vale só sobre entradas. */
+export const CENARIO_PESSIMISTA = '11111111-1111-4111-8111-11111111ce02'
+
 /**
  * Drena a fila de notificação **até esvaziar**, somando os lotes.
  *

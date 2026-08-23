@@ -362,3 +362,107 @@ insert into public.conta_bancaria
   ('11111111-1111-4111-8111-11111111cb02', '11111111-1111-4111-8111-111111111111',
    '11111111-1111-4111-8111-1111111111e1', '001', '3155', '77012-4', 'CORRENTE',
    'Recebimentos', 0, '2026-01-01');
+
+/* =========================================================================
+ * Módulos 12 e 13 — lançamentos futuros, recorrências e cenários de caixa
+ *
+ * Cuidado conhecido: acrescentar linha aqui pode alargar asserções exaustivas
+ * de outros arquivos (aconteceu com o equipamento 10425 no Módulo 11). A regra
+ * é atualizar as asserções, nunca relaxá-las.
+ * ========================================================================= */
+
+-- Uma recorrência mensal a pagar, com a próxima geração **atrasada** de
+-- propósito: é o caso que o worker existe para resolver, e o único que exercita
+-- a emissão em `least(hoje, data_prevista)`.
+insert into public.recorrencia
+  (id, tenant_id, lado, descricao, valor_base, periodicidade, dia_vencimento,
+   proxima_geracao, empresa_id, fornecedor_id, classificacao, filial_id,
+   centro_custo_id, created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111dd01', '11111111-1111-4111-8111-111111111111',
+   'PAGAR', 'Aluguel do galpão', 4000.0000, 'MENSAL', 10,
+   '2026-02-10', '11111111-1111-4111-8111-1111111111e1',
+   '11111111-1111-4111-8111-11111111f001', 'DESPESA_FIXA',
+   '11111111-1111-4111-8111-1111111111f1', '11111111-1111-4111-8111-11111111cc01',
+   '11111111-1111-4111-8111-111111110001', '2026-01-05T09:00:00-03:00');
+
+-- Uma recorrência trimestral a receber, ligada ao contrato ATIVO.
+insert into public.recorrencia
+  (id, tenant_id, lado, descricao, valor_base, periodicidade, dia_vencimento,
+   proxima_geracao, cliente_id, contrato_id, filial_id, created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111dd02', '11111111-1111-4111-8111-111111111111',
+   'RECEBER', 'Suporte trimestral', 900.0000, 'TRIMESTRAL', 5,
+   '2026-03-05', '11111111-1111-4111-8111-11111111c101',
+   '11111111-1111-4111-8111-1111111170a1', '11111111-1111-4111-8111-1111111111f1',
+   '11111111-1111-4111-8111-111111110001', '2026-01-05T09:10:00-03:00');
+
+/*
+ * Um lançamento elegível hoje, sem contrato: converte sem depender de vigência.
+ *
+ * `data_prevista` no passado, e o valor abaixo da menor faixa de
+ * APROVACAO_PAGAMENTO (R$ 10.000) para o título nascer APROVADO — o caminho em
+ * que a alçada não interfere no que o teste está medindo.
+ */
+insert into public.lancamento_futuro
+  (id, tenant_id, tipo, lado, descricao, valor_previsto, data_prevista,
+   empresa_id, fornecedor_id, classificacao, filial_id, centro_custo_id,
+   created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111de01', '11111111-1111-4111-8111-111111111111',
+   'DESPESA_RECORRENTE', 'PAGAR', 'Energia do galpão', 1800.0000, '2026-05-10',
+   '11111111-1111-4111-8111-1111111111e1', '11111111-1111-4111-8111-11111111f001',
+   'DESPESA_FIXA', '11111111-1111-4111-8111-1111111111f1',
+   '11111111-1111-4111-8111-11111111cc01',
+   '11111111-1111-4111-8111-111111110001', '2026-01-06T09:00:00-03:00');
+
+-- Um lançamento a receber ligado ao contrato SUSPENSO: RN-F16 recusa, escreve o
+-- motivo e o deixa na fila de exceção. Sem ele, a fila ficaria sem teste.
+insert into public.lancamento_futuro
+  (id, tenant_id, tipo, lado, descricao, valor_previsto, data_prevista,
+   cliente_id, contrato_id, filial_id, created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111de02', '11111111-1111-4111-8111-111111111111',
+   'RECEITA_RECORRENTE', 'RECEBER', 'Mensalidade de suporte', 700.0000, '2026-05-15',
+   '11111111-1111-4111-8111-11111111c101', '11111111-1111-4111-8111-1111111170a5',
+   '11111111-1111-4111-8111-1111111111f1',
+   '11111111-1111-4111-8111-111111110001', '2026-01-06T09:05:00-03:00');
+
+-- Um lançamento bem no futuro: não é elegível, e é o contraponto que prova que
+-- a fila é por data e não "tudo que está programado".
+insert into public.lancamento_futuro
+  (id, tenant_id, tipo, lado, descricao, valor_previsto, data_prevista,
+   empresa_id, fornecedor_id, classificacao, filial_id,
+   created_by, created_at) values
+  ('11111111-1111-4111-8111-11111111de03', '11111111-1111-4111-8111-111111111111',
+   'PROVISAO', 'PAGAR', 'Provisão de reforma', 25000.0000, '2027-11-20',
+   '11111111-1111-4111-8111-1111111111e1', '11111111-1111-4111-8111-11111111f001',
+   'INVESTIMENTO', '11111111-1111-4111-8111-1111111111f1',
+   '11111111-1111-4111-8111-111111110001', '2026-01-06T09:10:00-03:00');
+
+/*
+ * Dois cenários: o padrão neutro e um pessimista.
+ *
+ * O padrão é neutro (0% de inadimplência) porque é ele que responde quando a
+ * projeção é chamada sem cenário, **e** é de onde os alertas saem. Um padrão de
+ * estresse faria todo alerta soar sempre, e alerta que soa sempre é alerta que
+ * ninguém lê.
+ */
+insert into public.parametro_cenario_caixa
+  (id, tenant_id, nome, percentual_inadimplencia, limiar_concentracao, padrao) values
+  ('11111111-1111-4111-8111-11111111ce01', '11111111-1111-4111-8111-111111111111',
+   'Base', 0, 40, true),
+  ('11111111-1111-4111-8111-11111111ce02', '11111111-1111-4111-8111-111111111111',
+   'Pessimista', 30, 40, false);
+
+-- O locatário B também tem cenário e recorrência: é o que faz o teste de
+-- isolamento provar algo. Sem linha do outro lado, "não vê" é trivialmente
+-- verdadeiro.
+insert into public.parametro_cenario_caixa
+  (id, tenant_id, nome, percentual_inadimplencia, limiar_concentracao, padrao) values
+  ('22222222-2222-4222-8222-22222222ce01', '22222222-2222-4222-8222-222222222222',
+   'Base do vizinho', 15, 50, true);
+
+insert into public.recorrencia
+  (id, tenant_id, lado, descricao, valor_base, periodicidade, dia_vencimento,
+   proxima_geracao, empresa_id, classificacao, created_by, created_at) values
+  ('22222222-2222-4222-8222-22222222dd01', '22222222-2222-4222-8222-222222222222',
+   'PAGAR', 'Aluguel do vizinho', 500.0000, 'MENSAL', 1,
+   '2026-04-01', (select id from public.empresa where tenant_id = '22222222-2222-4222-8222-222222222222' limit 1),
+   'DESPESA_FIXA', '22222222-2222-4222-8222-222222220001', '2026-01-06T09:00:00-03:00');

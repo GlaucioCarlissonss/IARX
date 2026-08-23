@@ -239,6 +239,57 @@ export class BancoService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Transação de um worker, no contexto de **um** locatário.
+   *
+   * Existe porque um worker de fundo não tem requisição, e portanto não tem
+   * claims: `emTransacao` recusaria, e `semContexto` deixaria `app.tenant_id`
+   * vazio — o que faria toda escrita cair na política restritiva e não gravar
+   * linha nenhuma.
+   *
+   * **Por que isto não é um buraco no isolamento.** O papel continua `iarx_app`,
+   * sujeito a RLS como sempre: a transação vê exatamente um locatário, o que foi
+   * passado. E o valor não vem de query, cabeçalho ou corpo — vem de uma linha
+   * que a superfície fechada de `security definer` devolveu ao worker. Nenhum
+   * caminho de requisição chama este método; quem tenta, precisa antes ter em
+   * mãos um `tenant_id` que só o próprio banco entregou.
+   *
+   * É o oposto de uma conexão sem RLS: em vez de um caminho que vê tudo, são N
+   * transações que veem um locatário cada.
+   */
+  async porLocatario<T>(tenantId: string, fn: (db: Executor) => Promise<T>): Promise<T> {
+    const cliente = await this.pool.connect()
+    try {
+      await cliente.query('begin')
+      await cliente.query(
+        `select set_config('statement_timeout',                   $1, true),
+                set_config('idle_in_transaction_session_timeout', $2, true)`,
+        [String(this.config.statementTimeoutMs), String(this.config.transacaoOciosaTimeoutMs)],
+      )
+      /*
+       * `app.usuario_id` fica vazio de propósito: não há usuário, e inventar um
+       * faria a auditoria atribuir a alguém uma decisão que o sistema tomou.
+       * `app.origem` diz 'JOB', que é o que distingue no log de auditoria o que
+       * foi feito por alguém do que foi feito pelo relógio.
+       */
+      await cliente.query(
+        `select set_config('app.tenant_id',  $1, true),
+                set_config('app.usuario_id', '', true),
+                set_config('app.cliente_id', '', true),
+                set_config('app.origem',     $2, true)`,
+        [tenantId, 'JOB'],
+      )
+      const r = await fn(envolver(cliente))
+      await cliente.query('commit')
+      return r
+    } catch (e) {
+      await cliente.query('rollback').catch((err) => this.log.error(`falha no rollback: ${String(err)}`))
+      throw this.traduzir(e)
+    } finally {
+      cliente.release()
+    }
+  }
+
   /** Verificação de vitalidade — não usa contexto nem tenant. */
   async ping(): Promise<boolean> {
     try {
