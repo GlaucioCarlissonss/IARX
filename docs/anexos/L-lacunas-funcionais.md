@@ -1469,7 +1469,8 @@ catálogo porque a tabela não existia.
 ## MÓDULO 10: Contas a Pagar
 
 ### Status
-- [ ] Novo
+- [x] Novo — **✅ implementado** (migrações 0018 e 0019, API de 13 rotas, tela
+      com fila de aprovação); ver [Anexo S](S-contas-a-pagar.md)
 
 ### Descrição
 
@@ -1655,29 +1656,43 @@ Permissões: `pagar:ler` · `pagar:criar` · `pagar:aprovar` · `pagar:baixar` �
   de caixa), Módulo 14 (controle de despesas)
 
 ### Critérios de Aceite
-- [ ] Título abaixo do menor limite de alçada não gera linha de aprovação
-- [ ] Nível 2 fica invisível ao respectivo aprovador enquanto o nível 1 não
-      decidir
-- [ ] Rejeição sem justificativa é recusada pelo banco
-- [ ] Criador do título não aparece como aprovador possível de nenhum nível
+- [x] Título abaixo do menor limite de alçada não gera linha de aprovação
+- [x] O nível 2 **não decide** antes de o nível 1 aprovar — 422 do gatilho
+- [x] Rejeição sem justificativa é recusada pelo banco
+- [x] Criador do título não aparece como aprovador possível de nenhum nível
       dele, nem mesmo por escopo de perfil coincidente
-- [ ] Delegação fora do período não desvia a aprovação
-- [ ] Pagamento que excede o saldo em aberto é recusado
-- [ ] Estorno gera lançamento contrário; o pagamento original nunca é apagado
-- [ ] Cancelar o título pai propõe cancelamento das filhas pendentes e
+- [x] Delegação fora do período não desvia a aprovação
+- [x] Pagamento que excede o saldo em aberto é recusado
+- [x] Estorno gera lançamento contrário; o pagamento original nunca é apagado
+- [x] Cancelar o título pai propõe cancelamento das filhas pendentes e
       preserva as já pagas
 
+**Um critério deste levantamento estava errado, e a implementação o corrigiu.**
+A redação original era "nível 2 fica **invisível** ao respectivo aprovador
+enquanto o nível 1 não decidir". Isso é incompatível com a própria RN-F03, que
+aceita posto ≥ nível: um aprovador de posto 2 pode decidir o nível 1, e
+portanto o título no nível 1 pendente **deve** aparecer na fila dele — do
+contrário as férias do gerente travariam o nível 1 com o diretor disponível ao
+lado, e o contorno seria emprestar credencial (ver [Anexo S](S-contas-a-pagar.md)
+§S.4). A garantia real é a da decisão, não a da visibilidade: decidir o nível 2
+antes do nível 1 é recusado. Foi um teste de integração, escrito sobre o
+critério original, que expôs a contradição.
+
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-18]** As faixas de valor por nível são **configuráveis pelo
-  admin do cliente** (via `alcada`, que já é uma tabela por tenant) ou
-  **fixas no sistema**? A tabela `alcada` já é por tenant desde a 0002 — ela
-  não teria sido desenhada assim se a intenção fosse valor fixo global.
-  Recomendação: **configurável**, é o que a tabela já é; a pergunta que resta
-  é só de interface (tela de configuração de alçada, que hoje não existe).
-- **[DECISÃO D-19]** Notificação por e-mail depende de um provedor de envio
-  (SES, SendGrid, SMTP próprio) que este levantamento não escolhe — é
-  infraestrutura, não modelagem. O `outbox_evento` grava a intenção; o worker
-  que consome e efetivamente envia é lacuna de infraestrutura, não de dado.
+- **[DECISÃO D-18 — RESOLVIDA]** Faixas de alçada **configuráveis por
+  locatário**, via `alcada`, que já é por tenant desde a 0002. Não é escolha
+  por flexibilidade: fixá-las seria inventar regra de negócio, e dez mil reais
+  é valor de diretoria numa operação e de rotina em outra. A consequência de
+  projeto é que o **posto é a posição da faixa, não o valor** — trocar 50 mil
+  por 80 mil no cadastro não reescreve a hierarquia de aprovação. Falta a tela
+  de configuração de alçada, que hoje não existe (o cadastro é por SQL).
+- **[DECISÃO D-19 — RESOLVIDA]** Notificação implementada com **SMTP** como
+  adaptador, para que o provedor (SES, Resend, SendGrid, Postmark, Mailgun,
+  servidor próprio) seja configuração e não código. O adaptador padrão é
+  registro em log, por assimetria de erro: um ambiente que deveria enviar e
+  apenas registra é descoberto na primeira conferência; o inverso manda e-mail
+  de teste para pessoas reais, e isso não se desfaz. Migração 0018 e
+  [Anexo S](S-contas-a-pagar.md) §S.9.
 - **[LACUNA]** "Vínculo com contrato de fornecedor" pressupõe contrato de
   fornecedor como entidade — hoje só existe `fornecedor` (cadastro) e
   `contrato` (com cliente, não com fornecedor). Ficou como referência livre
@@ -2259,13 +2274,13 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | 2 | Tabela de Franquias | — | Alta | Média | ✅ Feito (Anexo P) |
 | 3 | Preço de Locação | Módulo 2 | Alta | Média | ✅ Feito (Anexo P) |
 | 4 | Usuários e Permissões | — | **Crítica** | Alta | ✅ Feito (Anexo Q) |
-| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, 25/25 rotas (Anexo Q §Q.8) |
+| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, hoje 55/55 rotas (Anexo Q §Q.8) |
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
 | 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
 | **8** | **Centros de Custo** | — | Alta | Baixa | ✅ Feito (Anexo R) |
 | **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
-| **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | 🔲 Novo — workflow de aprovação por alçada |
+| **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | ✅ Feito (Anexo S) — nove invariantes, alçada configurável, delegação |
 | **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | 🔲 Novo — unifica com a persistência de fatura (D-20) |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |
 | **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Média | Baixa | 🔲 Novo — só leitura, nenhuma tabela de posição |
@@ -2274,6 +2289,10 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12 → 13 →
 14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
 terminar, já que suas outras dependências (2, 3, 6) estão prontas.
+
+Executado até aqui: **4, 4.5, 8, 9 e 10**. O próximo é o 11 (contas a receber),
+que é também o que fecha D-20 — a fatura hoje é calculada e não persistida, e
+"contas a receber" e "fatura emitida" são a mesma linha vista de dois ângulos.
 
 ---
 
