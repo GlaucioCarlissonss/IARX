@@ -216,6 +216,79 @@ Legenda: **✔** concedida · **◐** concedida com alçada/condição · **○*
 
 ---
 
+## C.4.1 Como a matriz vira código
+
+A matriz acima usa quatro estados; `perfil.permissoes` é um array de folhas
+`recurso:ação`. A tradução de um para o outro precisa de duas convenções, e elas
+são estas:
+
+| Símbolo | Vira | Por quê |
+| :-: | --- | --- |
+| **✔** | permissão concedida | direto |
+| **◐** | **permissão concedida** | O ◐ marca "com alçada ou condição", e a fórmula de C.1 é `permissão AND escopo AND alçada`: o ◐ **é o terceiro termo**, avaliado em tempo de execução contra `alcada` e contra a RLS. Negar a permissão deixaria a alçada sem nada sobre que agir — o perfil nem entraria na fila para ser barrado pelo limite |
+| **○** | só a permissão `:ler` do grupo | é o que a legenda diz, sem as ações de escrita da mesma linha |
+| **—** | ausente | direto |
+
+Consequência prática: **o array não guarda a condição.** Uma linha ◐⁸
+("restrito ao escopo da filial") vira permissão concedida, e o recorte acontece
+na RLS por `usuario_perfil.escopo_tipo`. Uma linha ◐⁷ ("não aprova pagamento de
+fornecedor que ele mesmo cadastrou") vira permissão concedida, e a segregação
+acontece no gatilho da migração 0019. Quem ler o array sozinho vê menos restrição
+do que existe — as três camadas é que compõem a autorização, e o array é uma.
+
+---
+
+## C.4.2 As permissões que a matriz não cobre
+
+A matriz de C.4 foi escrita antes dos Módulos 8 a 13. Trinta e quatro permissões
+do catálogo não têm linha lá: vinte e uma estão definidas em C.2 sem atribuição,
+e treze nasceram depois, nos Anexos N, R, S e T.
+
+Esta seção fecha a lacuna. **Cada linha está marcada com a sua origem**, e a
+distinção importa: *especificada* significa que o Anexo C ou o anexo de origem
+diz literalmente a quem pertence; *inferida* significa que foi derivada do grupo
+vizinho ou do critério funcional declarado, e é revisável sem quebrar contrato.
+
+| Permissão | Perfis | Origem |
+| --- | --- | --- |
+| `receber:ler` · `pagar:ler` | Diretor, Analista Financeiro | **inferida** — não se opera o que não se lê; C.4 já dá `pagar:criar/baixar` e `receber:baixar/negociar` ao Financeiro |
+| `receber:criar` · `receber:cancelar` | Analista Financeiro | **inferida** — mesmo grupo de `receber:baixar/negociar` |
+| `receber:aprovar` | Diretor, Analista Financeiro | **inferida** — simétrica a `pagar:aprovar`. A segregação (quem gera não aprova) é gatilho da 0020, não ausência de permissão |
+| `pagar:cancelar` | Diretor, Analista Financeiro | **inferida** — mesmo grupo de `pagar:criar/baixar` |
+| `pagar:delegar_aprovacao` | Diretor | **especificada** por [Anexo S](S-contas-a-pagar.md) §S.4: quem aprova não precisa poder transferir a própria autoridade — logo a delegação fica acima de quem aprova |
+| `centro_custo:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro | **especificada** por [Anexo R](R-base-do-financeiro.md) §R.8: "quem lança um título precisa ler para escolher um centro" |
+| `centro_custo:gerenciar` | Analista Financeiro | **inferida** — R §R.8 trata a árvore como cadastro financeiro |
+| `conta_bancaria:ler` | Diretor, Analista Financeiro | **especificada** — R §R.8: "é o que a baixa de um título precisa" |
+| `conta_bancaria:gerenciar` | Analista Financeiro | **especificada** — R §R.8: "bloquear uma conta é ação de gestão, não de operação" |
+| `conta_bancaria:movimentar` | Analista Financeiro | **especificada** — R §R.8: "o dia a dia" |
+| `conta_bancaria:transferir` | Diretor, Analista Financeiro | **especificada** — R §R.8: "a única ação que move saldo sem um título por trás… a que mais interessa segregar de quem lança despesa" |
+| `nota_fiscal:editar` | Operador Administrativo | **especificada** por [Anexo N](N-nota-fiscal-de-compra.md) §N.7: quem lança é quem corrige antes da conferência |
+| `fornecedor:ler` | Operador Administrativo, Supervisor de Manutenção, Analista Financeiro, Diretor | **inferida** — acompanha `nota_fiscal:ler` e `ordem_compra:criar` |
+| `cliente:inativar` | Gestor de Filial | **inferida** — vizinha de `cliente:criar/editar`, com o mesmo peso de `contrato:cancelar` |
+| `local_operacao:gerenciar` | Gestor de Filial, Operador Administrativo | **inferida** — o local é cadastro de cliente, e os dois têm `cliente:criar/editar` |
+| `contrato:encerrar` | Diretor, Gestor de Filial | **inferida** — vizinha de `contrato:cancelar/distratar` |
+| `contrato:item_encerrar` | Gestor de Filial, Operador Administrativo, Coordenador de Logística | **inferida** — vizinha de `contrato:item_alocar/substituir` |
+| `contrato:anexo_gerenciar` | Gestor de Filial, Operador Administrativo | **inferida** — acompanha `contrato:criar/editar` |
+| `equipamento:importar` · `equipamento:etiqueta_gerar` | Gestor de Filial, Operador Administrativo | **inferida** — vizinhas de `equipamento:criar/editar` |
+| `os:sla_pausar` | Supervisor de Manutenção, Técnico de Manutenção | **especificada** por `RN-011`: a pausa é registrada por quem executa, com motivo tipificado |
+| `tecnico:gerenciar` | Supervisor de Manutenção | **inferida** — C.3 dá ao supervisor "triagem, agenda, validação, estoque"; a capacidade da equipe é a mesma agenda |
+| `estoque:reservar` | Supervisor de Manutenção, Técnico de Manutenção | **especificada** por §B.5: a reserva nasce da OS |
+| `estoque:politica_definir` | Gestor de Filial, Supervisor de Manutenção | **inferida** — vizinha de `estoque:ajustar` |
+| `ordem_compra:receber` | Coordenador de Logística, Supervisor de Manutenção | **inferida** — recebimento é ato físico, como `inventario:executar` |
+| `fatura:nota_correcao` | Analista Financeiro, Diretor | **inferida** — vizinha de `fatura:cancelar` |
+| `faturamento:exportar` | Analista Financeiro, Diretor | **inferida** — vizinha de `financeiro:exportar` |
+| `mapa:filtro_compartilhar` | todos os que têm `mapa:ler` e não são de cliente | **inferida** — compartilhar recorte não expõe dado além do que o recorte já mostra |
+| `relatorio:criar` · `relatorio:agendar` | Diretor, Gestor de Filial, Analista Financeiro | **inferida** — vizinhas de `relatorio:ler`, sem os perfis que só consultam |
+| `webhook:gerenciar` | Administrador da Plataforma | **inferida** — acompanha `integracao:gerenciar` e `apikey:gerenciar`, que C.4 dá só ao Administrador |
+
+> **Correção a C.7.** A seção de contas de serviço cita
+> `fatura:nota_fiscal_atualizar` e `equipamento:posicao_atualizar`. **As duas não
+> existem no catálogo.** Enquanto uma integração precisar delas, elas têm de ser
+> criadas em `catalogo-permissoes.ts` — uma conta de serviço com escopo declarado
+> que aponta para permissão inexistente é um escopo que nunca foi validado.
+
+---
+
 ## C.5 Alçadas por valor (padrão sugerido)
 
 | Tipo de alçada | Operador | Gestor de Filial | Analista Financeiro | Supervisor Mnt | Diretor |

@@ -826,11 +826,16 @@ O que falta, em ordem de bloqueio:
   `local_operacao` mesmo (não `filial_cliente`): o dado já existia com esse
   nome desde a 0005, e criar um segundo conceito para a mesma linha teria sido
   duplicação, não modelagem.
-- **[DECISÃO D-07]** Autenticação: Supabase Auth (coerente com o Anexo H, traz
-  recuperação, MFA e rotação prontos) ou implementação própria com Argon2id?
-  Recomendação: Supabase Auth; `usuario.subject_oidc` já existe para isso.
-  **Ainda pendente** — nenhum dos dois foi construído; é o item que bloqueia
-  §4.2 item 1.
+- ~~**[DECISÃO D-07]**~~ **Resolvida ao contrário da recomendação** — Argon2id
+  próprio, não Supabase Auth. O raciocínio está no [Anexo Q](Q-usuarios-e-permissoes.md);
+  em uma frase: o login precisa achar o usuário **antes** de existir contexto de
+  locatário, e sob RLS isso exige uma superfície fechada `security definer`
+  (migrações 0015 e 0016) — que resolve o problema independentemente de quem
+  guarda a senha. **E o item §4.2 nº 1 está feito:** `POST /api/v1/auth/login`
+  verifica a senha, registra tentativa e bloqueio, e emite o JWT com
+  `permissoes` e `escopos` resolvidos do banco (`apps/api/src/modulos/auth/auth.service.ts`).
+  O que segue faltando é o item nº 2 — a interface lê o perfil de um seletor de
+  demonstração, não da sessão.
 - **[DECISÃO D-08]** SSO corporativo (SAML/OIDC) para clientes grandes entra
   agora ou depois?
 - **[DECISÃO D-15 · NOVA]** Política de senha é **configurável por tenant**
@@ -958,13 +963,30 @@ cliente alcança dado do locador.
 - [ ] Portal atende WCAG 2.2 AA no mesmo gate já existente
 
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-09]** Subdomínio próprio (`portal.cliente.app`) ou mesma origem
-  com rota `/portal`? Subdomínio separado facilita CSP e cookies distintos;
-  mesma origem simplifica a operação.
-- **[DECISÃO D-10]** O cliente pode **abrir chamado** pelo portal? A permissão
-  `os:criar` está prevista, mas isso muda o fluxo de triagem.
+- ~~**[DECISÃO D-09]**~~ **Resolvida** ([Anexo M](M-decisoes-mercado-brasileiro.md)
+  §M.5) — mesma origem, prefixo `/portal`. O isolamento real é a RLS, não a
+  origem; subdomínio traria segunda configuração de DNS, certificado e deploy por
+  proteção marginal sobre um controle que já existe no dado.
+- ~~**[DECISÃO D-10]**~~ **Resolvida** (Anexo M §M.5) — **sim**, e já está
+  codificada: `0011_eixo_cliente.sql` põe `os:criar` na lista branca do gatilho
+  que valida perfil de cliente. O chamado entra em **triagem obrigatória**, nunca
+  atribuído direto a técnico, e o cliente informa sintoma e local, **nunca
+  prioridade** — prioridade é do SLA contratado; deixá-la com o solicitante faz
+  todo chamado virar crítico e o indicador perde sentido.
 - **[LACUNA]** Não há definição de SLA de disponibilidade do portal, nem de
-  política de retenção do histórico visível ao cliente.
+  política de retenção do histórico visível ao cliente. **Não bloqueia**: o
+  portal nasce mostrando todo o histórico existente, e a retenção entra como
+  parâmetro depois.
+- **[LACUNA · descoberta na revisão]** `usuario_local_cliente` existe desde a
+  0011 e **nenhuma política de RLS ou rota a consulta**. RN-L26 e RN-L34 —
+  "gestor de unidade não alcança o consolidado do grupo" — não estão
+  implementadas em lugar nenhum, e o critério de aceite correspondente
+  **falharia hoje**. É o único desenho novo que o Portal ainda exige: como a
+  política restritiva por `local_operacao` compõe com a de `cliente_id` sem
+  quebrar o Admin Cliente, que não tem vínculo e precisa ver o grupo inteiro.
+  Note também que RN-L26 chama a tabela de `usuario_filial_cliente` e as visões
+  materializadas falam de `filial_cliente` — os dois nomes estão errados; a
+  entidade é `local_operacao`, desde a 0005.
 
 ---
 
@@ -2179,8 +2201,10 @@ categoria_despesa
   categoria_pai_id uuid FK → categoria_despesa NULL   -- subcategoria, 2 níveis
   classificacao_sugerida text CHECK (classificacao_sugerida IN ('DESPESA_FIXA','DESPESA_VARIAVEL','INVESTIMENTO'))
   ativo           boolean NOT NULL DEFAULT true
+  deleted_at, deleted_by, delete_reason        -- exclusão lógica (Anexo A §A.1)
   UNIQUE (tenant_id, nome) WHERE deleted_at IS NULL
-  -- referenciada por titulo_pagar.categoria_id (Módulo 10)
+  -- referenciada por titulo_pagar.categoria_id (Módulo 10) — VER PENDÊNCIA:
+  -- essa coluna foi especificada e NÃO foi implementada na 0019
 
 orcamento
   id              uuid PK
@@ -2192,10 +2216,12 @@ orcamento
   filial_id       uuid FK → filial NULL
   valor_orcado    numeric(15,4) NOT NULL CHECK (valor_orcado >= 0)
   created_at, created_by, updated_at, updated_by
-  UNIQUE (tenant_id, ano, mes, categoria_id, centro_custo_id, filial_id)
-  -- a UNIQUE trata NULL como valor distinto por linha (comportamento padrão do
-  -- Postgres em índice único) — duas linhas "geral" (categoria_id NULL) do
-  -- mesmo centro no mesmo mês colidiriam, que é o comportamento certo
+  UNIQUE NULLS NOT DISTINCT (tenant_id, ano, mes, categoria_id, centro_custo_id, filial_id)
+  -- `NULLS NOT DISTINCT` (PG 15+) é obrigatório aqui, e a versão anterior deste
+  -- comentário afirmava o contrário: no padrão do Postgres um índice único trata
+  -- NULLs como **distintos**, então duas linhas "geral" (categoria_id NULL) do
+  -- mesmo centro no mesmo mês **não** colidiriam — nasceriam duplicadas, e a
+  -- execução orçamentária passaria a contar o mesmo orçamento duas vezes
 
 replanejamento_orcamento
   id                uuid PK
@@ -2208,9 +2234,17 @@ replanejamento_orcamento
   created_at        timestamptz NOT NULL DEFAULT now()
 ```
 
-**Execução orçamentária não é armazenada** — é `Σ(titulo_pagar.valor_ajustado)
+**Execução orçamentária não é armazenada** — é `Σ(titulo_pagar.valor_devido)
 WHERE categoria_id = X AND status NOT IN ('CANCELADO') AND data_emissao BETWEEN
-início E fim do período`, comparado a `orcamento.valor_orcado`. Guardar
+início E fim do período`, comparado a `orcamento.valor_orcado`.
+
+> A coluna é **`valor_devido`**, não `valor_ajustado` — versões anteriores desta
+> seção diziam a segunda. Na migração 0019, `valor_ajustado` é **nulável** ("nulo
+> = sem ajuste") e `valor_devido` é a coluna gerada
+> `coalesce(valor_ajustado, valor_original)`. Somar `valor_ajustado` daria zero
+> para todo título que nunca sofreu ajuste — isto é, para a maioria.
+
+Guardar
 "quanto já foi gasto" como coluna própria divergiria do que os títulos
 realmente somam assim que um for cancelado ou tiver o valor ajustado — o
 mesmo argumento do saldo de conta bancária (Módulo 9) e do custo de aquisição
@@ -2286,11 +2320,15 @@ GET    /api/v1/despesas/indicadores                  → ?periodo=&filial_id=&ce
 GET    /api/v1/despesas/relatorios/{tipo}            → ?formato=pdf|xlsx
 ```
 
-Permissões: `financeiro:centro_custo_gerenciar` (já existe, reaproveitado
-para orçamento por proximidade de domínio) — **nova decisão**: criar
-`despesa:orcamento_gerenciar` e `despesa:ler` dedicadas, para não sobrecarregar
-uma permissão de centro de custo com uma responsabilidade orçamentária
-distinta. `financeiro:exportar` (já existe) para os relatórios.
+Permissões: criar `despesa:orcamento_gerenciar` e `despesa:ler` dedicadas, para
+não sobrecarregar uma permissão de centro de custo com uma responsabilidade
+orçamentária distinta. `financeiro:exportar` (já existe) para os relatórios.
+
+> A versão anterior desta linha oferecia reaproveitar
+> `financeiro:centro_custo_gerenciar`. **Essa permissão já não existe:** ao
+> construir o Módulo 8 ela foi promovida a recurso próprio,
+> `centro_custo:ler` / `centro_custo:gerenciar`. A decisão de criar permissões de
+> despesa dedicadas continua valendo — e agora é a única opção.
 
 ### Dependências
 - **Depende de:** Módulo 8 (centro de custo), Módulo 10 (fonte de todo dado)
@@ -2317,6 +2355,29 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
   confirmação o indicador fica documentado como fórmula, sem entrar no painel
   padrão.
 
+**Nem D-25 nem D-26 travam o módulo.** D-25 trava a cláusula de limite dentro de
+um endpoint — as três tabelas, todo o CRUD, os outros indicadores e os relatórios
+independem dela. D-26 trava exatamente um indicador, e esta seção já declara o
+que fazer sem a resposta. As três pendências abaixo são mais impeditivas, e
+nenhuma estava registrada:
+
+- **[PENDÊNCIA · bloqueante] `titulo_pagar.categoria_id` não existe.** Ela está
+  especificada no Módulo 10 desta mesma seção, e a migração 0019 **não a
+  criou** — o [Anexo S](S-contas-a-pagar.md) sequer registra a omissão. Sem essa
+  coluna, `Σ(titulo_pagar.valor_devido) WHERE categoria_id = X` não tem sobre o
+  que rodar: é a fórmula central do módulo. Construir o Módulo 14 começa por
+  `alter table titulo_pagar add column categoria_id`, **depois** de
+  `categoria_despesa` existir.
+- **[DECISÃO · nova] O que fazer com os títulos já lançados sem categoria?**
+  Backfill manual, uma categoria "Não categorizado", ou excluí-los da execução
+  orçamentária? Muda os números do painel no primeiro dia, e é regra de negócio
+  de verdade — não deve ser escolhida por quem escreve o código.
+- **[LACUNA] A alçada de aprovação do replanejamento não existe.** O fluxo de
+  usuário diz "sujeito a aprovação se acima da alçada do perfil", mas nenhum
+  `alcada.tipo` de orçamento está definido, nem as faixas, nem se a aprovação é
+  em passo único ou fila como `titulo_pagar_aprovacao`. `replanejamento_orcamento.aprovado_por`
+  também não declara se é nulável.
+
 ---
 
 ## CRONOGRAMA SUGERIDO DE IMPLEMENTAÇÃO
@@ -2336,7 +2397,7 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | 2 | Tabela de Franquias | — | Alta | Média | ✅ Feito (Anexo P) |
 | 3 | Preço de Locação | Módulo 2 | Alta | Média | ✅ Feito (Anexo P) |
 | 4 | Usuários e Permissões | — | **Crítica** | Alta | ✅ Feito (Anexo Q) |
-| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, hoje 55/55 rotas (Anexo Q §Q.8) |
+| **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, hoje 86/86 rotas (Anexo Q §Q.8) |
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
 | 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
@@ -2346,18 +2407,25 @@ distinta. `financeiro:exportar` (já existe) para os relatórios.
 | **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | ✅ Feito (Anexo T) — D-20 fechada, fechamento de competência construído |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Alta | Média-Alta | ✅ Feito (Anexo U) — quatro invariantes, worker de conversão, D-23 fechada |
 | **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Alta | Média | ✅ Feito (Anexo U) — uma projeção só, nenhuma posição diária gravada |
-| **12** | **Lançamentos Futuros** | Módulos 10, 11 | Média | Média | 🔲 Novo |
-| **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Média | Baixa | 🔲 Novo — só leitura, nenhuma tabela de posição |
 | **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | 🔲 Novo — orçamento + indicadores, tudo calculado |
 
 Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12 → 13 →
 14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
 terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 
-Executado até aqui: **4, 4.5, 8, 9, 10 e 11**. O próximo é o 12 (lançamentos
-futuros), que converte recorrência em título — e é ele que cria
-`recorrencia_receber`, a tabela que `titulo_receber.recorrencia_id` já referencia
-sem chave estrangeira.
+Executado até aqui: **4, 4.5, 8, 9, 10, 11, 12 e 13**. Restam o **5** (Portal do
+Cliente) e o **14** (Controle de Despesas).
+
+O Portal **não depende de mais nada**: D-09 e D-10 estão resolvidas no
+[Anexo M](M-decisoes-mercado-brasileiro.md) §M.5, e D-10 já está codificada na
+migração `0011_eixo_cliente.sql` — o cliente abre chamado, a triagem é
+obrigatória e a prioridade não é dele. O que falta construir de estrutura é
+RN-L26/RN-L34 sobre `usuario_local_cliente`: a tabela existe desde a 0011 e **não
+é lida por nenhuma política nem por nenhuma rota**, então hoje um gestor de
+unidade enxerga tudo do grupo.
+
+O Módulo 14 tem um bloqueio que não é decisão e não estava registrado: veja a
+pendência de `titulo_pagar.categoria_id` no fim desta seção.
 
 ---
 
@@ -2456,6 +2524,8 @@ sem chave estrangeira.
 | ~~D-19~~ | Provedor de envio de e-mail | SMTP como adaptador; o provedor é configuração, não código — migração 0018 |
 | ~~D-22~~ | Geração de título contratual | No fechamento da competência, na mesma chamada que sela o consumo — migração 0020 (Anexo T) |
 | ~~D-23~~ | Conversão de lançamento futuro notifica? | **Sim** — quem pode decidir o nível pendente do título gerado, na rota do lado certo. Título que nasce aprovado não gera aviso (Anexo U §U.7) |
+| ~~D-09~~ | Portal em subdomínio ou rota `/portal` | Mesma origem, prefixo `/portal` — o isolamento real é a RLS, não a origem (Anexo M §M.5) |
+| ~~D-10~~ | Cliente abre chamado pelo portal? | **Sim**, com triagem obrigatória e sem escolher prioridade. Já codificada na migração 0011 (Anexo M §M.5) |
 
 ### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
@@ -2483,7 +2553,6 @@ diferente:
 | D-03 | Origem do XML da NF-e | Upload, portal do fornecedor ou SEFAZ por chave (exige certificado A1) |
 | D-04 | Existe ERP financeiro? | Se sim, inverte a direção da integração do módulo 1 |
 | D-08 | SSO corporativo para clientes grandes | Entra agora ou depois |
-| D-09 | Portal em subdomínio ou rota `/portal` | Afeta CSP, cookies e operação |
 | D-11 | Telemetria de contador | DCA na rede do cliente, API do fabricante, ou manual |
 | D-17 | Formato de importação de extrato bancário | OFX primeiro; CNAB se/quando houver cobrança registrada — Módulo 9 |
 | ~~D-22~~ | Geração de título contratual: no fechamento ou em ciclo separado? | **Resolvida**: no fechamento, `app.fechar_competencia` — Módulo 11 (Anexo T) |
@@ -2495,7 +2564,6 @@ diferente:
 | --- | --- | --- |
 | D-05 | Franquia acumulativa existe? | 2 |
 | D-06 | Preço por filial do cliente é necessário? | 3 |
-| D-10 | Cliente abre chamado pelo portal? | 5 |
 | D-25 | Replanejamento de orçamento considera só o pago, ou também o aprovado-não-pago? | 14 |
 | D-26 | Indicador análogo a "custo por paciente": por cliente ativo, por equipamento, ou os dois? | 14 |
 | — | Página A3 conta como 2× A4? | 2, 6 |
@@ -2550,8 +2618,14 @@ catálogo (`packages/contracts/src/catalogo-permissoes.ts`), não aqui.
 ¹ "Financeiro" aqui é o painel executivo (`financeiro:painel_executivo`,
 `:rentabilidade_ler`), não uma tela própria — é visão consolidada sobre os
 módulos ao lado.
-² Diretor tem `financeiro:painel_executivo` mas não `pagar:aprovar` por
-padrão — aprovação de valor alto é alçada, não perfil; ver Módulo 10 RN-F01.
+² **Corrigida.** A versão anterior dizia que o Diretor tem
+`financeiro:painel_executivo` mas **não** `pagar:aprovar`, "porque aprovação de
+valor alto é alçada, não perfil". O argumento se desfaz sozinho: se a aprovação é
+alçada, a **permissão** é o que deixa entrar na fila e a **alçada** é o que limita
+o valor — negar a permissão não move a decisão para a alçada, tira dela qualquer
+coisa sobre que agir. E o [Anexo C](C-matriz-de-permissoes.md) §C.5 dá ao Diretor
+"sem limite" nessa mesma linha, o que não significa nada sem a permissão.
+**Vale o Anexo C: o Diretor tem `pagar:aprovar`.**
 ³ "Sem aprovar" — operador cria o título e baixa o pagamento já aprovado, não
 decide aprovação.
 ⁴ Não é um perfil, é uma **posição na fila** de `titulo_pagar_aprovacao` —
@@ -2581,11 +2655,10 @@ está feito mas não conectado, e o que falta.
       acima: o guarda lê `@ExigePermissao` do handler e barra antes de
       chegar ao serviço. O que falta **não é o mecanismo**, é ele ter algo
       real para checar — ver o próximo item.
-- [ ] **Emissão do JWT com permissões reais** — hoje só existe em teste
-      (`apps/api/test/apoio.ts::token()`, que assina o mesmo formato que a
-      produção usaria). Falta `POST /auth/login` assinando esse token a
-      partir de `perfil.permissoes` de verdade — Módulo 4 §4.2 item 1. Sem
-      isso, o guarda funciona mas nunca foi exercitado fora de teste.
+- [x] **Emissão do JWT com permissões reais** — **feito**. `POST /auth/login`
+      resolve `permissoes` e `escopos` do banco e assina o token
+      (`auth.service.ts`), no mesmo formato que `apps/api/test/apoio.ts::token()`
+      já usava. O guarda passou a ser exercitado fora de teste.
 - [ ] **Componente de renderização condicional no front** — `pode()` já
       existe (`lib/contexto.tsx`) e já é usado em telas (`pode('financeiro:rentabilidade_ler')`,
       por exemplo, no mapa). O que falta é a fonte: hoje `pode()` lê um

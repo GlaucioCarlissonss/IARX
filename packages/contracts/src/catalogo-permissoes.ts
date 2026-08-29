@@ -81,7 +81,6 @@ export const PERMISSOES = [
   'estoque:politica_definir',
   'inventario:executar',
   'inventario:aprovar',
-  'fornecedor:gerenciar',
   'ordem_compra:criar',
   'ordem_compra:aprovar',
   'ordem_compra:receber',
@@ -97,6 +96,15 @@ export const PERMISSOES = [
   'nota_fiscal:conferir',
   'nota_fiscal:integrar',
   'nota_fiscal:cancelar',
+  /*
+   * Fornecedor mora aqui, e não no bloco de estoque acima.
+   *
+   * Ele aparecia nos dois — a mesma permissão listada duas vezes, o que fazia o
+   * catálogo declarar 126 entradas e conter 125. Ficou neste bloco porque é aqui
+   * que o fornecedor é usado de fato: a nota fiscal de compra é o único caminho
+   * que o cria e o consulta hoje. O bloco de estoque o citava por antecipação de
+   * um módulo de ordem de compra que ainda não existe.
+   */
   'fornecedor:ler',
   'fornecedor:gerenciar',
 
