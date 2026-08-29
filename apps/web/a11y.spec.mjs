@@ -1801,7 +1801,7 @@ test('o estado parcial é anunciado, e é o que impede a árvore de mentir', asy
   await abrir(page, { hash: '#/perfis' })
 
   // O perfil derivado é o editável; os de sistema abrem em leitura.
-  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Manutenção \(derivado\)/ }).click()
   await page.getByRole('button', { name: 'Editar permissões' }).click()
 
   const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
@@ -1818,7 +1818,7 @@ test('o estado parcial é anunciado, e é o que impede a árvore de mentir', asy
 
 test('marcar um módulo concede as permissões dele e a contagem acompanha', async ({ page }) => {
   await abrir(page, { hash: '#/perfis' })
-  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Manutenção \(derivado\)/ }).click()
   await page.getByRole('button', { name: 'Editar permissões' }).click()
 
   const contar = async () => Number((await page.getByRole('status').first().innerText()).match(/(\d+)/)[1])
@@ -1865,7 +1865,7 @@ test('trocar a permissão de um perfil muda o que a interface mostra', async ({ 
   await seletor.selectOption('perf-admin')
   await menu.getByRole('link', { name: 'Perfis de acesso' }).click()
 
-  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Suporte/ }).click()
+  await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Manutenção \(derivado\)/ }).click()
   await page.getByRole('button', { name: 'Editar permissões' }).click()
 
   const arvore = page.getByRole('tree', { name: 'Permissões do perfil' })
@@ -1900,11 +1900,11 @@ test('perfil de cliente não é oferecido a usuário interno', async ({ page }) 
   // RN-L25: usuário de cliente com perfil interno enxergaria a operação
   // inteira da locadora. A tela nem oferece a combinação.
   const opcoes = await page.getByLabel('Perfil', { exact: true }).locator('option').allInnerTexts()
-  expect(opcoes.some((o) => /Visualizador do Cliente/.test(o))).toBe(false)
+  expect(opcoes.some((o) => /Visualizador do cliente/.test(o))).toBe(false)
 
   await page.getByLabel('Tipo de acesso').selectOption('CLIENTE')
   const doCliente = await page.getByLabel('Perfil', { exact: true }).locator('option').allInnerTexts()
-  expect(doCliente.some((o) => /Visualizador do Cliente/.test(o))).toBe(true)
+  expect(doCliente.some((o) => /Visualizador do cliente/.test(o))).toBe(true)
 })
 
 test('o último administrador não pode ser desativado, e a tela explica', async ({ page }) => {
@@ -2718,10 +2718,14 @@ test('a delegação é sempre de quem está logado', async ({ page }) => {
 test('sem permissão de aprovar, a tela não oferece decidir', async ({ page }) => {
   await abrir(page, { hash: '#/contas-pagar' })
 
-  // O perfil de suporte tem `pagar:ler` e não `pagar:aprovar`: a lista continua
-  // visível, e é só a ação que sai. Esconder a tela inteira faria quem confere
-  // pagamentos perder o acesso de leitura que ele legitimamente tem.
-  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Supervisor de Suporte' })
+  // A Consulta tem `pagar:ler` e não `pagar:aprovar`: a lista continua visível,
+  // e é só a ação que sai. Esconder a tela inteira faria quem confere pagamentos
+  // perder o acesso de leitura que ele legitimamente tem.
+  //
+  // Era o Supervisor de Suporte que fazia este papel. Ao seguir a matriz do
+  // Anexo C ele deixou de ter qualquer permissão de `pagar` — e o perfil cuja
+  // definição inteira é ler passou a ser o caso certo para esta asserção.
+  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Consulta' })
   await expect(page.getByRole('button', { name: /^Decidir/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Novo título' })).toHaveCount(0)
 })
@@ -2870,7 +2874,10 @@ test('a prévia de alçada avisa que o contratual sempre passa por alguém', asy
   // sozinha — o contrário do que a regra garante.
   await expect(dialogo.getByText(/passa por ao menos um nível sempre/)).toBeVisible()
 
-  await dialogo.getByLabel('Valor', { exact: true }).fill('50000')
+  // Acima da faixa mais alta: os dois níveis que o cadastro tem. O valor
+  // acompanha as faixas — são duas desde que a de emissão deixou de ter um
+  // degrau no Operador Administrativo, que não emite fatura nenhuma.
+  await dialogo.getByLabel('Valor', { exact: true }).fill('150000')
   await expect(dialogo.getByText(/2 nível\(is\) de aprovação/)).toBeVisible()
 })
 
@@ -2974,10 +2981,10 @@ test('o recebimento não excede o saldo, e o parcial é anunciado antes', async 
 test('sem permissão de aprovar cobrança, a tela não oferece decidir', async ({ page }) => {
   await abrir(page, { hash: '#/contas-receber' })
 
-  // O perfil de suporte tem leitura e não aprova cobrança: a lista continua
+  // A Consulta tem `receber:ler` e não aprova cobrança: a lista continua
   // visível, e é só a ação que sai. Esconder a tela inteira faria quem confere
   // a cobrança perder o acesso de leitura que ele legitimamente tem.
-  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Supervisor de Suporte' })
+  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Consulta' })
   await expect(page.getByRole('button', { name: /^Decidir/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Cobrança avulsa' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Fechar competência' })).toHaveCount(0)

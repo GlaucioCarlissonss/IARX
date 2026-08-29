@@ -226,8 +226,23 @@ são estas:
 | :-: | --- | --- |
 | **✔** | permissão concedida | direto |
 | **◐** | **permissão concedida** | O ◐ marca "com alçada ou condição", e a fórmula de C.1 é `permissão AND escopo AND alçada`: o ◐ **é o terceiro termo**, avaliado em tempo de execução contra `alcada` e contra a RLS. Negar a permissão deixaria a alçada sem nada sobre que agir — o perfil nem entraria na fila para ser barrado pelo limite |
-| **○** | só a permissão `:ler` do grupo | é o que a legenda diz, sem as ações de escrita da mesma linha |
+| **○** | as permissões **de leitura** da linha, e só elas | é o que a legenda diz, sem as ações de escrita da mesma linha |
 | **—** | ausente | direto |
+
+O ○ precisa de uma definição que não dependa de leitura humana, porque as
+linhas da matriz agrupam ações e nem toda linha tem uma leitura. São **leituras**
+as ações `ler`, `painel_executivo` e `rentabilidade_ler` — e a regra decorre
+delas nos três formatos de linha:
+
+| Formato da linha | Exemplo | ○ concede |
+| --- | --- | --- |
+| tem leitura e escrita | `peca:ler` (a linha é só a leitura) | a leitura |
+| só leituras | `financeiro:painel_executivo` | a própria permissão — não há forma menor |
+| nenhuma leitura | `prefatura:gerar/editar/aprovar`, `usuario:gerenciar / perfil:gerenciar` | **nada dessa linha**; a leitura da área vem da linha dela em C.4.2 (`fatura:ler`), e onde não existe linha nenhuma — `usuario:ler` não está no catálogo — não há o que conceder |
+
+E uma convenção que a matriz aplica sem dizer: o **Administrador da Plataforma é
+✔ em todas as linhas**, inclusive nas de C.4.2 que não o citam. É o perfil de
+configuração do locatário; enumerá-lo em cada linha só acrescentaria ruído.
 
 Consequência prática: **o array não guarda a condição.** Uma linha ◐⁸
 ("restrito ao escopo da filial") vira permissão concedida, e o recorte acontece
@@ -240,18 +255,30 @@ do que existe — as três camadas é que compõem a autorização, e o array é
 
 ## C.4.2 As permissões que a matriz não cobre
 
-A matriz de C.4 foi escrita antes dos Módulos 8 a 13. Trinta e quatro permissões
-do catálogo não têm linha lá: vinte e uma estão definidas em C.2 sem atribuição,
-e treze nasceram depois, nos Anexos N, R, S e T.
+A matriz de C.4 foi escrita antes dos Módulos 8 a 13, e nunca alcançou alguns
+blocos que já existiam. Das **125** permissões do catálogo, **82** têm linha lá.
+As outras **43** estão nesta seção.
 
-Esta seção fecha a lacuna. **Cada linha está marcada com a sua origem**, e a
-distinção importa: *especificada* significa que o Anexo C ou o anexo de origem
-diz literalmente a quem pertence; *inferida* significa que foi derivada do grupo
-vizinho ou do critério funcional declarado, e é revisável sem quebrar contrato.
+A contagem é medida, não estimada — a versão anterior desta seção dizia "trinta e
+quatro" e listava trinta e três, deixando dez permissões (o bloco inteiro de nota
+fiscal, as duas de política comercial, `fornecedor:gerenciar`, `fatura:ler` e
+`medicao:ler`) sem atribuição em lugar nenhum. Quem fosse montar um perfil a
+partir do Anexo C não teria onde procurá-las.
+
+**Cada linha está marcada com a sua origem**, e a distinção importa:
+*especificada* significa que o Anexo C ou o anexo de origem diz literalmente a
+quem pertence; *inferida* significa que foi derivada do grupo vizinho ou do
+critério funcional declarado, e é revisável sem quebrar contrato.
+
+A coluna **Perfis** usa os nomes de C.3, sem abreviação e sem prosa: ela é lida
+por um teste que compara esta tabela com os perfis-semente do código
+(`apps/web/test/matriz-permissoes.test.ts`). O raciocínio fica na coluna Origem.
+Como em C.4, o Administrador da Plataforma é implícito em todas as linhas.
 
 | Permissão | Perfis | Origem |
 | --- | --- | --- |
-| `receber:ler` · `pagar:ler` | Diretor, Analista Financeiro | **inferida** — não se opera o que não se lê; C.4 já dá `pagar:criar/baixar` e `receber:baixar/negociar` ao Financeiro |
+| `pagar:ler` | Diretor, Gestor de Filial, Analista Financeiro, Consulta | **inferida** — não se opera o que não se lê, e C.4 dá `pagar:aprovar` ◐ ao Gestor de Filial: sem esta linha ele aprovaria um título que a tela não lhe mostra. A Consulta entra porque ler é a sua definição inteira em C.3, e ela já vê o painel executivo que resume estes mesmos títulos |
+| `receber:ler` | Diretor, Analista Financeiro, Consulta | **inferida** — mesma razão; sem o Gestor de Filial, que não tem ação nenhuma de `receber` em C.4 |
 | `receber:criar` · `receber:cancelar` | Analista Financeiro | **inferida** — mesmo grupo de `receber:baixar/negociar` |
 | `receber:aprovar` | Diretor, Analista Financeiro | **inferida** — simétrica a `pagar:aprovar`. A segregação (quem gera não aprova) é gatilho da 0020, não ausência de permissão |
 | `pagar:cancelar` | Diretor, Analista Financeiro | **inferida** — mesmo grupo de `pagar:criar/baixar` |
@@ -262,8 +289,13 @@ vizinho ou do critério funcional declarado, e é revisável sem quebrar contrat
 | `conta_bancaria:gerenciar` | Analista Financeiro | **especificada** — R §R.8: "bloquear uma conta é ação de gestão, não de operação" |
 | `conta_bancaria:movimentar` | Analista Financeiro | **especificada** — R §R.8: "o dia a dia" |
 | `conta_bancaria:transferir` | Diretor, Analista Financeiro | **especificada** — R §R.8: "a única ação que move saldo sem um título por trás… a que mais interessa segregar de quem lança despesa" |
-| `nota_fiscal:editar` | Operador Administrativo | **especificada** por [Anexo N](N-nota-fiscal-de-compra.md) §N.7: quem lança é quem corrige antes da conferência |
-| `fornecedor:ler` | Operador Administrativo, Supervisor de Manutenção, Analista Financeiro, Diretor | **inferida** — acompanha `nota_fiscal:ler` e `ordem_compra:criar` |
+| `nota_fiscal:ler` | Diretor, Operador Administrativo, Supervisor de Manutenção, Analista Financeiro | **especificada** por [Anexo N](N-nota-fiscal-de-compra.md) §N.7: a tabela de distribuição dá papel aos quatro, e à diretoria dá "só leitura" |
+| `nota_fiscal:criar` · `nota_fiscal:cancelar` | Operador Administrativo | **especificada** — N §N.7: "lança e cancela — é quem recebe o XML do fornecedor" |
+| `nota_fiscal:editar` | Operador Administrativo | **especificada** — N §N.7: quem lança é quem corrige antes da conferência |
+| `nota_fiscal:conferir` | Supervisor de Manutenção | **especificada** — N §N.7: "confere — é quem abre as caixas e lê as etiquetas". O anexo o chama pelo nome antigo, *Supervisor de suporte técnico* |
+| `nota_fiscal:integrar` | Analista Financeiro | **especificada** — N §N.7: "integra — é o lançamento contábil do imobilizado". As três ações em três perfis são a segregação de RN-027, não zelo |
+| `fornecedor:ler` | Diretor, Operador Administrativo, Supervisor de Manutenção, Analista Financeiro | **inferida** — acompanha `nota_fiscal:ler` e `ordem_compra:criar` |
+| `fornecedor:gerenciar` | Operador Administrativo, Analista Financeiro | **inferida** — a nota ⁷ de C.4 ("não aprova pagamento de fornecedor que ele mesmo cadastrou") só tem sentido se o Analista Financeiro cadastra fornecedor; a regra pressupõe a permissão |
 | `cliente:inativar` | Gestor de Filial | **inferida** — vizinha de `cliente:criar/editar`, com o mesmo peso de `contrato:cancelar` |
 | `local_operacao:gerenciar` | Gestor de Filial, Operador Administrativo | **inferida** — o local é cadastro de cliente, e os dois têm `cliente:criar/editar` |
 | `contrato:encerrar` | Diretor, Gestor de Filial | **inferida** — vizinha de `contrato:cancelar/distratar` |
@@ -275,9 +307,13 @@ vizinho ou do critério funcional declarado, e é revisável sem quebrar contrat
 | `estoque:reservar` | Supervisor de Manutenção, Técnico de Manutenção | **especificada** por §B.5: a reserva nasce da OS |
 | `estoque:politica_definir` | Gestor de Filial, Supervisor de Manutenção | **inferida** — vizinha de `estoque:ajustar` |
 | `ordem_compra:receber` | Coordenador de Logística, Supervisor de Manutenção | **inferida** — recebimento é ato físico, como `inventario:executar` |
-| `fatura:nota_correcao` | Analista Financeiro, Diretor | **inferida** — vizinha de `fatura:cancelar` |
-| `faturamento:exportar` | Analista Financeiro, Diretor | **inferida** — vizinha de `financeiro:exportar` |
-| `mapa:filtro_compartilhar` | todos os que têm `mapa:ler` e não são de cliente | **inferida** — compartilhar recorte não expõe dado além do que o recorte já mostra |
+| `medicao:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro | **inferida** — não se consolida nem se estima o que não se lê; são os perfis das duas linhas de `medicao` em C.4 |
+| `fatura:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro, Consulta | **inferida** — é a leitura que o ○ do Diretor e da Consulta na linha `prefatura:gerar/editar/aprovar` designa: aquela linha não tem leitura própria, e sem esta o ○ não concederia nada |
+| `fatura:nota_correcao` | Diretor, Analista Financeiro | **inferida** — vizinha de `fatura:cancelar` |
+| `faturamento:exportar` | Diretor, Analista Financeiro | **inferida** — vizinha de `financeiro:exportar` |
+| `comercial:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro, Consulta | **inferida** — [Anexo P](P-nucleo-comercial-e-consumo.md) trata tabela de franquia e de preço como política comercial: quem lê um contrato precisa ler a política que o precifica |
+| `comercial:gerenciar` | Analista Financeiro | **inferida** — a tabela de preço é cadastro financeiro, como a árvore de centro de custo |
+| `mapa:filtro_compartilhar` | Diretor, Gestor de Filial, Operador Administrativo, Coordenador de Logística, Supervisor de Manutenção, Técnico de Manutenção | **inferida** — compartilhar recorte não expõe dado além do que o recorte já mostra, logo acompanha `mapa:ler`. Fora a Consulta, que é somente leitura, e o Analista Financeiro, que não tem o mapa |
 | `relatorio:criar` · `relatorio:agendar` | Diretor, Gestor de Filial, Analista Financeiro | **inferida** — vizinhas de `relatorio:ler`, sem os perfis que só consultam |
 | `webhook:gerenciar` | Administrador da Plataforma | **inferida** — acompanha `integracao:gerenciar` e `apikey:gerenciar`, que C.4 dá só ao Administrador |
 

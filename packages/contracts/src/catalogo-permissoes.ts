@@ -214,8 +214,27 @@ export type Permissao = (typeof PERMISSOES)[number]
  * dentro do escopo do perfil (Anexo C.1).
  *
  *   Autorização = possui(permissão) AND registro ∈ escopo AND satisfaz(alçada)
+ *
+ * Os cinco primeiros recortam a operação da locadora. Os dois últimos recortam o
+ * **cliente**, e existem no enum `app.escopo_tipo` desde a migração 0011:
+ *
+ *  · `CLIENTE` — o usuário vê o próprio CNPJ e os demais do grupo econômico;
+ *  · `LOCAL_CLIENTE` — vê apenas os locais aos quais está vinculado.
+ *
+ * Esta lista precisa conter os sete porque `Claims` valida `escopos` contra ela.
+ * Sem os dois últimos, o token de qualquer usuário de cliente falhava o
+ * `safeParse` do guarda de autenticação e ele tomava **401** — o banco emitia um
+ * escopo que a fronteira recusava, e o erro não dizia isso em lugar nenhum.
  */
-export const ESCOPOS = ['TENANT', 'EMPRESA', 'FILIAL', 'REGIAO', 'PROPRIO'] as const
+export const ESCOPOS = [
+  'TENANT',
+  'EMPRESA',
+  'FILIAL',
+  'REGIAO',
+  'PROPRIO',
+  'CLIENTE',
+  'LOCAL_CLIENTE',
+] as const
 export type Escopo = (typeof ESCOPOS)[number]
 
 export interface EscopoConcedido {

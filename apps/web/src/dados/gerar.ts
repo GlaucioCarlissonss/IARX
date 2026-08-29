@@ -9,7 +9,6 @@ import {
   regiaoPorId,
 } from './catalogo'
 import { gerarFornecedores, gerarNotas } from './gerar-notas'
-import { PERMISSOES } from '@iarx/contracts/catalogo-permissoes'
 import { perfilPorId } from '../lib/permissoes'
 import type {
   Anexo,
@@ -346,6 +345,25 @@ function gerarPecas(s: Sorteio): Peca[] {
 /* Geração principal                                                          */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * A finalidade de cada perfil, transcrita da coluna "Finalidade" de
+ * [C.3](../../../../docs/anexos/C-matriz-de-permissoes.md). A descrição é o que
+ * a tela de perfis mostra ao lado do nome; escrevê-la de novo aqui produziria um
+ * segundo vocabulário para a mesma coisa, que é o defeito que este arquivo
+ * inteiro existe para não ter.
+ */
+const DESCRICAO_PERFIL: Record<string, string> = {
+  admin: 'Configuração, IAM, integrações e auditoria do locatário.',
+  diretoria: 'Visão executiva e alçadas máximas.',
+  'gestor-filial': 'Operação e resultado da filial.',
+  operacao: 'Contratos, clientes e movimentações.',
+  logistica: 'Movimentações, romaneios e transferências.',
+  manutencao: 'Triagem, agenda, validação e estoque.',
+  tecnico: 'Execução de OS e leituras.',
+  financeiro: 'Faturamento, recebíveis e pagáveis.',
+  consulta: 'Somente leitura.',
+}
+
 export function gerarBase(semente = 20260730): BaseDados {
   const s = new Sorteio(semente)
   const comps = ultimasCompetencias(12)
@@ -436,52 +454,81 @@ export function gerarBase(semente = 20260730): BaseDados {
    * do gerador — a massa sai do que o domínio já tem, não de nomes plausíveis
    * escritos à mão.
    *
-   * Os perfis espelham os do banco (`app.provisionar_perfis_cliente`, migração
-   * 0011): três internos e um de cliente, todos de sistema. Perfil de sistema é
-   * estrutural — atribuível, nunca editável — e a tela precisa de pelo menos um
-   * editável para o caso de uso principal existir, daí o quinto.
+   * Os perfis são os **nove de C.3** mais os **três de cliente que a migração
+   * 0011 provisiona por gatilho** (`app.provisionar_perfis_cliente`), copiados
+   * dela nome por nome e permissão por permissão. O comentário anterior aqui
+   * dizia que a 0011 cria "três internos e um de cliente" — ela cria três de
+   * cliente e nenhum interno, e o `perf-cliente` daqui era um quarto perfil que
+   * não existe em lugar nenhum.
+   *
+   * Perfil de sistema é estrutural — atribuível, nunca editável — e a tela
+   * precisa de pelo menos um editável para o caso de uso principal existir, daí
+   * o derivado no fim da lista. C.3 diz exatamente isso: "cada tenant pode
+   * derivar os seus".
    */
+  const interno = (id: string): PerfilGravado => {
+    const p = perfilPorId(id)
+    return {
+      id: `perf-${id}`,
+      nome: p.nome,
+      descricao: DESCRICAO_PERFIL[id]!,
+      tipo: 'INTERNO',
+      isSistema: true,
+      permissoes: p.permissoes,
+    }
+  }
+
   const perfis: PerfilGravado[] = [
+    interno('admin'),
+    interno('diretoria'),
+    interno('gestor-filial'),
+    interno('operacao'),
+    interno('logistica'),
+    interno('manutencao'),
+    interno('tecnico'),
+    interno('financeiro'),
+    interno('consulta'),
+
+    /*
+     * Os três de cliente, transcritos da 0011 linhas 480-489. Não são derivados
+     * de `lib/permissoes.ts` porque não são perfis da locadora: quem os define é
+     * a migração, e RN-L25 é imposta por gatilho sobre exatamente estas listas.
+     */
     {
-      id: 'perf-admin',
-      nome: 'Administrador da Plataforma',
-      descricao: 'Acesso completo ao ambiente do locatário.',
-      tipo: 'INTERNO',
+      id: 'perf-cliente-admin',
+      nome: 'Administrador do cliente',
+      descricao: 'Enxerga todo o parque, contratos e faturas do próprio CNPJ e do grupo econômico.',
+      tipo: 'CLIENTE',
       isSistema: true,
-      permissoes: [...PERMISSOES],
+      permissoes: [
+        'contrato:ler', 'equipamento:ler', 'fatura:ler', 'medicao:ler', 'os:ler', 'os:criar',
+        'mapa:ler', 'relatorio:ler', 'cliente:ler',
+      ],
     },
     {
-      id: 'perf-operacao',
-      nome: 'Operador Administrativo',
-      descricao: 'Cadastro, contratos e lançamento de nota fiscal.',
-      tipo: 'INTERNO',
+      id: 'perf-cliente-gestor',
+      nome: 'Gestor de unidade do cliente',
+      descricao: 'Enxerga o parque das unidades a que foi vinculado.',
+      tipo: 'CLIENTE',
       isSistema: true,
-      permissoes: perfilPorId('operacao').permissoes,
-    },
-    {
-      id: 'perf-financeiro',
-      nome: 'Analista Financeiro',
-      descricao: 'Faturamento, integração de nota e política comercial.',
-      tipo: 'INTERNO',
-      isSistema: true,
-      permissoes: perfilPorId('financeiro').permissoes,
+      permissoes: ['equipamento:ler', 'os:ler', 'os:criar', 'medicao:ler', 'mapa:ler'],
     },
     {
       id: 'perf-cliente',
-      nome: 'Visualizador do Cliente',
-      descricao: 'Somente leitura sobre os próprios contratos e consumo.',
+      nome: 'Visualizador do cliente',
+      descricao: 'Consulta sem abrir chamado.',
       tipo: 'CLIENTE',
       isSistema: true,
-      // Subconjunto restrito, sem nenhuma escrita de cadastro (RN-L25).
-      permissoes: ['contrato:ler', 'equipamento:ler', 'fatura:ler', 'medicao:ler', 'os:ler', 'os:criar', 'mapa:ler'],
+      permissoes: ['equipamento:ler', 'os:ler', 'medicao:ler'],
     },
+
     {
       id: 'perf-suporte',
-      nome: 'Supervisor de Suporte',
-      descricao: 'Perfil derivado, editável — criado a partir do modelo técnico.',
+      nome: 'Supervisor de Manutenção (derivado)',
+      descricao: 'Perfil derivado, editável — cópia do modelo de manutenção.',
       tipo: 'INTERNO',
       isSistema: false,
-      permissoes: perfilPorId('suporte').permissoes,
+      permissoes: perfilPorId('manutencao').permissoes,
     },
   ]
 
@@ -509,15 +556,22 @@ export function gerarBase(semente = 20260730): BaseDados {
       // saber exibir e que uma massa só de contas felizes esconderia.
       status: (i === 4 ? 'INATIVO' : 'ATIVO') as Usuario['status'],
       /*
-       * Os três perfis internos rodam, não dois.
+       * Um perfil interno diferente para cada uma das seis contas — e a
+       * distribuição é o que faz a escada de alçada ter alguém em cada degrau.
        *
-       * Com `i % 2` ninguém recebia `perf-financeiro`, e como é ele que carrega
-       * a faixa de alçada intermediária, **o nível 2 de aprovação não existia
-       * em ninguém** — a tela de contas a pagar nunca conseguiria demonstrar
-       * uma aprovação de dois níveis, e nada acusava a falta. Foi um teste da
-       * suíte de contas a pagar que a encontrou.
+       * Antes rodavam três (`i % 3`), e antes disso dois: com `i % 2` ninguém
+       * recebia `perf-financeiro`, e como é ele que carrega a faixa
+       * intermediária, **o nível 2 de aprovação não existia em ninguém**. A tela
+       * de contas a pagar nunca conseguiria demonstrar uma aprovação de dois
+       * níveis, e nada acusava a falta — foi um teste da suíte que a encontrou.
+       *
+       * O mesmo argumento vale agora para o nível 1, que passou do Operador para
+       * o Gestor de Filial ao seguir a matriz do Anexo C: sem uma conta com
+       * `perf-gestor-filial`, o degrau existiria no cadastro e não em ninguém.
        */
-      perfilIds: [['perf-suporte', 'perf-operacao', 'perf-financeiro'][i % 3]!],
+      perfilIds: [
+        ['perf-manutencao', 'perf-operacao', 'perf-financeiro', 'perf-gestor-filial', 'perf-logistica', 'perf-tecnico'][i % 6]!,
+      ],
       filiaisIds: i < 3 ? [] : [FILIAIS[i % FILIAIS.length]!.id],
       ultimoAcesso: i === 5 ? null : iso(somarDias(HOJE, -s.int(0, 20))),
       criadoEm: iso(somarMeses(HOJE, -s.int(2, 14))),
@@ -530,7 +584,7 @@ export function gerarBase(semente = 20260730): BaseDados {
       tipo: 'CLIENTE',
       clienteId: clientes[0]!.id,
       status: 'ATIVO',
-      perfilIds: ['perf-cliente'],
+      perfilIds: ['perf-cliente-admin'],
       filiaisIds: [],
       ultimoAcesso: iso(somarDias(HOJE, -2)),
       criadoEm: iso(somarMeses(HOJE, -6)),
@@ -1255,7 +1309,20 @@ export function gerarBase(semente = 20260730): BaseDados {
    * sejam — troque os três números aqui e a prévia de alçada acompanha.
    */
   const alcadas: FaixaAlcada[] = [
-    { id: 'alc-1', perfilId: 'perf-operacao', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 5_000, limitePercentual: null },
+    /*
+     * Cada faixa aponta para um perfil que **tem a permissão correspondente**.
+     *
+     * Não era o caso: `alc-1` dava alçada de aprovação de pagamento ao Operador
+     * Administrativo, que não tem `pagar:aprovar` em C.4 — uma alçada apontando
+     * para permissão inexistente. A fórmula de C.1 é
+     * `permissão AND escopo AND alçada`, e um cadastro que satisfaz o terceiro
+     * termo sem o primeiro não concede nada: é ruído que parece configuração.
+     *
+     * O degrau de baixo é do Gestor de Filial, que C.4 marca ◐ em
+     * `pagar:aprovar` — ◐ é exatamente "concedida, limitada por alçada", e é
+     * esta a alçada que o limita.
+     */
+    { id: 'alc-1', perfilId: 'perf-gestor-filial', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 5_000, limitePercentual: null },
     { id: 'alc-2', perfilId: 'perf-financeiro', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 25_000, limitePercentual: null },
     { id: 'alc-3', perfilId: 'perf-admin', tipo: 'APROVACAO_PAGAMENTO', limiteValor: 120_000, limitePercentual: null },
 
@@ -1269,7 +1336,15 @@ export function gerarBase(semente = 20260730): BaseDados {
      * interface prova que a contagem segue o cadastro — troque os números e a
      * prévia acompanha.
      */
-    { id: 'alc-4', perfilId: 'perf-operacao', tipo: 'EMISSAO_FATURA', limiteValor: 2_000, limitePercentual: null },
+    /*
+     * Duas faixas, não três, e a falta é a especificação falando.
+     *
+     * `fatura:emitir` existe em três perfis — Administrador, Diretor e Analista
+     * Financeiro (C.4) — e C.5 dá limite a dois deles: "até R$ 50 mil" ao
+     * Financeiro e "sem limite" ao Diretor. A faixa de baixo era do Operador
+     * Administrativo, que não emite fatura nenhuma. Inventar um terceiro perfil
+     * para manter três degraus seria fabricar autoridade que ninguém escreveu.
+     */
     { id: 'alc-5', perfilId: 'perf-financeiro', tipo: 'EMISSAO_FATURA', limiteValor: 20_000, limitePercentual: null },
     { id: 'alc-6', perfilId: 'perf-admin', tipo: 'EMISSAO_FATURA', limiteValor: 100_000, limitePercentual: null },
 
@@ -1277,13 +1352,21 @@ export function gerarBase(semente = 20260730): BaseDados {
      * Desconto é percentual, e só dois perfis o têm.
      *
      * Um teto em reais faria 5% num contrato grande ultrapassar o limite e 50%
-     * num pequeno passar batido — o inverso do que a alçada quer controlar. E o
-     * perfil de operação fica **sem nenhuma**, para a tela ter o caso de quem
-     * não concede desconto: zero significa "não concede", não "concede
-     * qualquer um".
+     * num pequeno passar batido — o inverso do que a alçada quer controlar.
+     *
+     * Os três primeiros percentuais são de C.5, literalmente: Operador até 5%,
+     * Analista Financeiro até 10%, Gestor de Filial até 15%. O do Administrador
+     * é massa desta demonstração — C.5 dá "sem limite" ao Diretor, e "sem
+     * limite" não é representável num campo de percentual.
+     *
+     * Os perfis sem faixa nenhuma — Logística, Manutenção, Técnico, Consulta,
+     * Diretor — dão à tela o caso de quem não concede desconto: zero significa
+     * "não concede", não "concede qualquer um".
      */
-    { id: 'alc-7', perfilId: 'perf-financeiro', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 10 },
-    { id: 'alc-8', perfilId: 'perf-admin', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 25 },
+    { id: 'alc-7', perfilId: 'perf-operacao', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 5 },
+    { id: 'alc-8', perfilId: 'perf-financeiro', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 10 },
+    { id: 'alc-9', perfilId: 'perf-gestor-filial', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 15 },
+    { id: 'alc-10', perfilId: 'perf-admin', tipo: 'DESCONTO', limiteValor: null, limitePercentual: 25 },
   ]
 
   /*

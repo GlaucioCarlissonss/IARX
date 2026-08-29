@@ -2526,6 +2526,7 @@ pendência de `titulo_pagar.categoria_id` no fim desta seção.
 | ~~D-23~~ | Conversão de lançamento futuro notifica? | **Sim** — quem pode decidir o nível pendente do título gerado, na rota do lado certo. Título que nasce aprovado não gera aviso (Anexo U §U.7) |
 | ~~D-09~~ | Portal em subdomínio ou rota `/portal` | Mesma origem, prefixo `/portal` — o isolamento real é a RLS, não a origem (Anexo M §M.5) |
 | ~~D-10~~ | Cliente abre chamado pelo portal? | **Sim**, com triagem obrigatória e sem escolher prioridade. Já codificada na migração 0011 (Anexo M §M.5) |
+| ~~D-27~~ | `escopo_tipo` de cliente leva id? | **`CLIENTE` não, `LOCAL_CLIENTE` sim** — o cliente vem do token (`app.cliente_id`) e repetir o id na linha criaria duas fontes para o mesmo recorte; o local recorta *abaixo* do cliente e o token não diz qual. Migração 0022, teste `15_escopo_de_cliente.sql` |
 
 ### Bloqueantes — precisam de resposta antes do desenvolvimento desta rodada
 
@@ -2574,6 +2575,32 @@ diferente:
 | — | Há comissão de vendas sobre o contrato? | 3 |
 
 ### Débitos técnicos que estes módulos tornam visíveis
+
+> **Corrigidos nesta rodada, e vale registrar por que passaram despercebidos.**
+>
+> **O eixo de cliente era inalcançável.** A migração 0011 acrescentou `CLIENTE` e
+> `LOCAL_CLIENTE` ao enum `app.escopo_tipo` e não tocou em
+> `usuario_perfil_escopo_coerente`, escrita na 0002 quando os dois valores não
+> existiam: um CHECK que não casa com ramo nenhum é falso, e os dois escopos eram
+> recusados com id e sem id. Do outro lado da fronteira, `ESCOPOS` no catálogo
+> TypeScript tinha cinco valores, então o token de qualquer usuário de cliente
+> falhava o `safeParse` do guarda e tomava **401**. Nenhuma das duas metades dava
+> erro em si mesma — o defeito só aparecia para quem tentasse usar a
+> funcionalidade inteira, e ninguém tinha tentado.
+>
+> **Os perfis-semente eram cinco, inventados.** O Anexo C §C.3 especifica nove, e
+> §C.4 diz o que cada um recebe. O código trazia outros nomes e outro conteúdo, e
+> o efeito medido era que **94 das 125 permissões não alcançavam ninguém além do
+> Administrador** — o bloco financeiro inteiro entre elas, o que impedia a
+> aplicação de demonstrar a segregação de funções que os Módulos 10 e 11 existem
+> para provar. Hoje sobram seis, todas de administração do locatário, e é o que a
+> própria matriz determina.
+>
+> Ao transcrever, a matriz revelou duas incoerências suas: o Gestor de Filial
+> aprovava pagamento sem poder lê-lo, e nenhum perfil lia os títulos sem também
+> aprová-los. As duas estão corrigidas em §C.4.2, e a transcrição agora é
+> verificada por `apps/web/test/matriz-permissoes.test.ts`, que relê o anexo e
+> compara — o documento é normativo, o código é a cópia.
 
 1. **`equipamento.nota_fiscal` é texto livre** — substituído por FK no módulo 1;
    exige migração dos registros existentes.

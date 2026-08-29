@@ -62,6 +62,23 @@ function comPostoEmissao(b: BaseDados, posto: number): string {
   return u!.id
 }
 
+/**
+ * O posto mais alto de emissão que a massa tem.
+ *
+ * Antes os testes pediam `topoEmissao(b)` para dizer "o topo". Três era o
+ * número de faixas de emissão porque uma delas estava no Operador
+ * Administrativo, que não tem `fatura:emitir` — corrigido o cadastro, o topo é
+ * dois. Fixar o número no teste era medir a massa, não a regra: o que a regra
+ * diz é que **quem gerou não decide, mesmo estando no topo**, e isso vale com
+ * quantas faixas houver.
+ */
+function topoEmissao(b: BaseDados): string {
+  const postos = b.usuarios.map((u) => ({ id: u.id, posto: postoEmissao(b, u.id) }))
+  const topo = postos.reduce((a, c) => (c.posto > a.posto ? c : a), { id: '', posto: 0 })
+  assert.ok(topo.posto > 0, 'a massa não tem ninguém com alçada de emissão')
+  return topo.id
+}
+
 function semAlcadaEmissao(b: BaseDados): string {
   const u = b.usuarios.find((x) => postoEmissao(b, x.id) === 0 && x.tipo === 'INTERNO')
   assert.ok(u, 'a massa não tem usuário interno sem alçada de emissão')
@@ -200,12 +217,12 @@ test('o rateio pela metade é recusado, e o vazio é legítimo', () => {
 test('quem gerou não aprova a própria cobrança', () => {
   const b = base()
   const limites = limitesAlcada(b, 'EMISSAO_FATURA')
-  const diretor = comPostoEmissao(b, 3)
+  const quemPodeTudo = topoEmissao(b)
 
-  const r = criarTituloAvulso(b, diretor, dados(b, { valorOriginal: limites[0]! + 1 }))
+  const r = criarTituloAvulso(b, quemPodeTudo, dados(b, { valorOriginal: limites[0]! + 1 }))
   assert.ok(r.ok)
 
-  const d = decidirEmissao(b, r.valor.id, 1, diretor, { decisao: 'APROVADO', justificativa: '' })
+  const d = decidirEmissao(b, r.valor.id, 1, quemPodeTudo, { decisao: 'APROVADO', justificativa: '' })
   assert.ok(!d.ok, 'quem gerou aprovou a própria cobrança')
   assert.match(d.erro.mensagem, /não pode aprová-la/)
   assert.ok(d.erro.acoes?.length, 'a recusa não ofereceu saída')
@@ -242,7 +259,7 @@ test('o nível 2 não decide antes do nível 1', () => {
 test('sem alçada de emissão não se decide', () => {
   const b = base()
   const limites = limitesAlcada(b, 'EMISSAO_FATURA')
-  const r = criarTituloAvulso(b, comPostoEmissao(b, 3), dados(b, { valorOriginal: limites[0]! + 1 }))
+  const r = criarTituloAvulso(b, topoEmissao(b), dados(b, { valorOriginal: limites[0]! + 1 }))
   assert.ok(r.ok)
 
   const d = decidirEmissao(b, r.valor.id, 1, semAlcadaEmissao(b), {
@@ -322,9 +339,9 @@ test('a fila do aprovador não oferece a cobrança que ele gerou', () => {
 
   // 4. Aprovada, sai da fila de todos.
   decidirEmissao(b, id, 1, comPostoEmissao(b, 2), { decisao: 'APROVADO', justificativa: '' })
-  decidirEmissao(b, id, 2, comPostoEmissao(b, 3), { decisao: 'APROVADO', justificativa: '' })
+  decidirEmissao(b, id, 2, topoEmissao(b), { decisao: 'APROVADO', justificativa: '' })
   assert.ok(!filaDeEmissao(b, comPostoEmissao(b, 2)).some((t) => t.id === id))
-  assert.ok(!filaDeEmissao(b, comPostoEmissao(b, 3)).some((t) => t.id === id))
+  assert.ok(!filaDeEmissao(b, topoEmissao(b)).some((t) => t.id === id))
 })
 
 /* ----------------------------------------------------------------- desconto */
