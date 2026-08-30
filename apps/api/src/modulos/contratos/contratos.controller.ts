@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
-import { AlocarItem, ListarContratos } from '@iarx/contracts'
+import { AlocarItem, CriarContrato, ListarContratos } from '@iarx/contracts'
 import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { ContratosService } from './contratos.service.js'
@@ -13,6 +13,18 @@ export class ContratosController {
   @ExigePermissao('contrato:ler')
   listar(@Query(validar(ListarContratos)) filtro: ListarContratos) {
     return this.servico.listar(filtro)
+  }
+
+  /**
+   * Cria o rascunho. Idempotente: o contrato é a origem de toda a cobrança, e
+   * dois rascunhos iguais viram duas cadeias de faturamento paralelas.
+   */
+  @Post()
+  @HttpCode(201)
+  @ExigePermissao('contrato:criar')
+  @Idempotente()
+  criar(@Body(validar(CriarContrato)) corpo: CriarContrato) {
+    return this.servico.criar(corpo)
   }
 
   @Get(':id')

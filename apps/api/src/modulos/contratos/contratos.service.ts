@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common'
-import type { AcaoSugerida, AlocarItem, Contrato, ContratoItem, ListarContratos } from '@iarx/contracts'
+import type {
+  AcaoSugerida,
+  AlocarItem,
+  Contrato,
+  ContratoItem,
+  CriarContrato,
+  ListarContratos,
+} from '@iarx/contracts'
 import { BancoService } from '../../banco/banco.service.js'
+import { exigirClaims } from '../../comum/contexto.js'
 import { dataLocal } from '../../comum/datas.js'
 import { ErroDominio, naoEncontrado } from '../../comum/erros.js'
 import { Pagina, codificarCursor } from '../../comum/pagina.js'
@@ -40,6 +48,41 @@ export class ContratosService {
         limit: filtro.limit,
         next_cursor: criadoEm && ultimo ? codificarCursor({ criadoEm, id: ultimo.id }) : null,
       })
+    })
+  }
+
+  /**
+   * Cria o contrato em rascunho.
+   *
+   * Não valida a vigência: `data_inicio` e `data_fim` podem nascer vazias — um
+   * rascunho existe justamente para ser preenchido em etapas —, e a coerência
+   * entre elas é cobrada na ativação, que é quando passa a valer. Cobrá-la aqui
+   * obrigaria a inventar as datas para salvar o rascunho.
+   */
+  async criar(dados: CriarContrato): Promise<Contrato> {
+    const claims = exigirClaims()
+    return this.banco.emTransacao(async (db) => {
+      let id: string
+      try {
+        id = await this.repo.criar(db, claims.tenant_id, dados)
+      } catch (e) {
+        if ((e as { code?: string }).code === '23505') {
+          throw new ErroDominio('RECURSO_DUPLICADO', 'Já existe um contrato com este número', {
+            detail: 'A numeração é única por locatário. Confira se o contrato já foi cadastrado.',
+            errors: [{ field: 'numero', code: 'DUPLICADO', message: dados.numero }],
+          })
+        }
+        if ((e as { code?: string }).code === '23503') {
+          throw new ErroDominio('PAYLOAD_INVALIDO', 'Cliente, empresa ou filial inexistente', {
+            detail: 'Um dos identificadores informados não existe neste locatário.',
+          })
+        }
+        throw e
+      }
+
+      const criado = await this.repo.porId(db, id)
+      if (!criado) throw naoEncontrado('Contrato', id)
+      return criado
     })
   }
 

@@ -50,6 +50,16 @@ import { FluxoCaixaService } from './modulos/fluxo-caixa/fluxo-caixa.service.js'
 import { NotificacaoController } from './modulos/notificacao/notificacao.controller.js'
 import { NotificacaoService } from './modulos/notificacao/notificacao.service.js'
 import { NotificacaoWorker } from './modulos/notificacao/notificacao.worker.js'
+import { ClientesController } from './modulos/clientes/clientes.controller.js'
+import { ClientesRepositorio } from './modulos/clientes/clientes.repositorio.js'
+import { ClientesService } from './modulos/clientes/clientes.service.js'
+import {
+  PerfisController,
+  PermissoesController,
+  UsuariosController,
+} from './modulos/iam/iam.controller.js'
+import { IamRepositorio } from './modulos/iam/iam.repositorio.js'
+import { IamService } from './modulos/iam/iam.service.js'
 import { LocaisController } from './modulos/locais/locais.controller.js'
 import { LocaisRepositorio } from './modulos/locais/locais.repositorio.js'
 import { LocaisService } from './modulos/locais/locais.service.js'
@@ -82,6 +92,10 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     NotasFiscaisController,
     FornecedoresController,
     LocaisController,
+    ClientesController,
+    UsuariosController,
+    PerfisController,
+    PermissoesController,
     AuthController,
     CentrosCustoController,
     ContasBancariasController,
@@ -105,6 +119,10 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     NotasFiscaisService,
     LocaisRepositorio,
     LocaisService,
+    ClientesRepositorio,
+    ClientesService,
+    IamRepositorio,
+    IamService,
     AuthRepositorio,
     AuthService,
     FinanceiroRepositorio,

@@ -17,6 +17,11 @@ export interface Executor {
   consultarUm<T extends QueryResultRow = QueryResultRow>(sql: string, valores?: unknown[]): Promise<T | null>
 }
 
+/** Opções por transação. Hoje só o motivo que a auditoria registra. */
+export interface OpcoesTransacao {
+  motivo?: string
+}
+
 interface ConfigBanco {
   connectionString: string
   max: number
@@ -72,7 +77,7 @@ export class BancoService implements OnModuleDestroy {
    *    transação seguram uma conexão do pool indefinidamente e, pior, seguram
    *    o horizonte do autovacuum.
    */
-  async emTransacao<T>(fn: (db: Executor) => Promise<T>): Promise<T> {
+  async emTransacao<T>(fn: (db: Executor) => Promise<T>, opcoes: OpcoesTransacao = {}): Promise<T> {
     const ctx = exigirContexto()
     const claims = ctx.claims
     if (!claims) throw new Error('emTransacao chamada sem claims: falta a guarda de autenticação')
@@ -108,6 +113,23 @@ export class BancoService implements OnModuleDestroy {
                 set_config('app.origem',     $5, true)`,
         [claims.tenant_id, claims.usuario_id, claims.cliente_id ?? '', ctx.requestId, 'API'],
       )
+
+      /*
+       * `app.motivo` — o "por quê" da mudança, lido pelo gatilho de auditoria.
+       *
+       * A coluna `audit_log.motivo` e a leitura do GUC existem desde a migração
+       * 0003, e **nenhum caminho da API os preenchia**: a trilha guardava sempre
+       * o diff das colunas e nunca a intenção. Um diff de `limite_credito` de
+       * 50 mil para 200 mil não diz se foi renegociação, análise de risco ou
+       * engano corrigido — e é justamente essa a pergunta de quem audita.
+       *
+       * Continua opcional: a maioria das operações se explica pelo diff, e
+       * exigir justificativa em toda escrita produziria campos preenchidos com
+       * "ok".
+       */
+      if (opcoes.motivo) {
+        await cliente.query(`select set_config('app.motivo', $1, true)`, [opcoes.motivo])
+      }
 
       ctx.db = cliente
       const resultado = await fn(envolver(cliente))
@@ -228,6 +250,7 @@ export class BancoService implements OnModuleDestroy {
                 set_config('app.origem',     $5, true)`,
         [claims.tenant_id, claims.usuario_id, claims.cliente_id ?? '', ctx.requestId, 'API'],
       )
+
       const r = await fn(envolver(cliente))
       await cliente.query('commit')
       return r

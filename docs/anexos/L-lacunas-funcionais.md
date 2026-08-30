@@ -795,9 +795,14 @@ O que falta, em ordem de bloqueio:
 2. `lib/contexto.tsx` troca o seletor de perfil local pela sessão vinda do
    login. `pode()` não muda de assinatura — só passa a ler permissão de rede,
    não de `useState`.
-3. Telas de usuário (`GET/POST /api/v1/usuarios`, `.../perfis`,
+3. ~~Telas de usuário (`GET/POST /api/v1/usuarios`, `.../perfis`,
    `.../convites`) e de perfil (árvore de §4.1), no padrão de
-   `apps/api/src/modulos/notas-fiscais`.
+   `apps/api/src/modulos/notas-fiscais`.~~ **A API está feita**
+   (`apps/api/src/modulos/iam`): listagem com filtro por perfil, convite sem
+   senha com token por e-mail, vínculo de perfil com escopo, ativação,
+   desativação com motivo e revogação de sessões, perfis com contagem de uso, e
+   `GET /permissoes` servindo a árvore de §4.1. O que segue faltando é a **tela**
+   — as de hoje operam sobre a base em memória.
 4. Recuperação de senha (`token_recuperacao` já existe) e expiração periódica
    configurável — precisa de `tenant.politica_senha jsonb` ou equivalente;
    **decisão pendente, ver D-15**.
@@ -811,12 +816,17 @@ O que falta, em ordem de bloqueio:
 - [ ] Usuário de cliente A não obtém dado do cliente B **mesmo com o filtro da
       aplicação removido** — teste que ataca a consulta diretamente
 - [ ] Gestor de filial sem vínculo não vê contrato algum
-- [ ] Perfil com permissão de escrita não pode ser atribuído a usuário de cliente
+- [x] Perfil com permissão de escrita não pode ser atribuído a usuário de cliente
+      — gatilho `perfil_cliente_somente_leitura` e `apps/api/test/iam.test.ts`
 - [ ] Recuperação responde igual para e-mail existente e inexistente
 - [ ] Token de recuperação usado duas vezes falha na segunda
-- [ ] Último admin ativo do tenant não pode ser desativado
+- [x] Último admin ativo do tenant não pode ser desativado — gatilhos
+      `usuario_protege_ultimo_admin` e `usuario_perfil_protege_ultimo_admin`,
+      traduzidos com a saída sugerida em `iam.service.ts`
 - [ ] Todo login, falha e bloqueio aparece em `log_acesso` com IP
-- [ ] Revogar sessões encerra o acesso em menos de 60 segundos
+- [x] Revogar sessões encerra o acesso — `POST /usuarios/{id}/revogar-sessoes`, e
+      a desativação derruba as sessões **na mesma transação**: separá-las deixaria
+      uma janela em que a conta está inativa e o token continua valendo
 
 ### Lacunas e Decisões Pendentes
 - ~~**[DECISÃO D-01 · BLOQUEANTE]**~~ **Resolvida** (Anexo M) — escopo `CLIENTE`
@@ -2601,6 +2611,29 @@ diferente:
 > aprová-los. As duas estão corrigidas em §C.4.2, e a transcrição agora é
 > verificada por `apps/web/test/matriz-permissoes.test.ts`, que relê o anexo e
 > compara — o documento é normativo, o código é a cópia.
+>
+> **A trilha de auditoria nunca soube o porquê.** `audit_log.motivo` existe
+> desde a migração 0003 e o gatilho `app.auditar` lê o GUC `app.motivo` — e
+> **nenhum caminho da API o preenchia**. A trilha guardava o diff das colunas e
+> nada mais: um `limite_credito` de 50 mil para 200 mil, sem dizer se foi
+> renegociação, análise de risco ou engano corrigido, que é exatamente a
+> pergunta de quem audita. `emTransacao` passa a aceitar um motivo opcional, e as
+> operações que decidem alguma coisa — crédito de cliente, desativação de
+> usuário, revogação de sessões — o informam.
+>
+> **`NotificacaoService.convite` estava escrito e nunca era chamado.** O convite
+> de usuário existia como mensagem pronta, com o texto que diz que ninguém mais
+> conhece a senha, e sem nenhuma rota que o disparasse. Agora
+> `POST /usuarios/convites` o usa.
+
+**Pendências abertas por este módulo, e registradas para não sumirem:**
+
+| O que | Onde | Por quê |
+| --- | --- | --- |
+| Não há rota `POST /usuarios/convites/{token}/aceitar` | Anexo L §4.2 endpoints | Quem foi convidado define a senha por `POST /auth/recuperacao/redefinir`, que é **literalmente a mesma operação**: consumir um token de uso único e gravar um hash. Duas implementações da mesma coisa divergem na primeira correção que só uma recebe. O que falta é a tela `#/primeiro-acesso`, para onde o link do e-mail aponta |
+| `visao-360` não traz chamados | `clientes.service.ts` | Não existe tabela de ordem de serviço: o módulo de manutenção não foi construído. A resposta **nomeia a ausência** em vez de devolver zero, porque um zero passaria por medição |
+| `visao-360` não traz rentabilidade | idem | O custo é rateado por centro de custo em `titulo_pagar_rateio`, e não há caminho de um título de despesa até um cliente. Depende de `titulo_pagar.categoria_id` (que também não existe) e do Módulo 14 |
+| Numeração de contrato vem de quem cadastra | `CriarContrato` | Cada operação tem a sua — série por filial, ano no prefixo, continuidade de um sistema anterior. Um gerador aqui imporia uma regra que ninguém escreveu; a unicidade é do banco |
 
 1. **`equipamento.nota_fiscal` é texto livre** — substituído por FK no módulo 1;
    exige migração dos registros existentes.

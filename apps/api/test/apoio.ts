@@ -1,3 +1,4 @@
+import { Client } from 'pg'
 import { NestFactory } from '@nestjs/core'
 import type { INestApplication } from '@nestjs/common'
 import { SignJWT } from 'jose'
@@ -26,6 +27,7 @@ export const FORNECEDOR_A = '11111111-1111-4111-8111-11111111f001' // CNPJ 11444
 export const CNPJ_FORNECEDOR_A = '11444777000161'
 export const FILIAL_A = '11111111-1111-4111-8111-1111111111f1'
 export const MODELO_A = '11111111-1111-4111-8111-1111111111d1'
+export const CATEGORIA_A = '11111111-1111-4111-8111-1111111111c1'
 export const NOTA_PENDENTE = '11111111-1111-4111-8111-11111111e001' // 1/12345, item 2 sem séries
 export const NOTA_ITEM_1 = '11111111-1111-4111-8111-11111111e101' // 3 unidades, já identificadas
 export const NOTA_ITEM_2 = '11111111-1111-4111-8111-11111111e102' // 2 unidades, nenhuma
@@ -93,6 +95,35 @@ export async function token(opcoes: {
     .setIssuedAt(agora - 60)
     .setExpirationTime(opcoes.expirado ? agora - 30 : agora + 600)
     .sign(new TextEncoder().encode(SEGREDO))
+}
+
+/**
+ * Consulta direta ao banco, como `iarx_app` e **dentro** de um locatário.
+ *
+ * Existe para asserções que nenhuma rota expõe — a trilha de auditoria é o caso
+ * que a motivou: `audit_log` não tem endpoint, e sem isto a única forma de
+ * verificar que uma alteração registrou o motivo seria confiar em que registrou.
+ *
+ * Conecta com a mesma credencial da API, não com superusuário: um teste que
+ * consulta ignorando a RLS pode afirmar coisas que a aplicação nunca veria.
+ * `set_config(..., true)` mantém o contexto local à transação, como em produção.
+ */
+export async function consultarBanco<T = Record<string, unknown>>(
+  tenantId: string,
+  sql: string,
+  valores: unknown[] = [],
+): Promise<T[]> {
+  const cliente = new Client({ connectionString: process.env['DATABASE_URL'] })
+  await cliente.connect()
+  try {
+    await cliente.query('begin')
+    await cliente.query(`select set_config('app.tenant_id', $1, true)`, [tenantId])
+    const r = await cliente.query(sql, valores)
+    await cliente.query('commit')
+    return r.rows as T[]
+  } finally {
+    await cliente.end()
+  }
 }
 
 export interface Servidor {

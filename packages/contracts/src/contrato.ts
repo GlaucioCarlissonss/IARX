@@ -112,6 +112,36 @@ export type ListarContratos = z.infer<typeof ListarContratos>
  * apontando para o input errado; no banco ela é a garantia de que nenhum outro
  * caminho de escrita produz o estado inválido.
  */
+/**
+ * Cria o contrato em **rascunho**, e só isso.
+ *
+ * Sem `status`: `POST /contratos` cria rascunho (Anexo D §D.2), e as transições
+ * são ações com permissão própria — `/submeter`, `/aprovar`, `/ativar`.
+ * Aceitar o status aqui permitiria nascer ATIVO sem passar por aprovação
+ * nenhuma, contornando a alçada inteira com um campo.
+ *
+ * O `numero` **vem de quem cadastra**, e não de um gerador aqui.
+ *
+ * A numeração de contrato é do locatário: cada operação tem a sua — série por
+ * filial, ano no prefixo, continuidade de um sistema anterior. Inventar um
+ * formato faria a API impor uma regra de negócio que ninguém escreveu, e o
+ * primeiro locatário com numeração própria teria de contorná-la. A unicidade,
+ * essa sim, é do banco (`contrato_numero_uk`).
+ */
+export const CriarContrato = z.object({
+  numero: z.string().trim().min(1).max(60),
+  cliente_id: Uuid,
+  empresa_id: Uuid,
+  filial_id: Uuid,
+  tipo: z.string().trim().min(1).max(60).default('LOCACAO_PRAZO_DETERMINADO'),
+  data_inicio: Data.nullish(),
+  data_fim: Data.nullish(),
+  prazo_minimo_meses: z.number().int().min(0).max(600).nullish(),
+  renovacao_automatica: z.boolean().default(false),
+  observacoes_operacionais: z.string().trim().max(2000).nullish(),
+})
+export type CriarContrato = z.infer<typeof CriarContrato>
+
 export const AlocarItem = z
   .object({
     equipamento_id: Uuid.nullable().default(null),

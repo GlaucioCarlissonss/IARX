@@ -74,6 +74,30 @@ export const ListarEquipamentos = Paginacao.extend({
 
 export type ListarEquipamentos = z.infer<typeof ListarEquipamentos>
 
+/**
+ * Cadastro de um ativo.
+ *
+ * Sem `status`: o equipamento nasce `DISPONIVEL`, que é o default do banco. O
+ * status muda por ação — `/bloquear`, alocação em contrato, movimentação — e
+ * aceitá-lo aqui daria a `equipamento:criar` o poder de pôr um ativo em LOCADO
+ * sem contrato nenhum por trás, que é o estado que ninguém consegue explicar
+ * depois.
+ *
+ * Sem `bloqueado` pela mesma razão, e sem os campos patrimoniais (valor de
+ * aquisição, vida útil, depreciação): eles têm permissão própria,
+ * `equipamento:patrimonial_editar`, porque quem cadastra um ativo não é quem
+ * decide quanto ele vale no imobilizado (Anexo C §C.4).
+ */
+export const CriarEquipamento = z.object({
+  patrimonio: z.string().trim().min(1).max(60),
+  numero_serie: z.string().trim().max(80).nullish(),
+  modelo_id: Uuid,
+  categoria_id: Uuid,
+  filial_id: Uuid,
+  ano_fabricacao: z.number().int().min(1980).max(2100).nullish(),
+})
+export type CriarEquipamento = z.infer<typeof CriarEquipamento>
+
 export const BloquearEquipamento = z.object({
   motivo: z.string().min(5, 'o motivo do bloqueio é obrigatório e precisa ser legível'),
   ate: DataHora.nullable().default(null),

@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
-import { BloquearEquipamento, ListarEquipamentos } from '@iarx/contracts'
-import { ExigePermissao } from '../../comum/decoradores.js'
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common'
+import { BloquearEquipamento, CriarEquipamento, ListarEquipamentos } from '@iarx/contracts'
+import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { versaoDe } from '../../comum/versao.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { EquipamentosService } from './equipamentos.service.js'
@@ -23,6 +33,19 @@ export class EquipamentosController {
   @ExigePermissao('equipamento:ler')
   listar(@Query(validar(ListarEquipamentos)) filtro: ListarEquipamentos) {
     return this.servico.listar(filtro)
+  }
+
+  /**
+   * Cadastra um ativo avulso. Idempotente: um reenvio criaria um segundo
+   * patrimônio para o mesmo bem, e a contagem do parque é o número que sustenta
+   * a depreciação.
+   */
+  @Post()
+  @HttpCode(201)
+  @ExigePermissao('equipamento:criar')
+  @Idempotente()
+  criar(@Body(validar(CriarEquipamento)) corpo: CriarEquipamento) {
+    return this.servico.criar(corpo)
   }
 
   @Get(':id')

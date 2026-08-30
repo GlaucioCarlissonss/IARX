@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { AlocarItem, Contrato, ContratoItem, ListarContratos } from '@iarx/contracts'
+import type { AlocarItem, Contrato, ContratoItem, CriarContrato, ListarContratos } from '@iarx/contracts'
 import type { Executor } from '../../banco/banco.service.js'
 import { decodificarCursor } from '../../comum/pagina.js'
 
@@ -112,6 +112,37 @@ export class ContratosRepositorio {
   async porId(db: Executor, id: string): Promise<Contrato | null> {
     const l = await db.consultarUm<LinhaContrato>(`${SELECT_CONTRATO} where c.id = $1 and c.deleted_at is null`, [id])
     return l ? mapearContrato(l) : null
+  }
+
+  /**
+   * Cria o contrato em rascunho.
+   *
+   * Sem `status` no INSERT: o default do banco é RASCUNHO, e repeti-lo aqui
+   * criaria um segundo lugar onde o estado inicial está escrito.
+   */
+  async criar(db: Executor, tenantId: string, dados: CriarContrato): Promise<string> {
+    const l = await db.consultarUm<{ id: string }>(
+      `insert into public.contrato
+         (tenant_id, numero, empresa_id, filial_id, cliente_id, tipo,
+          data_inicio, data_fim, prazo_minimo_meses, renovacao_automatica,
+          observacoes_operacionais)
+       values ($1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, $10, $11)
+       returning id`,
+      [
+        tenantId,
+        dados.numero,
+        dados.empresa_id,
+        dados.filial_id,
+        dados.cliente_id,
+        dados.tipo,
+        dados.data_inicio ?? null,
+        dados.data_fim ?? null,
+        dados.prazo_minimo_meses ?? null,
+        dados.renovacao_automatica,
+        dados.observacoes_operacionais ?? null,
+      ],
+    )
+    return (l as { id: string }).id
   }
 
   /** `created_at` do contrato, necessário para compor o cursor da listagem. */

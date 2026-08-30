@@ -318,7 +318,9 @@ GET /api/v1/indicadores?kpi=KPI-05,KPI-14&periodo=2026-01..2026-07&agrupar_por=f
 | `GET` | `/notificacoes` | autenticado | Central de alertas |
 | `POST` | `/notificacoes/{id}/ler` | autenticado | Marcar como lida |
 | `GET` | `/auditoria` | `auditoria:consultar` | `?entidade_tipo&entidade_id&usuario_id&periodo` |
-| `GET/POST` | `/usuarios` `/perfis` | `usuario:gerenciar` | IAM |
+| `GET/POST` | `/usuarios` | `usuario:gerenciar` | Contas, convite, vínculo de perfil, ativação |
+| `GET/POST` | `/perfis` | `perfil:gerenciar` | Perfis e suas permissões |
+| `GET` | `/permissoes` | `perfil:gerenciar` | Catálogo agrupado por módulo → tela → ação |
 | `GET/PUT` | `/parametros` | `parametro:gerenciar` | Parametrização do tenant |
 | `POST` | `/anexos/upload-url` | conforme recurso | URL assinada para upload direto |
 | `GET/POST` | `/webhooks` | `webhook:gerenciar` | Assinaturas de evento |
@@ -326,6 +328,13 @@ GET /api/v1/indicadores?kpi=KPI-05,KPI-14&periodo=2026-01..2026-07&agrupar_por=f
 | `GET/POST` | `/apikeys` | `apikey:gerenciar` | Chaves de integração |
 | `GET` | `/jobs/{id}` | autenticado | Status de processamento assíncrono |
 | `GET` | `/health` · `/health/ready` | público/interno | Liveness e readiness |
+
+> **Correção.** Até a construção deste módulo, a linha de IAM agrupava
+> `/usuarios` e `/perfis` numa célula só, com `usuario:gerenciar` para as duas.
+> As duas permissões existem no catálogo desde sempre, e usar a de usuário nas
+> rotas de perfil deixaria `perfil:gerenciar` **sem nenhuma rota que a exija** —
+> uma permissão que nenhuma rota consulta não protege nada, e apareceria na
+> árvore de configuração como um interruptor ligado a coisa nenhuma.
 
 ---
 

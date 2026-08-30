@@ -165,8 +165,15 @@ function mapear(l: LinhaTitulo): TituloReceber {
   }
 }
 
-/** Em aberto: o que ainda representa entrada de caixa esperada. */
-const EM_ABERTO = `('PENDENTE_APROVACAO','PENDENTE','APROVADO','RECEBIDO_PARCIAL','EM_DISPUTA')`
+/**
+ * Em aberto: o que ainda representa entrada de caixa esperada.
+ *
+ * Exportada porque a visão 360 do cliente soma exatamente estes títulos. Duas
+ * listas de status seriam duas definições de "em aberto", e a divergência
+ * apareceria como dois totais diferentes para o mesmo cliente em duas telas —
+ * ambas defensáveis, nenhuma verificável.
+ */
+export const EM_ABERTO = `('PENDENTE_APROVACAO','PENDENTE','APROVADO','RECEBIDO_PARCIAL','EM_DISPUTA')`
 
 export const cursorTitulo = (l: LinhaTitulo) => ({ criadoEm: l.created_at.toISOString(), id: l.id })
 

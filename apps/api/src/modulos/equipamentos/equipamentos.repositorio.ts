@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { Equipamento, ListarEquipamentos } from '@iarx/contracts'
+import type { CriarEquipamento, Equipamento, ListarEquipamentos } from '@iarx/contracts'
 import type { Executor } from '../../banco/banco.service.js'
 import { decodificarCursor, type Cursor } from '../../comum/pagina.js'
 
@@ -126,6 +126,25 @@ export class EquipamentosRepositorio {
       [id],
     )
     return linha ? mapear(linha) : null
+  }
+
+  async criar(db: Executor, tenantId: string, dados: CriarEquipamento): Promise<string> {
+    const l = await db.consultarUm<{ id: string }>(
+      `insert into public.equipamento
+         (tenant_id, patrimonio, numero_serie, modelo_id, categoria_id, filial_id, ano_fabricacao)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       returning id`,
+      [
+        tenantId,
+        dados.patrimonio,
+        dados.numero_serie ?? null,
+        dados.modelo_id,
+        dados.categoria_id,
+        dados.filial_id,
+        dados.ano_fabricacao ?? null,
+      ],
+    )
+    return (l as { id: string }).id
   }
 
   /**
