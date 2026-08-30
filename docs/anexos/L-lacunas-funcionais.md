@@ -2625,6 +2625,16 @@ diferente:
 > de usuário existia como mensagem pronta, com o texto que diz que ninguém mais
 > conhece a senha, e sem nenhuma rota que o disparasse. Agora
 > `POST /usuarios/convites` o usa.
+>
+> **A tela de Faturamento tinha uma segunda fonte de verdade, e agora não tem.**
+> Um modelo `Fatura` guardava a memória de cálculo *e* o estado da cobrança, e os
+> títulos a receber eram derivados dele — duas coleções para o mesmo fato,
+> mantidas em correspondência por um teste de paridade. Separadas: a
+> `MedicaoCompetencia` explica o valor, o `TituloReceber` é a cobrança, e o teste
+> saiu junto porque a divergência que ele vigiava deixou de ser possível
+> ([Anexo T](T-contas-a-receber.md) §T.11). No caminho, dois defeitos da massa:
+> uma cobrança em disputa vivia numa competência que ninguém havia fechado, e
+> vivia sem medição — `fecharCompetencia` nunca a teria produzido.
 
 **Pendências abertas por este módulo, e registradas para não sumirem:**
 

@@ -10,6 +10,7 @@ import {
 } from './catalogo'
 import { gerarFornecedores, gerarNotas } from './gerar-notas'
 import { perfilPorId } from '../lib/permissoes'
+import { datasDaCobranca, ehAbertoReceber, saldoReceber } from './receber'
 import type {
   Anexo,
   BaseDados,
@@ -17,8 +18,8 @@ import type {
   Contrato,
   ContratoItem,
   Equipamento,
-  Fatura,
-  FaturaItem,
+  ItemMedicao,
+  MedicaoCompetencia,
   Indicadores,
   LeituraContador,
   DescontoComercial,
@@ -163,7 +164,8 @@ export function gerarCnpj(s: Sorteio): string {
   return `${t.slice(0, 2)}.${t.slice(2, 5)}.${t.slice(5, 8)}/${t.slice(8, 12)}-${t.slice(12)}`
 }
 
-function iso(d: Date) {
+/** Data civil AAAA-MM-DD. Exportada junto de `HOJE`, que já sai daqui. */
+export function iso(d: Date) {
   return d.toISOString().slice(0, 10)
 }
 
@@ -916,22 +918,40 @@ export function gerarBase(semente = 20260730): BaseDados {
   /* ----------------------------------------------------------------- peças */
   const pecas = gerarPecas(s)
 
-  /* --------------------------------------------------------------- faturas */
-  const faturas: Fatura[] = []
-  let seqFatura = 4100
+  /* -------------------------------------------------------------- medições */
+  /*
+   * A medição é o que **explica** o valor; a cobrança é o `TituloReceber` com
+   * `origem = 'CONTRATUAL'`. Eram um modelo só até aqui, e por isso a mesma
+   * competência podia mostrar um número na tela de Faturamento e outro em
+   * Contas a receber.
+   *
+   * `planoCobranca` abaixo é andaime deste gerador, não modelo: guarda a decisão
+   * de como cada medição foi paga para o laço de títulos consumir. Fica aqui, e
+   * não lá, porque as tiragens aleatórias precisam acontecer nesta ordem — a
+   * base é determinística por semente, e mover um `s.chance` muda toda a massa.
+   */
+  const medicoes: MedicaoCompetencia[] = []
+  interface PlanoCobranca {
+    status: StatusReceber
+    pago: number
+    emissao: string
+    vencimento: string
+  }
+  const planoCobranca = new Map<string, PlanoCobranca>()
+  let seqMedicao = 4100
   const contratosFaturaveis = contratos.filter(
     (c) => c.itens.length > 0 && (c.status === 'ATIVO' || c.status === 'EM_RENOVACAO' || c.status === 'VENCIDO_EM_CAMPO'),
   )
 
   // Seis competências de histórico dão volume suficiente para aging e séries.
-  const compsFatura = comps.slice(-6)
+  const compsMedidas = comps.slice(-6)
 
   for (const contrato of contratosFaturaveis) {
     const cliente = clientes.find((c) => c.id === contrato.clienteId)!
 
-    compsFatura.forEach((comp, idxComp) => {
-      const ehAtual = idxComp === compsFatura.length - 1
-      const itens: FaturaItem[] = []
+    compsMedidas.forEach((comp, idxComp) => {
+      const ehAtual = idxComp === compsMedidas.length - 1
+      const itens: ItemMedicao[] = []
 
       for (const item of contrato.itens) {
         const eq = equipamentos.find((e) => e.id === item.equipamentoId)
@@ -968,44 +988,45 @@ export function gerarBase(semente = 20260730): BaseDados {
       const desconto = 0
       const liquido = Math.round((bruto - desconto) * 100) / 100
 
-      const [ano, mes] = comp.split('-').map(Number)
-      const emissao = new Date(ano, mes, 1)
-      const vencimento = new Date(ano, mes, contrato.diaVencimento)
+      const { emissao, vencimento } = datasDaCobranca(comp, contrato.diaVencimento)
       const diasDesdeVencimento = Math.round((HOJE.getTime() - vencimento.getTime()) / 86400000)
 
-      let status: Fatura['status']
+      /*
+       * Como esta cobrança terminou. `EM_ATRASO` **não** é estado: atraso é
+       * vencimento no passado com o título em aberto, e quem exibe calcula.
+       * Vencido e em aberto continua APROVADO.
+       */
+      let status: StatusReceber
       let pago = 0
       if (ehAtual) {
-        status = 'EM_FECHAMENTO'
-      } else if (cliente.situacaoCredito === 'BLOQUEADO' && idxComp >= compsFatura.length - 3) {
-        status = 'EM_ATRASO'
-      } else if (cliente.situacaoCredito === 'OBSERVACAO' && idxComp === compsFatura.length - 2) {
-        status = 'EM_ATRASO'
+        status = 'PENDENTE_APROVACAO'
+      } else if (cliente.situacaoCredito === 'BLOQUEADO' && idxComp >= compsMedidas.length - 3) {
+        status = 'APROVADO'
+      } else if (cliente.situacaoCredito === 'OBSERVACAO' && idxComp === compsMedidas.length - 2) {
+        status = 'APROVADO'
       } else if (diasDesdeVencimento > 0 && s.chance(0.055)) {
-        status = 'EM_ATRASO'
+        status = 'APROVADO'
       } else if (diasDesdeVencimento > 0 && s.chance(0.03)) {
-        status = 'PARCIAL'
+        status = 'RECEBIDO_PARCIAL'
         pago = Math.round(liquido * s.real(0.3, 0.75) * 100) / 100
       } else {
-        status = 'PAGA'
+        status = 'RECEBIDO'
         pago = liquido
       }
 
-      faturas.push({
-        id: `fat-${seqFatura}`,
-        numero: `1-${String(seqFatura++).padStart(6, '0')}`,
+      const idMedicao = `med-${seqMedicao++}`
+      planoCobranca.set(idMedicao, { status, pago, emissao: iso(emissao), vencimento: iso(vencimento) })
+      medicoes.push({
+        id: idMedicao,
         clienteId: contrato.clienteId,
         contratoId: contrato.id,
         competencia: comp,
-        status,
-        emissao: iso(emissao),
-        vencimento: iso(vencimento),
+        itens,
         valorBruto: bruto,
         desconto,
         valorLiquido: liquido,
-        valorPago: pago,
-        diasAtraso: status === 'EM_ATRASO' || status === 'PARCIAL' ? Math.max(1, diasDesdeVencimento) : 0,
-        itens,
+        // A competência corrente é a aberta: medida, ainda não selada.
+        seladaEm: ehAtual ? null : iso(emissao),
       })
     })
   }
@@ -1198,8 +1219,6 @@ export function gerarBase(semente = 20260730): BaseDados {
   const tabelasFranquia = [franquiaPadrao, franquiaAnterior]
   const tabelasPreco = [precoGeral, ...precosCliente]
 
-  /* ----------------------------------------------------------- indicadores */
-  const indicadores = calcularIndicadores({ equipamentos, contratos, faturas, ordens, pecas, comps })
 
   /* ------------------------------------------ base do financeiro */
 
@@ -1237,7 +1256,8 @@ export function gerarBase(semente = 20260730): BaseDados {
   ]
 
   /*
-   * Movimentações derivadas das faturas e das ordens já geradas, e não sorteadas
+   * Movimentações derivadas das medições recebidas e das ordens já geradas, e
+   * não sorteadas
    * à parte.
    *
    * Sorteadas, o extrato contaria uma história diferente da do faturamento —
@@ -1248,21 +1268,25 @@ export function gerarBase(semente = 20260730): BaseDados {
   let seqMov = 0
   const movId = () => `mov-${String(++seqMov).padStart(4, '0')}`
 
-  for (const f of faturas.filter((x) => x.status === 'PAGA').slice(0, 40)) {
+  const recebidas = [...planoCobranca.entries()].filter(([, p]) => p.status === 'RECEBIDO').slice(0, 40)
+  for (const [idMedicao, plano] of recebidas) {
+    const m = medicoes.find((x) => x.id === idMedicao)
+    if (!m) continue
+    const contrato = contratos.find((c) => c.id === m.contratoId)
     movimentacoes.push({
       id: movId(),
       contaId: 'cb-oper',
       tipo: 'ENTRADA',
-      valor: cent(f.valorLiquido),
-      dataMovimento: f.vencimento,
-      descricao: `Recebimento da fatura ${f.numero}`,
+      valor: cent(m.valorLiquido),
+      dataMovimento: plano.vencimento,
+      descricao: `Recebimento — contrato ${contrato?.numero ?? '—'}, competência ${m.competencia}`,
       transferenciaParId: null,
       estornaId: null,
       motivo: null,
       // Os mais antigos já conciliados, os recentes não: é a fila de trabalho.
-      conciliado: f.vencimento < iso(somarDias(HOJE, -20)),
-      conciliadoEm: f.vencimento < iso(somarDias(HOJE, -20)) ? f.vencimento : null,
-      criadoEm: f.vencimento,
+      conciliado: plano.vencimento < iso(somarDias(HOJE, -20)),
+      conciliadoEm: plano.vencimento < iso(somarDias(HOJE, -20)) ? plano.vencimento : null,
+      criadoEm: plano.vencimento,
     })
   }
 
@@ -1759,43 +1783,18 @@ export function gerarBase(semente = 20260730): BaseDados {
   /* --------------------------------------- contas a receber (Módulo 11) */
 
   /*
-   * Os títulos CONTRATUAL são **derivados das faturas já geradas**, um por
-   * fatura.
+   * Os contratuais saem da **medição**, e não de um modelo paralelo de fatura.
    *
-   * Isto é a mitigação de uma lacuna aceita, e vale dizer com clareza: no banco
-   * e na API a decisão D-20 foi aplicada — existe `titulo_receber` e não existe
-   * tabela de fatura. Na base de demonstração, a tela de Faturamento continua
-   * lendo `faturas`, então as duas coleções coexistem. Derivando uma da outra
-   * num gerador só, os dois números não podem divergir enquanto a lacuna
-   * existir; se a fatura fosse sorteada e o título também, a mesma competência
-   * mostraria receitas diferentes em duas telas — e as duas pareceriam certas.
-   *
-   * O mapa de status é uma tradução, não uma escolha nova. `EM_ATRASO` **não**
-   * tem correspondente: atraso é vencimento menor que hoje com o título em
-   * aberto, e é calculado por quem exibe.
+   * Era assim: um modelo `Fatura` guardava a memória de cálculo e o estado da
+   * cobrança, e os títulos eram derivados dele. Duas coleções para o mesmo
+   * fato, mantidas em paridade por um teste — que existia porque a divergência
+   * era possível. Hoje a medição explica o valor e o título é a cobrança; não há
+   * o que divergir, e o teste de paridade saiu junto.
    */
   const titulosReceber: TituloReceber[] = []
   let seqReceber = 0
   const receberId = () => `trc-${String(++seqReceber).padStart(4, '0')}`
   let numeroTitulo = 0
-
-  const statusDaFatura = (f: Fatura): StatusReceber => {
-    switch (f.status) {
-      case 'PREVISTA':
-      case 'EM_FECHAMENTO':
-        return 'PENDENTE_APROVACAO'
-      case 'EMITIDA':
-      // Vencido e em aberto continua APROVADO: o atraso é a data, não o estado.
-      case 'EM_ATRASO':
-        return 'APROVADO'
-      case 'PARCIAL':
-        return 'RECEBIDO_PARCIAL'
-      case 'PAGA':
-        return 'RECEBIDO'
-      case 'CANCELADA':
-        return 'CANCELADO'
-    }
-  }
 
   const aprovadorEmissaoN1 =
     lancadores.find((u) => u.perfilIds.includes('perf-operacao'))?.id ?? 'usr-admin'
@@ -1806,7 +1805,7 @@ export function gerarBase(semente = 20260730): BaseDados {
    * A competência corrente **não** gera título, e é o que a torna "aberta".
    *
    * Uma competência aberta tem medição e nenhuma cobrança: a cobrança nasce do
-   * fechamento. Derivando título para todas as faturas — como a primeira versão
+   * fechamento. Derivando título para todas as medições — como a primeira versão
    * fazia —, a competência corrente já vinha coberta, e o diálogo de fechar
    * competência dizia sempre "nada a gerar". A tela existia e não podia ser
    * exercitada; foi um teste que pediu "gere e me mostre o resultado" que expôs
@@ -1814,12 +1813,14 @@ export function gerarBase(semente = 20260730): BaseDados {
    */
   const competenciaAberta = comps[comps.length - 1]
 
-  faturas.forEach((f, i) => {
-    if (f.competencia === competenciaAberta) return
-    const status = statusDaFatura(f)
-    const liquido = cent(f.valorLiquido)
-    const emissao = f.emissao
-    const contrato = contratos.find((c) => c.id === f.contratoId)
+  medicoes.forEach((m, i) => {
+    if (m.competencia === competenciaAberta) return
+    const plano = planoCobranca.get(m.id)
+    if (!plano) return
+    const status = plano.status
+    const liquido = cent(m.valorLiquido)
+    const emissao = plano.emissao
+    const contrato = contratos.find((c) => c.id === m.contratoId)
 
     /*
      * Piso de um nível no contratual, como no banco: a alçada decide **quantos**
@@ -1850,12 +1851,12 @@ export function gerarBase(semente = 20260730): BaseDados {
     })
 
     const recebimentos: RecebimentoTitulo[] =
-      f.valorPago > 0
+      plano.pago > 0
         ? [
             {
               id: `rcb-${String(i + 1).padStart(4, '0')}`,
-              valorRecebido: cent(f.valorPago),
-              dataRecebimento: f.status === 'PAGA' ? f.vencimento : iso(somarDias(HOJE, -5)),
+              valorRecebido: cent(plano.pago),
+              dataRecebimento: status === 'RECEBIDO' ? plano.vencimento : iso(somarDias(HOJE, -5)),
               contaId: 'cb-oper',
               forma: i % 3 === 0 ? 'BOLETO' : i % 3 === 1 ? 'PIX' : 'TRANSFERENCIA',
               movimentacaoId: null,
@@ -1868,18 +1869,18 @@ export function gerarBase(semente = 20260730): BaseDados {
     titulosReceber.push({
       id: receberId(),
       numeroTitulo: ++numeroTitulo,
-      clienteId: f.clienteId,
+      clienteId: m.clienteId,
       filialId: contrato?.filialId ?? null,
-      contratoId: f.contratoId,
-      competencia: f.competencia,
+      contratoId: m.contratoId,
+      competencia: m.competencia,
       origem: 'CONTRATUAL',
-      descricao: `Locação e consumo — contrato ${contrato?.numero ?? '—'}, competência ${f.competencia}`,
-      valorOriginal: cent(f.valorBruto),
-      desconto: cent(f.desconto),
-      descontoMotivo: f.desconto > 0 ? 'Desconto comercial vigente na competência' : null,
-      descontoPor: f.desconto > 0 ? aprovadorEmissaoN2 : null,
+      descricao: `Locação e consumo — contrato ${contrato?.numero ?? '—'}, competência ${m.competencia}`,
+      valorOriginal: cent(m.valorBruto),
+      desconto: cent(m.desconto),
+      descontoMotivo: m.desconto > 0 ? 'Desconto comercial vigente na competência' : null,
+      descontoPor: m.desconto > 0 ? aprovadorEmissaoN2 : null,
       dataEmissao: emissao,
-      dataVencimento: f.vencimento,
+      dataVencimento: plano.vencimento,
       status,
       baixaMotivo: null,
       baixadoEm: null,
@@ -1898,7 +1899,7 @@ export function gerarBase(semente = 20260730): BaseDados {
   })
 
   /*
-   * Casos que a derivação das faturas nunca produz, e que a tela erra se ninguém
+   * Casos que a derivação das medições nunca produz, e que a tela erra se ninguém
    * os exercitar.
    */
   const clienteAvulso = clientes[0]
@@ -1917,16 +1918,66 @@ export function gerarBase(semente = 20260730): BaseDados {
       ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO'].includes(c.status),
     )
     if (contratoSuspenso) {
+      /*
+       * A disputa precisa de uma **medição** por trás, e o valor sai dela.
+       *
+       * Sem medição, este título seria uma cobrança de um contrato que ninguém
+       * mediu — e `fecharCompetencia` nunca a produziria, porque só gera para
+       * contrato com medição na competência. O caso real de RN-F11 é o contrato
+       * que estava sendo medido e deixou de ser vigente antes do fechamento; é
+       * isso que se monta aqui, em vez de um valor escrito à mão.
+       */
+      const compDisputa = comps[comps.length - 2]!
+      const itensDisputa: ItemMedicao[] = contratoSuspenso.itens.map((item) => {
+        const eq = equipamentos.find((e) => e.id === item.equipamentoId)
+        return {
+          descricao: eq ? nomeModeloLocal(eq.modeloId) : 'Equipamento do contrato',
+          equipamentoPatrimonio: eq?.patrimonio ?? '—',
+          modalidade: item.modalidade,
+          valorFixo: item.valorMensal,
+          franquiaMono: item.franquiaMono,
+          consumoMono: 0,
+          excedenteMono: 0,
+          valorExcedenteMono: 0,
+          franquiaColor: item.franquiaColor,
+          consumoColor: 0,
+          excedenteColor: 0,
+          valorExcedenteColor: 0,
+          total: item.valorMensal,
+        }
+      })
+      const brutoDisputa = cent(itensDisputa.reduce((a, i) => a + i.total, 0))
+      medicoes.push({
+        id: `med-disputa-${contratoSuspenso.id}`,
+        clienteId: contratoSuspenso.clienteId,
+        contratoId: contratoSuspenso.id,
+        competencia: compDisputa,
+        itens: itensDisputa,
+        valorBruto: brutoDisputa,
+        desconto: 0,
+        valorLiquido: brutoDisputa,
+        seladaEm: iso(somarDias(HOJE, -8)),
+      })
+
       titulosReceber.push({
         id: receberId(),
         numeroTitulo: ++numeroTitulo,
         clienteId: contratoSuspenso.clienteId,
         filialId: contratoSuspenso.filialId,
         contratoId: contratoSuspenso.id,
-        competencia: comps[comps.length - 1]!,
+        /*
+         * Na última competência **fechada**, e não na corrente.
+         *
+         * A disputa nasce do fechamento — é ele que gera a cobrança e detecta
+         * que o contrato não estava vigente. Na competência aberta, este título
+         * seria uma cobrança de um mês que ninguém fechou: contradiz a própria
+         * definição de "aberta", e foi o teste do modelo de medição que o
+         * apontou.
+         */
+        competencia: compDisputa,
         origem: 'CONTRATUAL',
-        descricao: `Locação e consumo — contrato ${contratoSuspenso.numero}, competência ${comps[comps.length - 1]}`,
-        valorOriginal: 4_180,
+        descricao: `Locação e consumo — contrato ${contratoSuspenso.numero}, competência ${compDisputa}`,
+        valorOriginal: brutoDisputa,
         desconto: 0,
         descontoMotivo: null,
         descontoPor: null,
@@ -2305,6 +2356,23 @@ export function gerarBase(semente = 20260730): BaseDados {
 
   lancamentosFuturos.sort((a, b) => a.dataPrevista.localeCompare(b.dataPrevista))
 
+  /* ----------------------------------------------------------- indicadores */
+  /*
+   * Calculados no fim, e não no meio: a carteira e a inadimplência saem de
+   * `titulosReceber`, que é onde a cobrança vive. Enquanto saíam do modelo de
+   * fatura, o painel somava uma coleção e a tela de Contas a receber somava
+   * outra — e as duas pareciam certas.
+   */
+  const indicadores = calcularIndicadores({
+    equipamentos,
+    contratos,
+    medicoes,
+    titulosReceber,
+    ordens,
+    pecas,
+    comps,
+  })
+
   return {
     competencias: comps,
     regioes: REGIOES,
@@ -2327,7 +2395,7 @@ export function gerarBase(semente = 20260730): BaseDados {
     perfis,
     ordens,
     pecas,
-    faturas,
+    medicoes,
     centrosCusto,
     contasBancarias,
     movimentacoes,
@@ -2359,7 +2427,8 @@ export function recalcularIndicadores(base: BaseDados): Indicadores {
   return calcularIndicadores({
     equipamentos: base.equipamentos,
     contratos: base.contratos,
-    faturas: base.faturas,
+    medicoes: base.medicoes,
+    titulosReceber: base.titulosReceber,
     ordens: base.ordens,
     pecas: base.pecas,
     comps: base.competencias,
@@ -2369,12 +2438,13 @@ export function recalcularIndicadores(base: BaseDados): Indicadores {
 function calcularIndicadores(ctx: {
   equipamentos: Equipamento[]
   contratos: Contrato[]
-  faturas: Fatura[]
+  medicoes: MedicaoCompetencia[]
+  titulosReceber: TituloReceber[]
   ordens: OrdemServico[]
   pecas: Peca[]
   comps: string[]
 }): Indicadores {
-  const { equipamentos, contratos, faturas, ordens, pecas, comps } = ctx
+  const { equipamentos, contratos, medicoes, titulosReceber, ordens, pecas, comps } = ctx
 
   const ativos = equipamentos.filter((e) => e.status !== 'BAIXADO')
   const locados = ativos.filter((e) => e.status === 'LOCADO')
@@ -2385,8 +2455,13 @@ function calcularIndicadores(ctx: {
   const compAtual = comps[comps.length - 1]
   const compAnterior = comps[comps.length - 2]
 
+  /*
+   * Receita do mês é o que foi **medido** naquela competência, não o que já foi
+   * cobrado: a competência corrente ainda não gerou título nenhum, e somar
+   * títulos faria o painel mostrar receita zero no mês em curso.
+   */
   const somaComp = (comp: string) =>
-    faturas.filter((f) => f.competencia === comp).reduce((a, f) => a + f.valorLiquido, 0)
+    medicoes.filter((m) => m.competencia === comp).reduce((a, m) => a + m.valorLiquido, 0)
 
   const receitaMes = somaComp(compAtual)
   const receitaMesAnterior = somaComp(compAnterior)
@@ -2408,11 +2483,19 @@ function calcularIndicadores(ctx: {
   const custoTotalMes = custoManutencaoMes + depreciacaoMes
   const margem = receitaMes > 0 ? (receitaMes - custoTotalMes) / receitaMes : 0
 
-  const receberAberto = faturas.filter((f) => f.status !== 'PAGA' && f.status !== 'CANCELADA')
-  const carteira = receberAberto.reduce((a, f) => a + (f.valorLiquido - f.valorPago), 0)
-  const vencido = receberAberto
-    .filter((f) => f.diasAtraso > 0)
-    .reduce((a, f) => a + (f.valorLiquido - f.valorPago), 0)
+  /*
+   * Carteira e inadimplência saem do **título**, que é onde a cobrança vive.
+   *
+   * `EM_ATRASO` não é status: vencido é `dataVencimento` no passado com saldo em
+   * aberto. Guardar o atraso como estado obrigaria a reescrevê-lo todo dia à
+   * meia-noite, e o dia em que o job não roda a tela mente.
+   */
+  const hojeIso = iso(HOJE)
+  const emAberto = titulosReceber.filter((t) => ehAbertoReceber(t.status))
+  const carteira = emAberto.reduce((a, t) => a + saldoReceber(t), 0)
+  const vencido = emAberto
+    .filter((t) => t.dataVencimento < hojeIso)
+    .reduce((a, t) => a + saldoReceber(t), 0)
   const inadimplencia = carteira > 0 ? vencido / carteira : 0
 
   const encerradas = ordens.filter((o) => o.concluidaEm)
@@ -2488,7 +2571,7 @@ function calcularIndicadores(ctx: {
         e.historicoConsumo.length > 0 &&
         !e.historicoConsumo.some((h) => h.competencia === compAtual),
     ).length,
-    serieReceita: serie((c) => faturas.filter((f) => f.competencia === c).reduce((a, f) => a + f.valorLiquido, 0)),
+    serieReceita: serie((c) => medicoes.filter((m) => m.competencia === c).reduce((a, m) => a + m.valorLiquido, 0)),
     serieCusto: serie(
       (c) =>
         ordens

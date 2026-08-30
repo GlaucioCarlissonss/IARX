@@ -41,7 +41,6 @@ export type OsStatus =
   | 'VALIDADA'
   | 'CANCELADA'
 
-export type FaturaStatus = 'PREVISTA' | 'EM_FECHAMENTO' | 'EMITIDA' | 'PARCIAL' | 'PAGA' | 'EM_ATRASO' | 'CANCELADA'
 
 export type SituacaoCredito = 'LIBERADO' | 'OBSERVACAO' | 'BLOQUEADO'
 
@@ -408,7 +407,16 @@ export interface Peca {
   consumo12m: number
 }
 
-export interface FaturaItem {
+/**
+ * Uma linha da memória de cálculo: o que **um equipamento** consumiu numa
+ * competência, e quanto isso custa.
+ *
+ * Espelha `consumo_competencia` do banco (migração 0013), que também é por
+ * equipamento. `valorFixo` é a única parte que não vem de lá — vem do
+ * `contrato_item` —, e está aqui porque a memória de cálculo que o cliente
+ * confere soma as duas coisas na mesma linha.
+ */
+export interface ItemMedicao {
   descricao: string
   equipamentoPatrimonio: string
   modalidade: ModalidadeCobranca
@@ -425,21 +433,40 @@ export interface FaturaItem {
   observacao?: string
 }
 
-export interface Fatura {
+/**
+ * A medição de um contrato numa competência: o que foi consumido e quanto vale.
+ *
+ * **Não é a cobrança.** A cobrança é `TituloReceber` com `origem = 'CONTRATUAL'`,
+ * e é lá que moram vencimento, situação, recebimentos e atraso.
+ *
+ * Até aqui existia um modelo `Fatura` que guardava as duas coisas — a memória
+ * de cálculo *e* o estado da cobrança — e os títulos eram derivados dele. Eram
+ * duas fontes para o mesmo fato: a mesma competência podia mostrar um valor na
+ * tela de Faturamento e outro em Contas a receber, e as duas pareceriam certas.
+ * Um teste de paridade vigiava a divergência; ele deixou de ser necessário
+ * quando a segunda fonte deixou de existir.
+ *
+ * O que sobrou aqui é o que **só** a medição sabe: quais equipamentos, quanto
+ * cada um rodou, qual franquia, qual excedente. É a resposta à pergunta "por que
+ * este valor", que nenhum título responde.
+ */
+export interface MedicaoCompetencia {
   id: string
-  numero: string
   clienteId: string
   contratoId: string
   competencia: string
-  status: FaturaStatus
-  emissao: string
-  vencimento: string
+  itens: ItemMedicao[]
   valorBruto: number
   desconto: number
   valorLiquido: number
-  valorPago: number
-  diasAtraso: number
-  itens: FaturaItem[]
+  /**
+   * Nula enquanto a competência está aberta.
+   *
+   * Selar é o ato do fechamento: a partir dele a base do valor cobrado não muda
+   * mais. Uma medição selada com título é o par normal; selada sem título seria
+   * um mês fechado que ninguém cobrou, e é o que o painel de fechamento procura.
+   */
+  seladaEm: string | null
 }
 
 /* --------------------------------------------------------------- anexos --- */
@@ -557,7 +584,7 @@ export interface BaseDados {
   perfis: PerfilGravado[]
   ordens: OrdemServico[]
   pecas: Peca[]
-  faturas: Fatura[]
+  medicoes: MedicaoCompetencia[]
   centrosCusto: CentroCusto[]
   contasBancarias: ContaBancaria[]
   movimentacoes: Movimentacao[]
@@ -832,9 +859,10 @@ export interface RecebimentoTitulo {
  *
  * **Sem campo de saldo e sem `emAtraso`.** Saldo é `saldoDoTituloReceber()`,
  * derivado dos recebimentos não estornados; atraso é `vencimento < hoje` com o
- * título em aberto. O modelo simulado de `Fatura` guarda `status: 'EM_ATRASO'` e
- * `diasAtraso` — no dia seguinte ao vencimento os dois estão errados, e só um
- * job noturno os corrigiria. É o mesmo defeito de classe que guardar saldo.
+ * título em aberto. O modelo de `Fatura` que existia aqui guardava
+ * `status: 'EM_ATRASO'` e `diasAtraso` como campos — no dia seguinte ao
+ * vencimento os dois estavam errados, e só um job noturno os corrigiria. É o
+ * mesmo defeito de classe que guardar saldo, e foi removido junto com ele.
  */
 export interface TituloReceber {
   id: string

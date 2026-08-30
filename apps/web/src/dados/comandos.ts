@@ -1,4 +1,5 @@
 import { HOJE } from './gerar'
+import { EM_ABERTO_RECEBER, datasDaCobranca } from './receber'
 import { categoriaPorCodigo, modeloPorId } from './catalogo'
 import { arredondar, chaveValida, decomporChave, diferencaTotal, formatarCnpj, somenteDigitos } from './nfe'
 import type {
@@ -3401,21 +3402,15 @@ export function saldoDoTituloReceber(titulo: TituloReceber): number {
   return arredondar(valorLiquidoDe(titulo) - totalRecebido(titulo))
 }
 
-/** Em aberto: o que ainda representa entrada de caixa esperada. */
-const EM_ABERTO_RECEBER: StatusReceber[] = [
-  'PENDENTE_APROVACAO',
-  'PENDENTE',
-  'APROVADO',
-  'RECEBIDO_PARCIAL',
-  'EM_DISPUTA',
-]
 
 /**
  * Em atraso — **calculado**, nunca um status.
  *
- * O modelo simulado de `Fatura` guarda `EM_ATRASO` e `diasAtraso` como campos:
- * no dia seguinte ao vencimento os dois estão errados, e só um job noturno os
- * corrigiria. Aqui a data faz o trabalho e a resposta está certa sempre.
+ * O modelo de `Fatura` que existia guardava `EM_ATRASO` e `diasAtraso` como
+ * campos: no dia seguinte ao vencimento os dois estavam errados, e só um job
+ * noturno os corrigiria. Aqui a data faz o trabalho e a resposta está certa
+ * sempre — foi por isso que a tela de Faturamento passou a calcular o atraso em
+ * vez de lê-lo.
  */
 export function emAtraso(titulo: TituloReceber, hojeIso = iso(HOJE)): boolean {
   return EM_ABERTO_RECEBER.includes(titulo.status) && titulo.dataVencimento < hojeIso
@@ -4022,12 +4017,18 @@ export function previaFechamento(base: BaseDados, competencia: string): PreviaFe
   let total = 0
 
   const semVigencia = ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO']
+  /*
+   * Candidato é contrato **com medição** na competência: a medição é a
+   * pré-cobrança, e sem ela não há base de valor para cobrar. Era o modelo de
+   * fatura que fazia este papel; a medição sempre foi o que ele guardava de
+   * fato.
+   */
   const candidatos = base.contratos.filter((c) =>
-    base.faturas.some((f) => f.contratoId === c.id && f.competencia === competencia),
+    base.medicoes.some((m) => m.contratoId === c.id && m.competencia === competencia),
   )
 
   for (const c of candidatos) {
-    const fatura = base.faturas.find((f) => f.contratoId === c.id && f.competencia === competencia)!
+    const fatura = base.medicoes.find((m) => m.contratoId === c.id && m.competencia === competencia)!
     if (base.titulosReceber.some((t) => t.contratoId === c.id && t.competencia === competencia)) {
       jaExistentes += 1
       continue
@@ -4089,7 +4090,7 @@ export function fecharCompetencia(
   const semVigencia = ['SUSPENSO', 'ENCERRADO', 'CANCELADO', 'DISTRATADO']
 
   for (const c of base.contratos) {
-    const fatura = base.faturas.find((f) => f.contratoId === c.id && f.competencia === competencia)
+    const fatura = base.medicoes.find((m) => m.contratoId === c.id && m.competencia === competencia)
     if (!fatura) continue
     if (base.titulosReceber.some((t) => t.contratoId === c.id && t.competencia === competencia)) continue
 
@@ -4098,6 +4099,13 @@ export function fecharCompetencia(
       : null
     const bruto = arredondar(fatura.valorBruto)
     const desconto = arredondar(fatura.desconto)
+    /*
+     * As datas são da **cobrança**, e por isso decididas aqui e não guardadas na
+     * medição: emissão e vencimento passam a existir no fechamento, que é o ato
+     * que transforma medição em cobrança. Pela mesma função que o gerador usa,
+     * senão a cobrança criada pela tela venceria num dia e a da massa em outro.
+     */
+    const datas = datasDaCobranca(competencia, c.diaVencimento)
     // RN-F10, com o piso: a alçada decide quantos conferem, não se alguém confere.
     const niveis = Math.max(1, niveisEmissao(base, bruto - desconto))
 
@@ -4114,8 +4122,8 @@ export function fecharCompetencia(
       desconto,
       descontoMotivo: desconto > 0 ? `Desconto comercial vigente em ${competencia}` : null,
       descontoPor: null,
-      dataEmissao: fatura.emissao,
-      dataVencimento: fatura.vencimento,
+      dataEmissao: iso(datas.emissao),
+      dataVencimento: iso(datas.vencimento),
       status: excecao ? 'EM_DISPUTA' : 'PENDENTE_APROVACAO',
       baixaMotivo: null,
       baixadoEm: null,

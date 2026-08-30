@@ -108,7 +108,7 @@ export const api = {
   equipamentos: () => responder(() => [...BASE.equipamentos]),
   ordens: () => responder(() => [...BASE.ordens]),
   pecas: () => responder(() => [...BASE.pecas]),
-  faturas: () => responder(() => [...BASE.faturas]),
+  medicoes: () => responder(() => [...BASE.medicoes]),
   tecnicos: () => responder(() => [...BASE.tecnicos]),
   fornecedores: () => responder(() => [...BASE.fornecedores]),
   usuarios: () => responder(() => [...BASE.usuarios]),

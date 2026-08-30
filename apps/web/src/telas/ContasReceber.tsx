@@ -1260,8 +1260,15 @@ function DialogoDecisao({
   const restantes = titulo.aprovacoes.filter(
     (a) => a.rodada === nivelPendenteReceber(titulo)?.rodada && a.nivel > nivel,
   ).length
-  const fatura = titulo.competencia
-    ? base.faturas.find((f) => f.contratoId === titulo.contratoId && f.competencia === titulo.competencia)
+  /*
+   * A memória de cálculo vem da **medição** da competência, e não de um campo do
+   * título: é ela que sabe quais equipamentos rodaram quanto. O título sabe
+   * quanto se cobra; a medição sabe por quê.
+   */
+  const medicao = titulo.competencia
+    ? base.medicoes.find(
+        (m) => m.contratoId === titulo.contratoId && m.competencia === titulo.competencia,
+      )
     : undefined
 
   return (
@@ -1331,7 +1338,7 @@ function DialogoDecisao({
             cobrança contratual precisa ver a composição, não só o total. Aprovar
             um número sem a memória de cálculo é assinar em branco.
           */}
-          {fatura ? (
+          {medicao ? (
             <section>
               <h3>Composição do valor</h3>
               <dl className="descricoes">
@@ -1349,19 +1356,19 @@ function DialogoDecisao({
                 </div>
                 <div>
                   <dt>Itens medidos</dt>
-                  <dd>{fatura.itens.length}</dd>
+                  <dd>{medicao.itens.length}</dd>
                 </div>
               </dl>
               <ul className="lista-simples">
-                {fatura.itens.slice(0, 6).map((it, i) => (
+                {medicao.itens.slice(0, 6).map((it, i) => (
                   <li key={`${it.equipamentoPatrimonio}-${i}`}>
                     {it.equipamentoPatrimonio}: {moeda(it.valorFixo)} fixo
                     {it.excedenteMono > 0 &&
                       ` + ${it.excedenteMono} páginas excedentes (${moeda(it.valorExcedenteMono)})`}
                   </li>
                 ))}
-                {fatura.itens.length > 6 && (
-                  <li className="texto-atenuado">e mais {fatura.itens.length - 6} item(ns)…</li>
+                {medicao.itens.length > 6 && (
+                  <li className="texto-atenuado">e mais {medicao.itens.length - 6} item(ns)…</li>
                 )}
               </ul>
             </section>

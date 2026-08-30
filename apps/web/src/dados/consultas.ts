@@ -1,7 +1,15 @@
 import { api } from './api'
 import { categoriaPorCodigo, modeloPorId, nomeModelo, regiaoPorId } from './catalogo'
-import { HOJE } from './gerar'
-import type { Cliente, Equipamento, Fatura, OrdemServico, Peca } from './tipos'
+import { HOJE, iso } from './gerar'
+import { ehAbertoReceber, saldoReceber } from './receber'
+import type {
+  Cliente,
+  Equipamento,
+  MedicaoCompetencia,
+  OrdemServico,
+  Peca,
+  TituloReceber,
+} from './tipos'
 
 /**
  * Consultas derivadas.
@@ -143,6 +151,7 @@ export interface LinhaCliente {
 export function linhasClientes(): LinhaCliente[] {
   const b = base()
   const compAtual = b.indicadores.serieReceita[b.indicadores.serieReceita.length - 1].competencia
+  const hojeIso = iso(HOJE)
 
   return b.clientes
     .map((c) => {
@@ -157,11 +166,18 @@ export function linhasClientes(): LinhaCliente[] {
       }, 0)
       const custo = equipamentos.reduce((a, e) => a + e.custoManutencao12m, 0)
       const receita12m = equipamentos.reduce((a, e) => a + e.receita12m, 0)
-      const faturas = b.faturas.filter((f) => f.clienteId === c.id)
-      const aberto = faturas
-        .filter((f) => f.status !== 'PAGA' && f.status !== 'CANCELADA')
-        .reduce((a, f) => a + (f.valorLiquido - f.valorPago), 0)
-      const vencido = faturas.filter((f) => f.diasAtraso > 0).reduce((a, f) => a + (f.valorLiquido - f.valorPago), 0)
+      /*
+       * A carteira do cliente sai do **título**, que é onde a cobrança vive, e
+       * pelas mesmas funções que a tela de Contas a receber usa. Enquanto saía
+       * do modelo de fatura, esta tela somava uma coleção e aquela somava outra.
+       */
+      const emAberto = b.titulosReceber.filter(
+        (t) => t.clienteId === c.id && ehAbertoReceber(t.status),
+      )
+      const aberto = emAberto.reduce((a, t) => a + saldoReceber(t), 0)
+      const vencido = emAberto
+        .filter((t) => t.dataVencimento < hojeIso)
+        .reduce((a, t) => a + saldoReceber(t), 0)
 
       return {
         cliente: c,
@@ -181,21 +197,47 @@ export function linhasClientes(): LinhaCliente[] {
 
 /* ------------------------------------------------------------ faturamento */
 
-export interface LinhaFatura {
-  fatura: Fatura
+/**
+ * Uma linha do ciclo de faturamento: a medição, e a cobrança dela **quando já
+ * existe**.
+ *
+ * A âncora é a medição, não o título, e é o que faz a competência aberta
+ * aparecer na tela: ela foi medida e ainda não foi cobrada — que é exatamente o
+ * que "aberta" significa. Uma lista de títulos não teria como mostrá-la, e o
+ * fechamento é o que esta tela existe para operar.
+ *
+ * `titulo` nulo é informação, não ausência de dado.
+ */
+export interface LinhaCobranca {
+  medicao: MedicaoCompetencia
+  titulo: TituloReceber | null
   clienteNome: string
   contratoNumero: string
-  saldo: number
+  /** Nulo enquanto não há cobrança: não se deve saldo do que não foi cobrado. */
+  saldo: number | null
+  atrasada: boolean
 }
 
-export function linhasFaturas(): LinhaFatura[] {
+export function linhasCobranca(): LinhaCobranca[] {
   const b = base()
-  return b.faturas.map((f) => ({
-    fatura: f,
-    clienteNome: b.clientes.find((c) => c.id === f.clienteId)?.nomeFantasia ?? '—',
-    contratoNumero: b.contratos.find((c) => c.id === f.contratoId)?.numero ?? '—',
-    saldo: f.valorLiquido - f.valorPago,
-  }))
+  const hojeIso = iso(HOJE)
+  const contratuais = b.titulosReceber.filter((t) => t.origem === 'CONTRATUAL')
+
+  return b.medicoes.map((m) => {
+    const titulo =
+      contratuais.find((t) => t.contratoId === m.contratoId && t.competencia === m.competencia) ??
+      null
+    return {
+      medicao: m,
+      titulo,
+      clienteNome: b.clientes.find((c) => c.id === m.clienteId)?.nomeFantasia ?? '—',
+      contratoNumero: b.contratos.find((c) => c.id === m.contratoId)?.numero ?? '—',
+      saldo: titulo ? saldoReceber(titulo) : null,
+      // Atraso é a data, nunca um estado guardado: no dia seguinte ao vencimento
+      // um campo estaria errado, e só um job noturno o corrigiria.
+      atrasada: titulo !== null && ehAbertoReceber(titulo.status) && titulo.dataVencimento < hojeIso,
+    }
+  })
 }
 
 /** Itens da competência corrente que fugiram do padrão e pedem conferência. */
@@ -205,19 +247,29 @@ export function excecoesFechamento() {
   const atual = comps[comps.length - 1]
   const anterior = comps[comps.length - 2]
 
-  const emFechamento = b.faturas.filter((f) => f.competencia === atual)
-  const resultado: { fatura: Fatura; clienteNome: string; motivo: string; severidade: 'critico' | 'atencao' }[] = []
+  const emFechamento = b.medicoes.filter((m) => m.competencia === atual)
+  const resultado: {
+    medicao: MedicaoCompetencia
+    clienteNome: string
+    contratoNumero: string
+    motivo: string
+    severidade: 'critico' | 'atencao'
+  }[] = []
+  const numeroDoContrato = (id: string) => b.contratos.find((c) => c.id === id)?.numero ?? '—'
 
   for (const f of emFechamento) {
     const cliente = b.clientes.find((c) => c.id === f.clienteId)!
-    const anteriorDoContrato = b.faturas.find((x) => x.contratoId === f.contratoId && x.competencia === anterior)
+    const anteriorDoContrato = b.medicoes.find(
+      (x) => x.contratoId === f.contratoId && x.competencia === anterior,
+    )
 
     if (anteriorDoContrato && anteriorDoContrato.valorLiquido > 0) {
       const var_ = (f.valorLiquido - anteriorDoContrato.valorLiquido) / anteriorDoContrato.valorLiquido
       if (Math.abs(var_) > 0.35) {
         resultado.push({
-          fatura: f,
+          medicao: f,
           clienteNome: cliente.nomeFantasia,
+          contratoNumero: numeroDoContrato(f.contratoId),
           motivo: `variação de ${var_ > 0 ? '+' : '−'}${Math.abs(var_ * 100).toFixed(0)}% sobre a competência anterior`,
           severidade: Math.abs(var_) > 0.6 ? 'critico' : 'atencao',
         })
@@ -226,8 +278,9 @@ export function excecoesFechamento() {
     }
     if (!anteriorDoContrato) {
       resultado.push({
-        fatura: f,
+        medicao: f,
         clienteNome: cliente.nomeFantasia,
+        contratoNumero: numeroDoContrato(f.contratoId),
         motivo: 'primeira competência do contrato — cobrança proporcional',
         severidade: 'atencao',
       })
@@ -235,8 +288,9 @@ export function excecoesFechamento() {
     }
     if (cliente.situacaoCredito === 'BLOQUEADO') {
       resultado.push({
-        fatura: f,
+        medicao: f,
         clienteNome: cliente.nomeFantasia,
+        contratoNumero: numeroDoContrato(f.contratoId),
         motivo: `cliente bloqueado com ${cliente.diasAtrasoMaximo} dias de atraso`,
         severidade: 'critico',
       })

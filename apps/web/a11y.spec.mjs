@@ -420,6 +420,40 @@ test('faturamento por franquia e excedente aparece na memória de cálculo', asy
   await expect(memoria.getByRole('columnheader', { name: 'Consumo' })).toBeVisible()
 })
 
+test('a competência aberta aparece como a faturar, sem número e sem vencimento', async ({ page }) => {
+  await abrir(page, { hash: '#/faturamento' })
+
+  /*
+   * O ponto: a linha da competência aberta **existe** e se declara não faturada.
+   *
+   * A tela lia um modelo de fatura que inventava número, vencimento e situação
+   * antes de a cobrança existir — a competência em fechamento aparecia com cara
+   * de cobrança emitida. Hoje a âncora é a medição, e a ausência de título é a
+   * informação: sem ela, quem opera o fechamento não distingue o que já foi
+   * cobrado do que ainda vai ser.
+   */
+  await page.getByLabel('Recorte').selectOption('ciclo')
+
+  const tabela = page.getByRole('table').last()
+  const primeira = tabela.getByRole('row').nth(1)
+  await expect(primeira.getByText('a faturar')).toBeVisible()
+  await expect(primeira.getByText('Em fechamento')).toBeVisible()
+  await expect(primeira.getByText('no fechamento')).toBeVisible()
+})
+
+test('a competência já fechada mostra a cobrança, e o atraso é calculado', async ({ page }) => {
+  await abrir(page, { hash: '#/faturamento' })
+  await page.getByLabel('Recorte').selectOption('atraso')
+
+  const tabela = page.getByRole('table').last()
+  const linhas = tabela.getByRole('row')
+  await expect(linhas.nth(1)).toBeVisible()
+
+  // Atraso é vencimento no passado com saldo em aberto, e a tela conta os dias
+  // a partir da data — não de um campo `diasAtraso` que envelhece sozinho.
+  await expect(linhas.nth(1).getByText(/\d+ dias em atraso/)).toBeVisible()
+})
+
 /* ==================================================================== */
 /* Formulários                                                          */
 /* ==================================================================== */

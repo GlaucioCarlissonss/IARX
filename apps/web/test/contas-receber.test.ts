@@ -744,29 +744,70 @@ test('a massa cobre os estados difíceis, e não só os recebidos', () => {
   )
 })
 
-test('os contratuais da massa espelham as faturas, valor a valor', () => {
+/*
+ * Aqui vivia o teste de paridade entre `faturas` e `titulosReceber`.
+ *
+ * Ele existia porque a base tinha **duas** coleções para o mesmo fato: um modelo
+ * de fatura, que a tela de Faturamento lia, e os títulos, que Contas a receber
+ * lia. O teste comparava valor a valor para que as duas telas não mostrassem
+ * receitas diferentes para o mesmo mês.
+ *
+ * A duplicação acabou: a medição explica o valor, o título é a cobrança, e a
+ * segunda fonte deixou de existir. Um teste que compara uma coisa com ela mesma
+ * passa sempre e não prova nada — mantê-lo daria a impressão de que ainda há
+ * algo sendo vigiado. O que sobrou dele está no teste abaixo e no de
+ * `linhasCobranca`: existe cobrança contratual, e a competência aberta tem
+ * medição sem título.
+ */
+
+test('a competência aberta tem medição e nenhuma cobrança — é o que a torna aberta', () => {
+  const b = base()
+  const aberta = b.competencias_fechamento.find((c) => c.fechadoEm === null)!.competencia
+
+  const medidas = b.medicoes.filter((m) => m.competencia === aberta)
+  assert.ok(medidas.length > 0, 'a competência aberta não tem medição: não haveria o que fechar')
+  assert.ok(
+    medidas.every((m) => m.seladaEm === null),
+    'medição da competência aberta já está selada',
+  )
+
+  /*
+   * Nenhum título: a cobrança nasce do fechamento. Já houve uma versão em que a
+   * derivação cobria todas as competências, e o diálogo de fechar competência
+   * dizia sempre "nada a gerar" — a tela existia e não podia ser exercitada.
+   */
+  const cobradas = b.titulosReceber.filter(
+    (t) => t.origem === 'CONTRATUAL' && t.competencia === aberta,
+  )
+  assert.equal(cobradas.length, 0, 'a competência aberta já tem cobrança')
+})
+
+test('faturamento e contas a receber somam o mesmo para a mesma competência', () => {
   const b = base()
   /*
-   * Esta é a asserção que sustenta a lacuna aceita: na base de demonstração
-   * `faturas` e `titulosReceber` coexistem, porque a tela de Faturamento não foi
-   * migrada. Derivando uma da outra num gerador só, os dois números não podem
-   * divergir. Se alguém passar a sortear os títulos à parte, este teste falha
-   * antes de as duas telas mostrarem receitas diferentes para o mesmo mês.
+   * A **última** fechada, não a primeira: a massa mede seis competências, e as
+   * anteriores a isso não têm medição — comparar uma delas mediria a janela do
+   * gerador, não a concordância entre as duas telas.
    */
-  // A competência corrente é a **aberta**: ela tem medição e nenhuma cobrança,
-  // porque a cobrança nasce do fechamento. Só as fechadas têm par.
-  const aberta = b.competencias_fechamento.find((c) => c.fechadoEm === null)!.competencia
-  for (const f of b.faturas.filter((x) => x.competencia !== aberta)) {
-    const titulo = b.titulosReceber.find(
-      (t) => t.origem === 'CONTRATUAL' && t.contratoId === f.contratoId && t.competencia === f.competencia,
-    )
-    assert.ok(titulo, `a fatura ${f.numero} não tem título correspondente`)
-    assert.equal(
-      Math.round(valorLiquidoDe(titulo!) * 100),
-      Math.round(f.valorLiquido * 100),
-      `a fatura ${f.numero} e o título divergem no valor`,
-    )
-  }
+  const fechadas = b.competencias_fechamento.filter((c) => c.fechadoEm !== null)
+  const fechada = fechadas[fechadas.length - 1]!.competencia
+
+  /*
+   * Esta é a garantia que o teste de paridade dava, agora por outro caminho: em
+   * vez de comparar duas coleções mantidas em correspondência, compara **o que
+   * cada tela mostra**. A tela de Faturamento soma a medição; Contas a receber
+   * soma o título. Com uma fonte só, os dois têm de bater — e se um dia não
+   * baterem, é porque alguém reintroduziu a segunda fonte.
+   */
+  const somaMedicao = b.medicoes
+    .filter((m) => m.competencia === fechada)
+    .reduce((a, m) => a + m.valorLiquido, 0)
+  const somaTitulo = b.titulosReceber
+    .filter((t) => t.origem === 'CONTRATUAL' && t.competencia === fechada)
+    .reduce((a, t) => a + valorLiquidoDe(t), 0)
+
+  assert.ok(somaMedicao > 0, `a competência ${fechada} não tem medição`)
+  assert.equal(Math.round(somaTitulo * 100), Math.round(somaMedicao * 100))
 })
 
 test('nenhum título contratual da massa foi gerado por quem pode aprová-lo', () => {

@@ -178,10 +178,11 @@ conta como receita".
 `app.saldo_titulo_receber(id)`, função. E **não existe status `EM_ATRASO`**.
 
 O último é o mais interessante, porque a simulação da interface o tinha: o modelo
-`Fatura` guarda `status: 'EM_ATRASO'` e `diasAtraso` como campos. No dia seguinte
-ao vencimento os dois estão errados, e só um job noturno os corrigiria. É o mesmo
-defeito de classe que guardar saldo — e aqui ele estava um passo mais escondido,
-porque um status parece um fato e não um cálculo.
+`Fatura` guardava `status: 'EM_ATRASO'` e `diasAtraso` como campos. No dia
+seguinte ao vencimento os dois estavam errados, e só um job noturno os
+corrigiria. É o mesmo defeito de classe que guardar saldo — e ali estava um passo
+mais escondido, porque um status parece um fato e não um cálculo. O modelo foi
+removido; a tela de Faturamento calcula o atraso a partir do vencimento.
 
 Atraso é `data_vencimento < current_date` com o título em aberto. A resposta está
 certa em qualquer instante porque não é guardada.
@@ -376,31 +377,41 @@ assunto.
 
 ---
 
-## T.11 A lacuna aceita, e como foi mitigada
+## T.11 A lacuna aceita — fechada
 
-**No banco e na API, D-20 está aplicada**: existe `titulo_receber` e não existe
-tabela de fatura.
+**No banco e na API, D-20 sempre esteve aplicada**: existe `titulo_receber` e não
+existe tabela de fatura.
 
-**No front, as duas coleções coexistem.** A tela de Faturamento continua lendo a
-`Fatura` simulada — foi decisão de escopo do operador, para não refatorar nove
-arquivos e os indicadores nesta rodada. É, declaradamente, duas fontes de verdade
-sobre "quanto o cliente deve" na camada de demonstração: exatamente o que D-20
-existe para evitar.
+**No front, as duas coleções coexistiram por uma rodada.** A tela de Faturamento
+lia uma `Fatura` simulada que guardava duas coisas diferentes: a memória de
+cálculo — quais equipamentos, quanto rodaram, franquia, excedente — e o estado da
+cobrança — vencimento, situação, pago, dias de atraso. Os títulos `CONTRATUAL`
+eram derivados dela, num gerador só, e um teste comparava fatura por fatura. A
+mitigação funcionava, mas era mitigação: duas fontes de verdade sobre "quanto o
+cliente deve", mantidas em correspondência por vigilância.
 
-A mitigação é obrigatória e está no código: os títulos `CONTRATUAL` da
-demonstração são **derivados das faturas**, num gerador só. Os dois números não
-podem divergir enquanto a lacuna existir. E há teste que compara fatura por
-fatura:
+**A separação fechou a lacuna.** O modelo virou `MedicaoCompetencia`, e perdeu
+tudo o que era da cobrança:
 
-```ts
-for (const f of b.faturas.filter((x) => x.competencia !== aberta)) {
-  const titulo = /* ... */
-  assert.equal(Math.round(valorLiquidoDe(titulo) * 100), Math.round(f.valorLiquido * 100))
-}
-```
+| O que era | Onde está agora |
+| --- | --- |
+| `itens`, `valorBruto`, `desconto`, `valorLiquido` | `MedicaoCompetencia` — é o que só a medição sabe |
+| `numero` | `titulo_receber.numero_titulo`; a medição não numera nada |
+| `status` | `TituloReceber.status`; enquanto não há título, a competência está **em fechamento** |
+| `emissao`, `vencimento` | decididos no fechamento, por `datasDaCobranca` — as datas nascem com a cobrança |
+| `valorPago` | os recebimentos do título |
+| `diasAtraso` | calculado do vencimento, nunca guardado |
 
-Se alguém passar a sortear os títulos à parte, ele falha **antes** de as duas
-telas mostrarem receitas diferentes para o mesmo mês.
+A tela de Faturamento ancora cada linha na **medição** e mostra a cobrança quando
+ela existe. É o que faz a competência aberta continuar aparecendo: medida, ainda
+não faturada — que é exatamente o que "aberta" significa, e o que uma lista de
+títulos não teria como mostrar.
+
+**O teste de paridade saiu junto.** Ele existia porque a divergência era
+possível; comparar uma coisa com ela mesma passa sempre e não prova nada. No
+lugar ficaram duas asserções sobre o que passou a valer: a competência aberta tem
+medição e nenhum título, e as somas das duas telas batem para a mesma competência
+— agora por consequência de haver uma fonte só, não por alinhamento vigiado.
 
 ---
 
@@ -422,7 +433,6 @@ telas mostrarem receitas diferentes para o mesmo mês.
 
 | # | Pendência | Consequência |
 | --- | --- | --- |
-| — | Tela de Faturamento não migrada | duas fontes de verdade na demonstração; mitigado por gerador único e teste de paridade, não eliminado |
 | — | Emissão de NFS-e | `numero_titulo` é identificador interno. Emissão depende de município, certificado e regime — **não foi inventada** |
 | — | Boleto e remessa CNAB | cobrança registrada é outro assunto; `forma` já registra o meio do recebimento |
 | — | Régua de cobrança | a fila de notificação receberia os avisos de atraso; a política de quando cobrar, e quantas vezes, é decisão do operador |
