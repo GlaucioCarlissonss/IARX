@@ -188,8 +188,12 @@ delete from public.contrato where tenant_id in (:'t1', :'t2');
 delete from public.cliente  where tenant_id in (:'t1', :'t2');
 delete from public.filial   where tenant_id in (:'t1', :'t2');
 delete from public.empresa  where tenant_id in (:'t1', :'t2');
--- Perfis de cliente são provisionados por gatilho na criação do tenant (0011).
-delete from public.perfil   where tenant_id in (:'t1', :'t2');
+-- Provisionados por gatilho na criação do tenant: os perfis de cliente (0011) e
+-- a categoria de despesa residual (0023). As duas FKs são `restrict` de
+-- propósito — um locatário com dado não desaparece —, então a limpeza precisa
+-- conhecê-las.
+delete from public.perfil            where tenant_id in (:'t1', :'t2');
+delete from public.categoria_despesa where tenant_id in (:'t1', :'t2');
 delete from public.tenant   where id in (:'t1', :'t2');
 
 \echo '== 02_rn028_isolamento_tenant: TODOS OS CASOS APROVADOS =='

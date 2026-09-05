@@ -242,6 +242,8 @@ delete from public.filial where tenant_id = :'t1';
 delete from public.empresa where tenant_id = :'t1';
 -- Perfis de cliente são provisionados por gatilho na criação do tenant (0011).
 delete from public.perfil where tenant_id = :'t1';
+-- Provisionada pelo mesmo gatilho, na 0023.
+delete from public.categoria_despesa where tenant_id = :'t1';
 delete from public.tenant where id = :'t1';
 
 \echo '== 03_rn018_rn020_auditoria_leitura: TODOS OS CASOS APROVADOS =='
