@@ -256,8 +256,8 @@ do que existe — as três camadas é que compõem a autorização, e o array é
 ## C.4.2 As permissões que a matriz não cobre
 
 A matriz de C.4 foi escrita antes dos Módulos 8 a 13, e nunca alcançou alguns
-blocos que já existiam. Das **125** permissões do catálogo, **82** têm linha lá.
-As outras **43** estão nesta seção.
+blocos que já existiam, e cresceu com os módulos seguintes. Das **127**
+permissões do catálogo, **82** têm linha lá. As outras **45** estão nesta seção.
 
 A contagem é medida, não estimada — a versão anterior desta seção dizia "trinta e
 quatro" e listava trinta e três, deixando dez permissões (o bloco inteiro de nota
@@ -285,6 +285,8 @@ Como em C.4, o Administrador da Plataforma é implícito em todas as linhas.
 | `pagar:delegar_aprovacao` | Diretor | **especificada** por [Anexo S](S-contas-a-pagar.md) §S.4: quem aprova não precisa poder transferir a própria autoridade — logo a delegação fica acima de quem aprova |
 | `centro_custo:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro | **especificada** por [Anexo R](R-base-do-financeiro.md) §R.8: "quem lança um título precisa ler para escolher um centro" |
 | `centro_custo:gerenciar` | Analista Financeiro | **inferida** — R §R.8 trata a árvore como cadastro financeiro |
+| `despesa:ler` | Diretor, Gestor de Filial, Operador Administrativo, Analista Financeiro, Consulta | **especificada** por [Anexo L](L-lacunas-funcionais.md) §Módulo 14: as permissões de despesa são dedicadas, para não sobrecarregar a de centro de custo com responsabilidade orçamentária. Quem lança um título precisa ler as categorias para escolher uma — é a mesma razão de `centro_custo:ler` alcançar o Operador |
+| `despesa:orcamento_gerenciar` | Analista Financeiro | **especificada** — L §Módulo 14 separa orçar de manter a estrutura de custo. Fica onde `centro_custo:gerenciar` já está: é cadastro financeiro |
 | `conta_bancaria:ler` | Diretor, Analista Financeiro | **especificada** — R §R.8: "é o que a baixa de um título precisa" |
 | `conta_bancaria:gerenciar` | Analista Financeiro | **especificada** — R §R.8: "bloquear uma conta é ação de gestão, não de operação" |
 | `conta_bancaria:movimentar` | Analista Financeiro | **especificada** — R §R.8: "o dia a dia" |

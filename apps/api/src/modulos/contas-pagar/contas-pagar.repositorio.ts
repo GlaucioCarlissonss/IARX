@@ -256,9 +256,9 @@ export class ContasPagarRepositorio {
     const l = await db.consultarUm<{ id: string }>(
       `insert into public.titulo_pagar
          (tenant_id, empresa_id, filial_id, fornecedor_id, descricao, classificacao,
-          contrato_fornecedor_ref, valor_original, data_emissao, data_vencimento,
-          parcela_total, created_by, updated_by)
-       values (app.tenant_atual(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+          categoria_id, contrato_fornecedor_ref, valor_original, data_emissao,
+          data_vencimento, parcela_total, created_by, updated_by)
+       values (app.tenant_atual(), $1, $2, $3, $4, $5, $11, $6, $7, $8, $9, $10,
                app.usuario_atual(), app.usuario_atual())
        returning id`,
       [
@@ -272,6 +272,7 @@ export class ContasPagarRepositorio {
         dados.data_emissao,
         dados.data_vencimento,
         dados.parcelas > 1 ? dados.parcelas : null,
+        dados.categoria_id ?? null,
       ],
     )
     return l!.id
@@ -303,9 +304,10 @@ export class ContasPagarRepositorio {
       await db.consultar(
         `insert into public.titulo_pagar
            (tenant_id, empresa_id, filial_id, fornecedor_id, descricao, classificacao,
-            contrato_fornecedor_ref, valor_original, data_emissao, data_vencimento,
-            titulo_pai_id, parcela_numero, parcela_total, created_by, updated_by)
-         values (app.tenant_atual(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+            categoria_id, contrato_fornecedor_ref, valor_original, data_emissao,
+            data_vencimento, titulo_pai_id, parcela_numero, parcela_total,
+            created_by, updated_by)
+         values (app.tenant_atual(), $1, $2, $3, $4, $5, $13, $6, $7, $8, $9, $10, $11, $12,
                  app.usuario_atual(), app.usuario_atual())`,
         [
           dados.empresa_id,
@@ -320,6 +322,7 @@ export class ContasPagarRepositorio {
           paiId,
           i,
           total,
+          dados.categoria_id ?? null,
         ],
       )
     }

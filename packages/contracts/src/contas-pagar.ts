@@ -138,6 +138,16 @@ export const CriarTituloPagar = z
     fornecedor_id: Uuid.nullish(),
     descricao: z.string().trim().min(3).max(200),
     classificacao: ClassificacaoPagar,
+    /**
+     * Natureza do gasto (Módulo 14). **Opcional de propósito.**
+     *
+     * Omitida, o título cai na categoria residual do locatário — por gatilho, e
+     * não por padrão do esquema. Exigi-la aqui transformaria o lançamento de uma
+     * despesa numa decisão de classificação contábil no momento errado; deixá-la
+     * de fora do contrato faria o painel de despesas divergir do de contas a
+     * pagar, que é o defeito que a categoria residual existe para evitar.
+     */
+    categoria_id: Uuid.nullish(),
     contrato_fornecedor_ref: z.string().trim().max(120).nullish(),
     valor_original: DinheiroPositivo,
     data_emissao: Data,

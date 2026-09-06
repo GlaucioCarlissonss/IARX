@@ -60,6 +60,13 @@ import {
 } from './modulos/iam/iam.controller.js'
 import { IamRepositorio } from './modulos/iam/iam.repositorio.js'
 import { IamService } from './modulos/iam/iam.service.js'
+import {
+  CategoriasDespesaController,
+  DespesasController,
+  OrcamentosController,
+} from './modulos/despesas/despesas.controller.js'
+import { DespesasRepositorio } from './modulos/despesas/despesas.repositorio.js'
+import { DespesasService } from './modulos/despesas/despesas.service.js'
 import { LocaisController } from './modulos/locais/locais.controller.js'
 import { LocaisRepositorio } from './modulos/locais/locais.repositorio.js'
 import { LocaisService } from './modulos/locais/locais.service.js'
@@ -108,6 +115,9 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     RecorrenciasController,
     FluxoCaixaController,
     CenariosCaixaController,
+    CategoriasDespesaController,
+    OrcamentosController,
+    DespesasController,
   ],
   providers: [
     BancoService,
@@ -138,6 +148,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     ConversaoWorker,
     FluxoCaixaRepositorio,
     FluxoCaixaService,
+    DespesasRepositorio,
+    DespesasService,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },

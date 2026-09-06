@@ -180,6 +180,19 @@ export const PERMISSOES = [
   'conta_bancaria:movimentar',
   'conta_bancaria:transferir',
 
+  // Controle de despesas — Módulo 14, migração 0023
+  //
+  // Duas, e não uma. `despesa:ler` é o painel e a árvore de categorias: quem
+  // lança um título precisa **ler** as categorias para escolher uma, e não
+  // precisa poder criar categoria nem mexer em orçamento.
+  //
+  // Nenhuma delas reaproveita `centro_custo:*`. O Anexo L é explícito: orçar é
+  // responsabilidade distinta de manter a estrutura de custo, e sobrecarregar
+  // uma permissão com as duas faria conceder orçamento a quem só devia cadastrar
+  // centro — sem que nada na tela dissesse isso.
+  'despesa:ler',
+  'despesa:orcamento_gerenciar',
+
   // Política comercial — tabela de franquia, tabela de preço, simulador
   //
   // Acrescentadas ao reconciliar os vocabulários: o módulo comercial foi

@@ -285,7 +285,27 @@ describe('projeção', () => {
   it('o resumo diz em que dia o caixa aperta, não só qual o menor número', async () => {
     const t = await token({ permissoes: [...PAINEL] })
     const dia = emDias(15)
-    await pagarEm(dia, '900000.0000')
+
+    /*
+     * O valor da saída é **derivado da projeção**, não um número fixo.
+     *
+     * A primeira versão pagava 900 mil e assumia que isso bastava para o
+     * acumulado virar negativo. Bastava por acidente: dependia do saldo semeado,
+     * dos títulos que os outros arquivos da suíte tinham criado antes deste, e
+     * da distância entre a data de hoje e as datas fixas de `semear.sql`. Quando
+     * o calendário andou, o mesmo teste passou a falhar sem que uma linha de
+     * código mudasse — e acusou o produto por um defeito da massa.
+     *
+     * O que a regra promete é que **uma saída grande o bastante** leva o
+     * acumulado abaixo de zero e o resumo diz em que dia. "Grande o bastante" é
+     * mais do que o maior acumulado da janela, e isso a própria projeção informa.
+     */
+    const antes = await chamar(api, 'GET', '/api/v1/fluxo-caixa/projecao?dias=30', { token: t })
+    const teto = Math.max(
+      ...antes.corpo.data.dias.map((d: { saldo_acumulado: string }) => Number(d.saldo_acumulado)),
+      0,
+    )
+    await pagarEm(dia, (teto + 1000).toFixed(4))
 
     const r = await chamar(api, 'GET', '/api/v1/fluxo-caixa/projecao?dias=30', { token: t })
     const p = r.corpo.data
