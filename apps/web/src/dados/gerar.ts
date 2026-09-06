@@ -14,6 +14,7 @@ import { datasDaCobranca, ehAbertoReceber, saldoReceber } from './receber'
 import type {
   Anexo,
   BaseDados,
+  CategoriaDespesa,
   Cliente,
   Contrato,
   ContratoItem,
@@ -25,8 +26,10 @@ import type {
   DescontoComercial,
   LocalOperacao,
   ModalidadeCobranca,
+  Orcamento,
   OrdemServico,
   Peca,
+  ReplanejamentoOrcamento,
   SerieMensal,
   TabelaFranquia,
   TabelaPreco,
@@ -1247,6 +1250,31 @@ export function gerarBase(semente = 20260730): BaseDados {
     { id: 'cc-desc', empresaId: null, codigo: 'DESC', nome: 'Projeto descontinuado', descricao: 'Mantido para não romper o histórico de rateio.', centroPaiId: null, ativo: false },
   ]
 
+  /* ------------------------------------------------ categorias de despesa */
+  /*
+   * A residual vem primeiro, e existe por decisão do operador: todo título sem
+   * categoria aponta para ela. É o que faz o painel de despesas fechar com o de
+   * contas a pagar desde o primeiro dia, e a fila de trabalho ficar visível em
+   * vez de escondida atrás de um total que não bate.
+   *
+   * As demais têm `classificacaoSugerida` porque é ela que pré-preenche a
+   * classificação do título — sugestão, não imposição: uma licença comprada como
+   * investimento de projeto existe, e a coluna do título continua sendo dele.
+   */
+  const categoriasDespesa: CategoriaDespesa[] = [
+    { id: 'cat-residual', nome: 'Não categorizado', categoriaPaiId: null, classificacaoSugerida: null, ativo: true, residual: true },
+    { id: 'cat-parque', nome: 'Aquisição de parque', categoriaPaiId: null, classificacaoSugerida: 'INVESTIMENTO', ativo: true, residual: false },
+    { id: 'cat-ti', nome: 'Tecnologia interna', categoriaPaiId: null, classificacaoSugerida: 'DESPESA_FIXA', ativo: true, residual: false },
+    // Segundo nível: o máximo que a árvore aceita, e o caso que a tela precisa
+    // saber desenhar.
+    { id: 'cat-ti-lic', nome: 'Licenças de software', categoriaPaiId: 'cat-ti', classificacaoSugerida: 'DESPESA_FIXA', ativo: true, residual: false },
+    { id: 'cat-estrutura', nome: 'Estrutura e ocupação', categoriaPaiId: null, classificacaoSugerida: 'DESPESA_FIXA', ativo: true, residual: false },
+    { id: 'cat-servicos', nome: 'Serviços de terceiros', categoriaPaiId: null, classificacaoSugerida: 'DESPESA_VARIAVEL', ativo: true, residual: false },
+    // Uma inativa: o estado que a tela precisa exibir e que uma massa só de
+    // categorias ativas esconderia.
+    { id: 'cat-antiga', nome: 'Projeto encerrado', categoriaPaiId: null, classificacaoSugerida: 'DESPESA_VARIAVEL', ativo: false, residual: false },
+  ]
+
   const contasBancarias: ContaBancaria[] = [
     { id: 'cb-oper', empresaId: 'emp-alfa', bancoCodigo: '341', bancoNome: 'Itaú Unibanco', agencia: '0912', numero: '45871-3', tipo: 'CORRENTE', apelido: 'Operação', saldoInicial: 418_500, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: 150_000, status: 'ATIVA' },
     { id: 'cb-folha', empresaId: 'emp-alfa', bancoCodigo: '001', bancoNome: 'Banco do Brasil', agencia: '3155', numero: '21004-8', tipo: 'CORRENTE', apelido: 'Folha de pagamento', saldoInicial: 96_200, dataSaldoInicial: iso(somarMeses(HOJE, -7)), limiteCredito: null, status: 'ATIVA' },
@@ -1557,6 +1585,8 @@ export function gerarBase(semente = 20260730): BaseDados {
       fornecedorId: nf.fornecedorId,
       descricao: `Nota fiscal ${nf.serie}/${nf.numero} — aquisição de parque`,
       classificacao: 'INVESTIMENTO',
+      // Sobrescrita pelo passo único abaixo, como o gatilho faz no banco.
+      categoriaId: 'cat-residual',
       // Filial rotativa: é o recorte em que a projeção de caixa filtra, e com
       // todas na mesma o filtro passaria sem provar nada.
       filialId: FILIAIS[i % FILIAIS.length]?.id ?? null,
@@ -1670,6 +1700,8 @@ export function gerarBase(semente = 20260730): BaseDados {
         fornecedorId: fornecedores[(indice + 1) % fornecedores.length]?.id ?? null,
         descricao: r.descricao,
         classificacao: 'DESPESA_FIXA',
+        // Sobrescrita pelo passo único abaixo, como o gatilho faz no banco.
+        categoriaId: 'cat-residual',
         // Distribuídas entre as filiais, para o recorte da projeção ter o que
         // separar: com todas na mesma, o filtro passaria sem provar nada.
         filialId: FILIAIS[indice % FILIAIS.length]?.id ?? null,
@@ -1714,6 +1746,8 @@ export function gerarBase(semente = 20260730): BaseDados {
       fornecedorId: fornecedorServico.id,
       descricao: 'Contrato de suporte técnico terceirizado — 12 meses',
       classificacao: 'DESPESA_FIXA' as ClassificacaoPagar,
+      // Sobrescrita pelo passo único abaixo, como o gatilho faz no banco.
+      categoriaId: 'cat-residual',
       filialId: null as string | null,
       contratoFornecedorRef: 'CTR-SUP-0042',
       valorAjustado: null,
@@ -1777,6 +1811,30 @@ export function gerarBase(semente = 20260730): BaseDados {
       })
     }
   }
+
+  /*
+   * A categoria entra num passo só, depois — como no banco.
+   *
+   * `titulo_pagar_categoria` é um gatilho `before insert`: quem lança não
+   * precisa escolher, e o que chega sem categoria cai na residual. Espalhar
+   * `categoriaId` pelos doze `push` acima daria doze lugares para a mesma regra
+   * e onze chances de esquecer um.
+   *
+   * Um em cada seis fica na residual de propósito. Sem nenhum, a tela não teria
+   * como mostrar a fila de trabalho que a decisão do operador cria — e é
+   * justamente essa fila que ela existe para tornar visível.
+   */
+  const categoriaSugerida = new Map<ClassificacaoPagar, string[]>([
+    ['INVESTIMENTO', ['cat-parque']],
+    ['DESPESA_FIXA', ['cat-ti', 'cat-ti-lic', 'cat-estrutura']],
+    ['DESPESA_VARIAVEL', ['cat-servicos', 'cat-antiga']],
+  ])
+  titulosPagar.forEach((t, i) => {
+    const candidatas = categoriaSugerida.get(t.classificacao) ?? []
+    t.categoriaId = i % 6 === 0 || candidatas.length === 0
+      ? 'cat-residual'
+      : candidatas[i % candidatas.length]!
+  })
 
   titulosPagar.sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))
 
@@ -2356,6 +2414,98 @@ export function gerarBase(semente = 20260730): BaseDados {
 
   lancamentosFuturos.sort((a, b) => a.dataPrevista.localeCompare(b.dataPrevista))
 
+  /* -------------------------------------------- orçamento (Módulo 14) */
+  /*
+   * Os valores orçados são **derivados do que a massa gasta de fato**, e não
+   * sorteados.
+   *
+   * Sorteados, o painel mostraria execuções de 4% e de 900% — números que não
+   * ensinam nada sobre a tela e que escondem se o cálculo está certo. Derivando
+   * do realizado e aplicando uma folga por categoria, cada degrau do semáforo de
+   * RN-F24 aparece pelo menos uma vez: normal, atenção, crítico e estourado.
+   *
+   * A folga é massa desta demonstração, não regra da IARX: em produção o
+   * orçamento é decidido por quem opera, e é justamente por isso que ele é
+   * cadastro e não constante no código.
+   */
+  const orcamentos: Orcamento[] = []
+  const FOLGA: Record<string, number> = {
+    'cat-parque': 1.6,      // sobra confortável → NORMAL
+    'cat-ti': 1.2,          // apertado → ATENCAO
+    'cat-ti-lic': 1.05,     // no limite → CRITICO
+    'cat-estrutura': 0.85,  // estourado, e o painel tem de dizer isso
+    'cat-servicos': 1.35,
+  }
+  const mesesOrcados = comps.slice(-3)
+
+  for (const comp of mesesOrcados) {
+    const [ano, mes] = comp.split('-').map(Number)
+    for (const [categoriaId, folga] of Object.entries(FOLGA)) {
+      const realizado = titulosPagar
+        .filter(
+          (t) =>
+            t.categoriaId === categoriaId &&
+            t.dataEmissao.slice(0, 7) === comp &&
+            t.status !== 'CANCELADO' &&
+            t.status !== 'REJEITADO',
+        )
+        .reduce((a, t) => a + (t.valorAjustado ?? t.valorOriginal), 0)
+
+      // Categoria sem gasto no mês não ganha linha: um orçamento de zero com
+      // realizado de zero é uma linha que só ocupa espaço na tela.
+      if (realizado === 0) continue
+      orcamentos.push({
+        id: `orc-${comp}-${categoriaId}`,
+        ano: ano!,
+        mes: mes!,
+        categoriaId,
+        centroCustoId: null,
+        filialId: null,
+        valorOrcado: Math.round(realizado * folga),
+      })
+    }
+  }
+
+  /*
+   * Um replanejamento na massa, e um só.
+   *
+   * A tela precisa de pelo menos um para mostrar o histórico; mais de um faria
+   * os valores orçados divergirem visivelmente do que a fórmula da folga
+   * explica, e quem lê o código não saberia mais de onde cada número veio.
+   */
+  const replanejamentos: ReplanejamentoOrcamento[] = []
+  /*
+   * O par é **procurado**, não fixado em duas categorias escolhidas à mão.
+   *
+   * A primeira versão pedia `cat-parque` doando para `cat-estrutura` no mesmo
+   * mês, e a massa nem sempre orça as duas na mesma competência: o par não era
+   * encontrado, a lista saía vazia e a tela ficava sem histórico — sem que nada
+   * no gerador dissesse por quê. Procurar o primeiro par que **existe** vale
+   * para qualquer massa.
+   */
+  const doador = orcamentos.find((o) =>
+    orcamentos.some((x) => x.ano === o.ano && x.mes === o.mes && x.categoriaId !== o.categoriaId),
+  )
+  const receptor = orcamentos.find(
+    (o) => o.ano === doador?.ano && o.mes === doador?.mes && o.categoriaId !== doador?.categoriaId,
+  )
+  if (doador && receptor) {
+    const valor = Math.round(doador.valorOrcado * 0.05)
+    doador.valorOrcado -= valor
+    receptor.valorOrcado += valor
+    replanejamentos.push({
+      id: 'rep-0001',
+      origemId: doador.id,
+      destinoId: receptor.id,
+      valorTransferido: valor,
+      motivo: 'Reforço de estrutura após reajuste do aluguel da base',
+      criadoPor: 'usr-admin',
+      // Sempre nulo: não há alçada de orçamento definida (Anexo V).
+      aprovadoPor: null,
+      criadoEm: iso(somarDias(HOJE, -12)),
+    })
+  }
+
   /* ----------------------------------------------------------- indicadores */
   /*
    * Calculados no fim, e não no meio: a carteira e a inadimplência saem de
@@ -2396,6 +2546,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     ordens,
     pecas,
     medicoes,
+    categoriasDespesa,
+    orcamentos,
+    replanejamentos,
     centrosCusto,
     contasBancarias,
     movimentacoes,

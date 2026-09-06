@@ -2751,6 +2751,16 @@ export interface DadosTituloPagar {
   fornecedorId: string | null
   descricao: string
   classificacao: ClassificacaoPagar
+  /**
+   * Natureza do gasto. **Opcional**, e a ausência tem destino: o título cai na
+   * categoria residual do locatário, como o gatilho `titulo_pagar_categoria`
+   * faz no banco.
+   *
+   * Exigi-la transformaria o lançamento de uma despesa numa decisão de
+   * classificação contábil no momento errado; deixá-la sem destino faria o
+   * painel de despesas divergir do de contas a pagar.
+   */
+  categoriaId?: string | null
   filialId?: string | null
   contratoFornecedorRef: string | null
   valorOriginal: number
@@ -2760,6 +2770,17 @@ export interface DadosTituloPagar {
   parcelas: number
   rateio: RateioPagar[]
 }
+
+/**
+ * A categoria residual do locatário — o destino de quem chega sem categoria.
+ *
+ * Procurada pelo campo `residual`, nunca pelo nome: o nome é editável, e um
+ * `find(c => c.nome === 'Não categorizado')` deixaria de encontrá-la no dia de
+ * uma renomeação. O título passaria a nascer sem categoria e o total do painel
+ * divergiria, sem erro nenhum.
+ */
+export const categoriaResidual = (base: BaseDados): string =>
+  base.categoriasDespesa.find((c) => c.residual)?.id ?? 'cat-residual'
 
 let seqTitulo = 0
 
@@ -2852,6 +2873,7 @@ export function criarTituloPagar(
     fornecedorId: dados.fornecedorId,
     descricao: dados.descricao.trim(),
     classificacao: dados.classificacao,
+    categoriaId: dados.categoriaId ?? categoriaResidual(base),
     filialId: dados.filialId ?? null,
     contratoFornecedorRef: dados.contratoFornecedorRef?.trim() || null,
     valorOriginal: arredondar(dados.valorOriginal),

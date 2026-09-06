@@ -20,6 +20,7 @@ import { CentrosCusto } from './telas/CentrosCusto'
 import { ContasBancarias } from './telas/ContasBancarias'
 import { ContasPagar } from './telas/ContasPagar'
 import { ContasReceber } from './telas/ContasReceber'
+import { Despesas } from './telas/Despesas'
 import { LancamentosFuturos } from './telas/LancamentosFuturos'
 import { FluxoCaixa } from './telas/FluxoCaixa'
 import type { Permissao } from './lib/permissoes'
@@ -159,6 +160,14 @@ export function Rotas() {
           element={
             <Protegida permissao="receber:ler">
               <ContasReceber />
+            </Protegida>
+          }
+        />
+        <Route
+          path="despesas"
+          element={
+            <Protegida permissao="despesa:ler">
+              <Despesas />
             </Protegida>
           }
         />

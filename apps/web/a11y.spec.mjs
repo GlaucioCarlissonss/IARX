@@ -27,6 +27,7 @@ const ROTAS = [
   { hash: '#/usuarios', nome: 'usuários', titulo: 'Usuários' },
   { hash: '#/perfis', nome: 'perfis de acesso', titulo: 'Perfis de acesso' },
   { hash: '#/centros-custo', nome: 'centros de custo', titulo: 'Centros de custo' },
+  { hash: '#/despesas', nome: 'despesas', titulo: 'Despesas' },
   { hash: '#/contas-bancarias', nome: 'contas bancárias', titulo: 'Contas bancárias' },
   { hash: '#/contas-pagar', nome: 'contas a pagar', titulo: 'Contas a pagar' },
   { hash: '#/contas-receber', nome: 'contas a receber', titulo: 'Contas a receber' },
@@ -452,6 +453,47 @@ test('a competência já fechada mostra a cobrança, e o atraso é calculado', a
   // Atraso é vencimento no passado com saldo em aberto, e a tela conta os dias
   // a partir da data — não de um campo `diasAtraso` que envelhece sozinho.
   await expect(linhas.nth(1).getByText(/\d+ dias em atraso/)).toBeVisible()
+})
+
+test('a execução orçamentária mostra o degrau junto do número que o justifica', async ({ page }) => {
+  await abrir(page, { hash: '#/despesas' })
+
+  const tabela = page.getByRole('table', { name: /Execução orçamentária por categoria/i })
+  await expect(tabela).toBeVisible()
+  await expect(tabela.getByRole('columnheader', { name: 'Realizado' })).toBeVisible()
+  // Comprometido ao lado do realizado, e não escondido num detalhe: é ele que
+  // limita o replanejamento, e a diferença entre os dois é o que sobra de verba.
+  await expect(tabela.getByRole('columnheader', { name: 'Comprometido' })).toBeVisible()
+
+  /*
+   * O semáforo tem de aparecer com mais de um degrau. Com tudo em "dentro do
+   * orçado" a tela passaria sem nunca exercitar os cortes de 75, 90 e 100 por
+   * cento — e o teste diria que está tudo bem porque não há nada para ver.
+   */
+  const chips = await tabela.getByRole('cell').filter({ hasText: /orçado|75%|90%|Estourado/ }).count()
+  expect(chips).toBeGreaterThan(0)
+})
+
+test('a fila de classificação fica visível, e diz quanto ainda não tem destino', async ({ page }) => {
+  await abrir(page, { hash: '#/despesas' })
+
+  /*
+   * A consequência da decisão do operador: os títulos sem categoria entram no
+   * total — o painel fecha com contas a pagar — e ficam anunciados como fila de
+   * trabalho. A alternativa que ele recusou deixaria esse dinheiro fora dos
+   * números, e o painel não fecharia com contas a pagar no primeiro dia.
+   */
+  const aviso = page.getByRole('region', { name: /Não categorizado/ })
+  await expect(aviso).toBeVisible()
+  await expect(aviso.getByText(/à espera de destino/)).toBeVisible()
+})
+
+test('sem permissão de orçamento, a tela lê e diz o que falta', async ({ page }) => {
+  await abrir(page, { hash: '#/despesas' })
+  // A Consulta lê o painel e não orça: a tela continua inteira, e é só a
+  // capacidade de mexer no orçamento que sai.
+  await page.getByLabel('Perfil de acesso').selectOption({ label: 'Consulta' })
+  await expect(page.getByText(/despesa:orcamento_gerenciar/)).toBeVisible()
 })
 
 /* ==================================================================== */

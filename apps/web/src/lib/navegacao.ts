@@ -43,6 +43,7 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { para: '/contas-bancarias', rotulo: 'Contas bancárias', glifo: '◧', permissao: 'conta_bancaria:ler', grupo: 'Financeiro', detalhe: 'saldo derivado, extrato e conciliação' },
   { para: '/contas-pagar', rotulo: 'Contas a pagar', glifo: '◨', permissao: 'pagar:ler', grupo: 'Financeiro', detalhe: 'fila de aprovação, alçada e baixa' },
   { para: '/contas-receber', rotulo: 'Contas a receber', glifo: '◩', permissao: 'receber:ler', grupo: 'Financeiro', detalhe: 'cobrança, fechamento de competência e baixa' },
+  { para: '/despesas', rotulo: 'Despesas', glifo: '◩', permissao: 'despesa:ler', grupo: 'Financeiro', detalhe: 'orçamento e execução' },
   { para: '/lancamentos-futuros', rotulo: 'Lançamentos futuros', glifo: '◷', permissao: 'financeiro:lancamento_manual', grupo: 'Financeiro', detalhe: 'compromissos programados, séries e conversão' },
   { para: '/fluxo-caixa', rotulo: 'Fluxo de caixa', glifo: '◭', permissao: 'financeiro:painel_executivo', grupo: 'Financeiro', detalhe: 'projeção diária, cenários e alertas' },
   { para: '/usuarios', rotulo: 'Usuários', glifo: '◑', permissao: 'usuario:gerenciar', grupo: 'Administração', detalhe: 'contas, convites e perfis' },

@@ -585,6 +585,9 @@ export interface BaseDados {
   ordens: OrdemServico[]
   pecas: Peca[]
   medicoes: MedicaoCompetencia[]
+  categoriasDespesa: CategoriaDespesa[]
+  orcamentos: Orcamento[]
+  replanejamentos: ReplanejamentoOrcamento[]
   centrosCusto: CentroCusto[]
   contasBancarias: ContaBancaria[]
   movimentacoes: Movimentacao[]
@@ -608,6 +611,73 @@ export interface BaseDados {
  * distinguem por ela. `empresaId` nulo é centro global do locatário, o caso
  * comum de "Administrativo" — ausência deliberada de vínculo, não dado faltando.
  */
+/* ------------------------------------------------------------- despesas --- */
+
+/**
+ * Natureza do gasto. Dimensão distinta do centro de custo, que é organizacional.
+ *
+ * Dois níveis, não três: categoria e subcategoria bastam, e abaixo disso vira
+ * catálogo de fornecedor.
+ */
+export interface CategoriaDespesa {
+  id: string
+  nome: string
+  categoriaPaiId: string | null
+  /** Pré-preenche a classificação do título; quem lança pode discordar. */
+  classificacaoSugerida: ClassificacaoPagar | null
+  ativo: boolean
+  /**
+   * A categoria "Não categorizado" do locatário.
+   *
+   * Campo, e não comparação por nome: o nome é editável, e comparar por ele
+   * deixaria o preenchimento sem destino no dia de uma renomeação.
+   */
+  residual: boolean
+}
+
+/**
+ * Valor orçado por período e dimensão.
+ *
+ * **Sem campo de gasto, de execução ou de percentual.** Tudo isso é derivado de
+ * `titulo_pagar` a cada consulta, por `execucaoOrcamentaria()`. Guardar
+ * "quanto já foi gasto" divergiria do que os títulos somam no instante em que um
+ * for cancelado ou tiver o valor ajustado — o mesmo argumento do saldo de conta
+ * e do saldo de título.
+ *
+ * `mes` nulo é orçamento anual sem quebra mensal; `categoriaId` nulo é o
+ * orçamento geral do centro. Nulo aqui é ausência deliberada de recorte.
+ */
+export interface Orcamento {
+  id: string
+  ano: number
+  mes: number | null
+  categoriaId: string | null
+  centroCustoId: string | null
+  filialId: string | null
+  valorOrcado: number
+}
+
+/**
+ * Movimento de verba entre duas linhas de orçamento.
+ *
+ * `aprovadoPor` é sempre nulo, e o nulo é a informação: não existe alçada de
+ * orçamento definida — nem faixas, nem se a aprovação é passo único ou fila.
+ * Registrado no Anexo V.
+ */
+export interface ReplanejamentoOrcamento {
+  id: string
+  origemId: string
+  destinoId: string
+  valorTransferido: number
+  motivo: string
+  criadoPor: string
+  aprovadoPor: string | null
+  criadoEm: string
+}
+
+/** Os cinco degraus de RN-F24. Calculados, nunca guardados. */
+export type LimiarExecucao = 'NORMAL' | 'ATENCAO' | 'CRITICO' | 'ESTOURADO' | 'SEM_ORCAMENTO'
+
 export interface CentroCusto {
   id: string
   empresaId: string | null
@@ -765,6 +835,16 @@ export interface TituloPagar {
   fornecedorId: string | null
   descricao: string
   classificacao: ClassificacaoPagar
+  /**
+   * Natureza do gasto (Módulo 14). **Nunca nulo.**
+   *
+   * Não porque o campo seja obrigatório para quem lança — não é —, mas porque o
+   * título que chega sem categoria cai na residual do locatário, por gatilho. É
+   * o que faz o total do painel de despesas fechar com o de contas a pagar
+   * sempre, e a fila de trabalho ficar visível em vez de escondida atrás de um
+   * total que não bate.
+   */
+  categoriaId: string
   /*
    * Filial, pelo mesmo motivo que `TituloReceber` tem a dela: é o recorte em que
    * a projeção de caixa filtra. Sem a coluna aqui, um recorte por filial somaria

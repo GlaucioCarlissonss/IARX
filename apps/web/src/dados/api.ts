@@ -27,13 +27,23 @@ function esperar() {
 }
 
 export class ErroApi extends Error {
-  constructor(
-    readonly codigo: string,
-    mensagem: string,
-    readonly acoes: string[] = [],
-  ) {
+  readonly codigo: string
+  readonly acoes: string[]
+
+  /*
+   * Campos declarados e atribuídos, em vez de propriedades de parâmetro.
+   *
+   * `constructor(readonly codigo: string)` é açúcar do TypeScript que **emite
+   * código** — e o modo de remoção de tipos do Node, que é como esta suíte roda
+   * `.ts` sem compilar, recusa qualquer sintaxe assim. O efeito era que nenhum
+   * teste conseguia importar este arquivo, e com ele toda a camada de consultas
+   * derivadas ficava sem cobertura por causa de um detalhe de sintaxe.
+   */
+  constructor(codigo: string, mensagem: string, acoes: string[] = []) {
     super(mensagem)
     this.name = 'ErroApi'
+    this.codigo = codigo
+    this.acoes = acoes
   }
 }
 
@@ -113,6 +123,8 @@ export const api = {
   fornecedores: () => responder(() => [...BASE.fornecedores]),
   usuarios: () => responder(() => [...BASE.usuarios]),
   centrosCusto: () => responder(() => [...BASE.centrosCusto]),
+  categoriasDespesa: () => responder(() => [...BASE.categoriasDespesa]),
+  orcamentos: () => responder(() => [...BASE.orcamentos]),
   titulosPagar: () => responder(() => [...BASE.titulosPagar]),
   titulosReceber: () => responder(() => [...BASE.titulosReceber]),
   lancamentosFuturos: () => responder(() => [...BASE.lancamentosFuturos]),

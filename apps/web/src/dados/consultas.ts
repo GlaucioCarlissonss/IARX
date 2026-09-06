@@ -3,11 +3,16 @@ import { categoriaPorCodigo, modeloPorId, nomeModelo, regiaoPorId } from './cata
 import { HOJE, iso } from './gerar'
 import { ehAbertoReceber, saldoReceber } from './receber'
 import type {
+  BaseDados,
   Cliente,
   Equipamento,
+  LimiarExecucao,
   MedicaoCompetencia,
+  Orcamento,
   OrdemServico,
   Peca,
+  StatusPagar,
+  TituloPagar,
   TituloReceber,
 } from './tipos'
 
@@ -369,4 +374,210 @@ export function pendenciasDeMedicao(): PendenciaMedicao[] {
       }
     })
     .sort((a, b2) => b2.mesesSemLeitura - a.mesesSemLeitura)
+}
+
+/* --------------------------------------------------------------- despesas */
+
+/**
+ * Execução orçamentária — **derivada, nunca guardada**.
+ *
+ * Espelha `app.execucao_orcamentaria` do banco. As duas existem porque a tela
+ * precisa responder sem ida ao servidor e o banco precisa responder para quem
+ * não passa pela tela; a duplicação é assumida e tem contrapartida, como no
+ * resto do bloco financeiro: os testes desta suíte e os de invariante falham
+ * juntos se a regra mudar num lado só.
+ *
+ * O limiar de RN-F24 sai daqui e não de um campo: um título cancelado depois de
+ * disparar o alerta de 90% precisa fazer o alerta **desaparecer**, não persistir
+ * um estado que o dado atual já não sustenta.
+ */
+export interface LinhaExecucao {
+  orcamento: Orcamento
+  categoriaNome: string
+  valorOrcado: number
+  realizado: number
+  comprometido: number
+  /** Nulo quando o orçado é zero: dividir por zero não é 0%, é indefinido. */
+  percentual: number | null
+  limiar: LimiarExecucao
+}
+
+/** Estados que **não** contam como despesa: foram desfeitos. */
+const FORA_DA_DESPESA: StatusPagar[] = ['CANCELADO', 'REJEITADO']
+
+/**
+ * D-25 — o que já tem destino certo.
+ *
+ * O gasto **e** o aprovado-não-pago. `PENDENTE` e `EM_APROVACAO` ficam de fora:
+ * ainda podem ser rejeitados, e travar verba em cima de pedido não aprovado
+ * congelaria dinheiro por um lançamento que ninguém aceitou.
+ */
+const COMPROMETIDO: StatusPagar[] = ['APROVADO', 'AGENDADO', 'PAGO_PARCIAL', 'PAGO']
+
+const valorDevido = (t: TituloPagar) => t.valorAjustado ?? t.valorOriginal
+
+/** A fatia de um título que pertence a um centro. Sem centro, o título inteiro. */
+function parteDoCentro(t: TituloPagar, centroId: string | null): number {
+  if (!centroId) return valorDevido(t)
+  const r = t.rateio.find((x) => x.centroCustoId === centroId)
+  // Sem rateio para aquele centro, o título não é dele: contar inteiro faria a
+  // soma dos centros exceder a despesa real.
+  return r ? Math.round(valorDevido(t) * (r.percentual / 100) * 100) / 100 : 0
+}
+
+export function despesaRealizada(
+  base: BaseDados,
+  de: string,
+  ate: string,
+  opcoes: {
+    categoriaId?: string | null
+    centroCustoId?: string | null
+    filialId?: string | null
+    status?: StatusPagar[]
+  } = {},
+): number {
+  const permitidos = opcoes.status
+  const total = base.titulosPagar
+    .filter((t) => {
+      if (t.dataEmissao < de || t.dataEmissao > ate) return false
+      if (permitidos ? !permitidos.includes(t.status) : FORA_DA_DESPESA.includes(t.status)) return false
+      if (opcoes.categoriaId && t.categoriaId !== opcoes.categoriaId) return false
+      if (opcoes.filialId && t.filialId !== opcoes.filialId) return false
+      if (opcoes.centroCustoId && !t.rateio.some((r) => r.centroCustoId === opcoes.centroCustoId))
+        return false
+      return true
+    })
+    .reduce((a, t) => a + parteDoCentro(t, opcoes.centroCustoId ?? null), 0)
+  return Math.round(total * 100) / 100
+}
+
+/** Primeiro e último dia do período de um orçamento. Mês nulo = o ano inteiro. */
+function janelaDoOrcamento(o: Orcamento): { de: string; ate: string } {
+  if (o.mes === null) return { de: `${o.ano}-01-01`, ate: `${o.ano}-12-31` }
+  const mm = String(o.mes).padStart(2, '0')
+  const ultimo = new Date(Date.UTC(o.ano, o.mes, 0)).getUTCDate()
+  return { de: `${o.ano}-${mm}-01`, ate: `${o.ano}-${mm}-${String(ultimo).padStart(2, '0')}` }
+}
+
+/** Os degraus de RN-F24: 75, 90 e 100 por cento. */
+function limiarDe(orcado: number, realizado: number): LimiarExecucao {
+  if (orcado === 0) return 'SEM_ORCAMENTO'
+  const p = realizado / orcado
+  if (p >= 1) return 'ESTOURADO'
+  if (p >= 0.9) return 'CRITICO'
+  if (p >= 0.75) return 'ATENCAO'
+  return 'NORMAL'
+}
+
+export function execucaoOrcamentaria(
+  ano: number,
+  mes?: number,
+  centroCustoId?: string,
+): LinhaExecucao[] {
+  const b = base()
+  return b.orcamentos
+    .filter((o) => o.ano === ano)
+    .filter((o) => mes === undefined || o.mes === null || o.mes === mes)
+    .filter((o) => !centroCustoId || o.centroCustoId === centroCustoId)
+    .map((o) => {
+      const { de, ate } = janelaDoOrcamento(o)
+      const comum = {
+        categoriaId: o.categoriaId,
+        centroCustoId: o.centroCustoId,
+        filialId: o.filialId,
+      }
+      const realizado = despesaRealizada(b, de, ate, comum)
+      return {
+        orcamento: o,
+        categoriaNome:
+          b.categoriasDespesa.find((c) => c.id === o.categoriaId)?.nome ?? 'Geral do centro',
+        valorOrcado: o.valorOrcado,
+        realizado,
+        comprometido: despesaRealizada(b, de, ate, { ...comum, status: COMPROMETIDO }),
+        percentual: o.valorOrcado === 0 ? null : realizado / o.valorOrcado,
+        limiar: limiarDe(o.valorOrcado, realizado),
+      }
+    })
+    .sort((a, b2) => a.categoriaNome.localeCompare(b2.categoriaNome))
+}
+
+/** Saldo que ainda pode ser replanejado: orçado menos comprometido (RN-F23). */
+export function saldoNaoComprometido(base_: BaseDados, o: Orcamento): number {
+  const { de, ate } = janelaDoOrcamento(o)
+  const comprometido = despesaRealizada(base_, de, ate, {
+    categoriaId: o.categoriaId,
+    centroCustoId: o.centroCustoId,
+    filialId: o.filialId,
+    status: COMPROMETIDO,
+  })
+  return Math.round((o.valorOrcado - comprometido) * 100) / 100
+}
+
+export interface IndicadoresDespesa {
+  despesaTotal: number
+  despesaAnterior: number
+  /** Nulo quando o período anterior não teve despesa: variação sobre zero é indefinida. */
+  variacao: number | null
+  totalOrcado: number
+  execucaoPercentual: number | null
+  proporcaoInvestimento: number
+  clientesAtivos: number
+  equipamentosLocados: number
+  /** D-26, os dois lado a lado. Nulo sem denominador. */
+  custoPorClienteAtivo: number | null
+  custoPorEquipamentoLocado: number | null
+  execucao: LinhaExecucao[]
+}
+
+export function indicadoresDespesa(ano: number, mes?: number): IndicadoresDespesa {
+  const b = base()
+  const mm = mes === undefined ? null : String(mes).padStart(2, '0')
+  const de = mm ? `${ano}-${mm}-01` : `${ano}-01-01`
+  const ate = mm
+    ? `${ano}-${mm}-${String(new Date(Date.UTC(ano, mes!, 0)).getUTCDate()).padStart(2, '0')}`
+    : `${ano}-12-31`
+
+  const anteriorMes = mes === undefined ? undefined : mes === 1 ? 12 : mes - 1
+  const anteriorAno = mes === undefined ? ano - 1 : mes === 1 ? ano - 1 : ano
+  const am = anteriorMes === undefined ? null : String(anteriorMes).padStart(2, '0')
+  const deAnt = am ? `${anteriorAno}-${am}-01` : `${anteriorAno}-01-01`
+  const ateAnt = am
+    ? `${anteriorAno}-${am}-${String(new Date(Date.UTC(anteriorAno, anteriorMes!, 0)).getUTCDate()).padStart(2, '0')}`
+    : `${anteriorAno}-12-31`
+
+  const total = despesaRealizada(b, de, ate)
+  const anterior_ = despesaRealizada(b, deAnt, ateAnt)
+  const execucao = execucaoOrcamentaria(ano, mes)
+  const orcado = execucao.reduce((a, l) => a + l.valorOrcado, 0)
+
+  const investimento = b.titulosPagar
+    .filter(
+      (t) =>
+        t.dataEmissao >= de &&
+        t.dataEmissao <= ate &&
+        !FORA_DA_DESPESA.includes(t.status) &&
+        t.classificacao === 'INVESTIMENTO',
+    )
+    .reduce((a, t) => a + valorDevido(t), 0)
+
+  const clientesAtivos = new Set(
+    b.contratos.filter((c) => c.status === 'ATIVO').map((c) => c.clienteId),
+  ).size
+  const equipamentosLocados = b.equipamentos.filter((e) => e.status === 'LOCADO').length
+
+  return {
+    despesaTotal: total,
+    despesaAnterior: anterior_,
+    variacao: anterior_ === 0 ? null : (total - anterior_) / anterior_,
+    totalOrcado: orcado,
+    execucaoPercentual: orcado === 0 ? null : total / orcado,
+    proporcaoInvestimento: total === 0 ? 0 : investimento / total,
+    clientesAtivos,
+    equipamentosLocados,
+    // Dividir por zero cliente não é custo zero, é pergunta sem resposta.
+    custoPorClienteAtivo: clientesAtivos === 0 ? null : Math.round((total / clientesAtivos) * 100) / 100,
+    custoPorEquipamentoLocado:
+      equipamentosLocados === 0 ? null : Math.round((total / equipamentosLocados) * 100) / 100,
+    execucao,
+  }
 }

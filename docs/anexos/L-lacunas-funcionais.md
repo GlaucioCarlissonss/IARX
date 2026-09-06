@@ -2354,13 +2354,18 @@ orçamentária distinta. `financeiro:exportar` (já existe) para os relatórios.
 - [ ] Relatório exportado em PDF e em Excel contêm os mesmos números da tela
 
 ### Lacunas e Decisões Pendentes
-- **[DECISÃO D-25]** O que conta como "comprometido" ao limitar o
+- ~~**[DECISÃO D-25]**~~ **Resolvida** como esta seção recomendava: o gasto **e**
+  o aprovado-não-pago ([Anexo V](V-controle-de-despesas.md) §V.4). O texto
+  original: o que conta como "comprometido" ao limitar o
   replanejamento — só o já gasto (`titulo_pagar` `PAGO`/`PAGO_PARCIAL`) ou
   também o **aprovado e ainda não pago**? Recomendação: os dois — um
   orçamento que ignora compromisso já aprovado e não pago permitiria
   replanejar verba que já tem destino certo, e o replanejamento pareceria
   válido até o vencimento do título original chegar.
-- **[DECISÃO D-26]** Confirmar o indicador análogo a "custo por paciente":
+- ~~**[DECISÃO D-26]**~~ **Resolvida: os dois lado a lado** — por cliente ativo e
+  por equipamento locado (Anexo V §V.5). A única diferença entre eles é o
+  denominador, o que torna mostrar os dois mais barato do que escolher. O texto
+  original: confirmar o indicador análogo a "custo por paciente":
   por cliente ativo, por equipamento locado, ou os dois lado a lado? Sem essa
   confirmação o indicador fica documentado como fórmula, sem entrar no painel
   padrão.
@@ -2371,18 +2376,25 @@ independem dela. D-26 trava exatamente um indicador, e esta seção já declara 
 que fazer sem a resposta. As três pendências abaixo são mais impeditivas, e
 nenhuma estava registrada:
 
-- **[PENDÊNCIA · bloqueante] `titulo_pagar.categoria_id` não existe.** Ela está
+- ~~**[PENDÊNCIA · bloqueante] `titulo_pagar.categoria_id` não existe.**~~
+  **Resolvida** na migração 0023, junto de `categoria_despesa`, do backfill e do
+  gatilho que preenche a residual. Ver [Anexo V](V-controle-de-despesas.md) §V.2.
+  O texto original fica abaixo, porque o diagnóstico continua valendo: Ela está
   especificada no Módulo 10 desta mesma seção, e a migração 0019 **não a
   criou** — o [Anexo S](S-contas-a-pagar.md) sequer registra a omissão. Sem essa
   coluna, `Σ(titulo_pagar.valor_devido) WHERE categoria_id = X` não tem sobre o
   que rodar: é a fórmula central do módulo. Construir o Módulo 14 começa por
   `alter table titulo_pagar add column categoria_id`, **depois** de
   `categoria_despesa` existir.
-- **[DECISÃO · nova] O que fazer com os títulos já lançados sem categoria?**
-  Backfill manual, uma categoria "Não categorizado", ou excluí-los da execução
-  orçamentária? Muda os números do painel no primeiro dia, e é regra de negócio
-  de verdade — não deve ser escolhida por quem escreve o código.
-- **[LACUNA] A alçada de aprovação do replanejamento não existe.** O fluxo de
+- ~~**[DECISÃO · nova] O que fazer com os títulos já lançados sem categoria?**~~
+  **Decidida pelo operador: categoria "Não categorizado".** A migração 0023 a
+  provisiona por locatário e aponta todos os títulos existentes para ela; um
+  gatilho `before insert` mantém a promessa para os que ainda vão nascer. O
+  painel fecha com o total de contas a pagar desde o primeiro dia, e a fila de
+  classificação fica visível em vez de escondida atrás de um total que não bate.
+- **[LACUNA · continua aberta] A alçada de aprovação do replanejamento não
+  existe.** O módulo foi construído **sem** ela, e `aprovado_por` é nulável para
+  dizer isso — ver Anexo V §V.8. Texto original: O fluxo de
   usuário diz "sujeito a aprovação se acima da alçada do perfil", mas nenhum
   `alcada.tipo` de orçamento está definido, nem as faixas, nem se a aprovação é
   em passo único ou fila como `titulo_pagar_aprovacao`. `replanejamento_orcamento.aprovado_por`
@@ -2417,7 +2429,7 @@ nenhuma estava registrada:
 | **11** | **Contas a Receber** | Módulos 6, 8, 9 | Alta | **Alta** | ✅ Feito (Anexo T) — D-20 fechada, fechamento de competência construído |
 | **12** | **Lançamentos Futuros** | Módulos 10, 11 | Alta | Média-Alta | ✅ Feito (Anexo U) — quatro invariantes, worker de conversão, D-23 fechada |
 | **13** | **Fluxo de Caixa** | Módulos 9, 10, 11, 12 | Alta | Média | ✅ Feito (Anexo U) — uma projeção só, nenhuma posição diária gravada |
-| **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | 🔲 Novo — orçamento + indicadores, tudo calculado |
+| **14** | **Controle de Despesas** | Módulos 8, 10 | Média | Média | ✅ Feito — migração 0023, [Anexo V](V-controle-de-despesas.md). Orçamento, execução derivada e o semáforo de RN-F24 |
 
 Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12 → 13 →
 14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
