@@ -314,6 +314,30 @@ atribuído direto a técnico — e o cliente informa sintoma e local, nunca
 prioridade. Prioridade é decisão do SLA contratado, não do solicitante; deixar
 o cliente escolher faz todo chamado virar crítico e o indicador perde sentido.
 
+### D-27 · O que dispara o recorte por unidade — **RESOLVIDA**
+
+**Decisão:** **o escopo do perfil decide se o recorte se aplica; a tabela de
+vínculo diz quais locais.** Perfil com escopo `LOCAL_CLIENTE` enxerga só os
+locais listados em `usuario_local_cliente` — sem vínculo, nada. Perfil com
+escopo `CLIENTE` enxerga o grupo econômico, como antes.
+
+**Fundamentação.** A alternativa — "quem tem vínculo é recortado, quem não tem
+vê tudo" — é a que parece natural e é a perigosa: um vínculo apagado por engano
+**promoveria** o gestor de unidade a administrador do grupo, em silêncio. Além
+disso, é a única leitura sob a qual RN-L26 ("sem vínculo, não vê nada") e "o
+Administrador do cliente não tem vínculo e precisa ver o grupo" são verdadeiras
+ao mesmo tempo.
+
+Tem apoio estrutural: o [Anexo C](C-matriz-de-permissoes.md) §C.1 define
+autorização como `possui(permissão) AND registro ∈ escopo AND satisfaz(alçada)`,
+e o escopo é `usuario_perfil.escopo_tipo`. Fazer o recorte depender da
+*existência* de vínculos acrescentaria um quarto termo que a fórmula não tem —
+e que nenhuma outra parte do sistema consulta.
+
+Implementada em `0024_escopo_de_unidade.sql` com políticas `as restrictive`, que
+compõem com **E**: o vínculo indevido a local de outro cliente não dissolve a
+política de cliente. Detalhe em [Anexo W](W-portal-do-cliente.md) §W.2 e §W.3.
+
 ---
 
 ## M.6 Geolocalização
@@ -382,6 +406,9 @@ cliente. É produto próprio, não funcionalidade.
 | D-13 | Geocodificação | Nominatim, por ação explícita | Política de uso: 1 req/s, sem busca a cada tecla |
 | D-20 | Contas a receber | **Tabela única com origem** | Duas tabelas = duas verdades sobre a dívida do cliente |
 | D-21 | Índice de reajuste | **Cadastro manual mensal** | Motor roda dentro do banco; API externa vira dependência de rede |
+| D-25 | O que conta como comprometido | Gasto **mais** aprovado-não-pago ([Anexo V](V-controle-de-despesas.md) §V.4) | Replanejar verba já comprometida passaria despercebido até o vencimento |
+| D-26 | Análogo a "custo por paciente" | Os **dois**: por cliente ativo e por equipamento locado (Anexo V §V.5) | A única diferença é o denominador; mostrar os dois é mais barato que escolher sem base |
+| D-27 | O que dispara o recorte por unidade | **O escopo do perfil**; o vínculo diz quais locais ([Anexo W](W-portal-do-cliente.md) §W.2) | O inverso promoveria o gestor a administrador do grupo ao apagar um vínculo |
 | — | A3 | 2 × A4, configurável | Contador do equipamento e tabela comercial |
 | — | Duplex | 2 páginas, sem conversão | Contador conta faces, não folhas |
 | — | Scan | Registrado, não cobrado | Minoria no mercado |
@@ -409,3 +436,4 @@ Registro honesto do risco de cada uma, para revisão futura.
 | D-07 Auth própria | **Alto se para trás, baixo se para frente.** Migrar para Supabase Auth depois exige redefinição de senha em massa — o hash é nosso e não se exporta. Ir de Supabase para próprio seria o mesmo problema espelhado. É a decisão mais cara de reverter deste conjunto, e por isso a que mais merecia ser tomada com os dois custos à vista |
 | D-20 Título único | **Médio.** Separar depois exige migrar as linhas CONTRATUAL para uma tabela `fatura` e reapontar o portal |
 | D-21 Índice manual | **Nenhum.** Acrescentar consulta a API depois não invalida os índices já cadastrados |
+| D-27 Recorte pelo escopo | **Baixo.** É uma função (`app.local_visivel`) chamada por quatro políticas; mudar o gatilho do recorte é reescrevê-la. O que **não** é baixo é errar: enquanto estiver errado, o erro só aparece como dado a mais na tela de quem não devia vê-lo, e ninguém reclama de ver demais |

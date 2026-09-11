@@ -963,14 +963,19 @@ cliente alcança dado do locador.
   pagar este mês"
 
 ### Critérios de Aceite
-- [ ] Usuário do cliente A recebe 404 — não 403 — ao pedir contrato do cliente B
-- [ ] Nenhuma rota `/portal` devolve margem, custo de manutenção ou valor de aquisição
-- [ ] Valor de competência fechada é idêntico ao da fatura emitida
-- [ ] Competência aberta aparece marcada como parcial, com a data da última leitura
-- [ ] Gestor de filial não alcança o consolidado do grupo por URL montada à mão
-- [ ] Exportação em PDF e Excel reflete exatamente o recorte do usuário
-- [ ] Alertas de vencimento e de franquia respeitam a preferência do usuário
-- [ ] Portal atende WCAG 2.2 AA no mesmo gate já existente
+- [x] Usuário do cliente A recebe 404 — não 403 — ao pedir contrato do cliente B
+- [x] Nenhuma rota `/portal` devolve margem, custo de manutenção ou valor de aquisição
+- [x] Valor de competência fechada é idêntico ao da fatura emitida — a locação é a
+  **decomposição** do total que a cobrança fixou, não uma segunda soma
+- [x] Competência aberta aparece marcada como parcial, com a data da última leitura
+- [x] Gestor de filial não alcança o consolidado do grupo por URL montada à mão
+- [ ] Exportação em PDF e Excel reflete exatamente o recorte do usuário — **não
+  construído**: não há geração de PDF/XLSX no servidor (mesma ausência do
+  [Anexo V](V-controle-de-despesas.md) §V.8)
+- [ ] Alertas de vencimento e de franquia respeitam a preferência do usuário —
+  **não construído**: RN-L36 não tem tabela nem granularidade definida
+- [ ] Portal atende WCAG 2.2 AA no mesmo gate já existente — **sem tela**: as
+  rotas existem e são verificadas por teste; a tela é passo próprio
 
 ### Lacunas e Decisões Pendentes
 - ~~**[DECISÃO D-09]**~~ **Resolvida** ([Anexo M](M-decisoes-mercado-brasileiro.md)
@@ -987,16 +992,25 @@ cliente alcança dado do locador.
   política de retenção do histórico visível ao cliente. **Não bloqueia**: o
   portal nasce mostrando todo o histórico existente, e a retenção entra como
   parâmetro depois.
-- **[LACUNA · descoberta na revisão]** `usuario_local_cliente` existe desde a
-  0011 e **nenhuma política de RLS ou rota a consulta**. RN-L26 e RN-L34 —
-  "gestor de unidade não alcança o consolidado do grupo" — não estão
-  implementadas em lugar nenhum, e o critério de aceite correspondente
-  **falharia hoje**. É o único desenho novo que o Portal ainda exige: como a
-  política restritiva por `local_operacao` compõe com a de `cliente_id` sem
-  quebrar o Admin Cliente, que não tem vínculo e precisa ver o grupo inteiro.
-  Note também que RN-L26 chama a tabela de `usuario_filial_cliente` e as visões
-  materializadas falam de `filial_cliente` — os dois nomes estão errados; a
-  entidade é `local_operacao`, desde a 0005.
+- ~~**[LACUNA · descoberta na revisão]** `usuario_local_cliente` sem leitor~~
+  **Resolvida** ([Anexo W](W-portal-do-cliente.md) §W.2 e §W.3, migração
+  `0024_escopo_de_unidade.sql`). O defeito foi **medido antes de corrigido**: um
+  usuário com escopo `LOCAL_CLIENTE` lia a unidade irmã. O desenho que faltava:
+  **o escopo do perfil decide se o recorte se aplica, e a tabela de vínculo diz
+  quais locais** — com `LOCAL_CLIENTE` e nenhum vínculo, nada (RN-L26); com
+  `CLIENTE`, o grupo inteiro (Admin Cliente). As políticas são `as restrictive`,
+  então compõem com E: vínculo indevido a local de outro cliente não abre nada.
+  Registrada em [Anexo M](M-decisoes-mercado-brasileiro.md) §M.5 como D-27.
+- **[CORREÇÃO DE NOME]** RN-L26 chama a tabela de `usuario_filial_cliente` e as
+  visões materializadas acima falam de `filial_cliente`: os dois nomes estão
+  errados. A entidade é `local_operacao` desde a 0005, e é assim que as rotas
+  construídas a nomeiam (`?local_id=`).
+- **[LACUNA · descoberta ao construir]** As duas visões materializadas acima
+  **não foram criadas**, e não por esquecimento: otimização sem medição é aposta.
+  As consultas diretas respondem e os índices da 0013 as cobrem; uma visão
+  materializada acrescenta o problema de quando atualizar — inclusive a janela em
+  que o cliente lê número velho logo depois do fechamento. Entram quando houver
+  medida que as justifique.
 
 ---
 
@@ -2422,7 +2436,7 @@ nenhuma estava registrada:
 | **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, hoje 86/86 rotas (Anexo Q §Q.8) |
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
-| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | 🔲 Pendente — depende só do 4 agora |
+| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | ✅ API feita — migração 0024 e sete rotas ([Anexo W](W-portal-do-cliente.md)). Falta a tela, a exportação e as preferências de notificação |
 | **8** | **Centros de Custo** | — | Alta | Baixa | ✅ Feito (Anexo R) |
 | **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
 | **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | ✅ Feito (Anexo S) — nove invariantes, alçada configurável, delegação |
@@ -2435,19 +2449,20 @@ Ordem recomendada para esta rodada: **4 → 4.5 → 8 ∥ 9 → 10 → 11 → 12
 14**, com o Módulo 5 (Portal) podendo entrar em paralelo assim que o 4
 terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 
-Executado até aqui: **4, 4.5, 8, 9, 10, 11, 12 e 13**. Restam o **5** (Portal do
-Cliente) e o **14** (Controle de Despesas).
+Executado até aqui: **4, 4.5, 5 (API), 8, 9, 10, 11, 12, 13 e 14**.
 
-O Portal **não depende de mais nada**: D-09 e D-10 estão resolvidas no
-[Anexo M](M-decisoes-mercado-brasileiro.md) §M.5, e D-10 já está codificada na
-migração `0011_eixo_cliente.sql` — o cliente abre chamado, a triagem é
-obrigatória e a prioridade não é dele. O que falta construir de estrutura é
-RN-L26/RN-L34 sobre `usuario_local_cliente`: a tabela existe desde a 0011 e **não
-é lida por nenhuma política nem por nenhuma rota**, então hoje um gestor de
-unidade enxerga tudo do grupo.
+Do Módulo 5 falta a **tela** — audiência diferente de todas as outras, é o
+cliente e não o operador —, a exportação PDF/Excel e as preferências de
+notificação, ambas por ausência de infraestrutura e não por decisão. O recorte
+por unidade que o Portal exigia está construído: RN-L26/RN-L34 sobre
+`usuario_local_cliente`, na migração `0024`, com o defeito medido antes de
+corrigido ([Anexo W](W-portal-do-cliente.md) §W.1).
 
-O Módulo 14 tem um bloqueio que não é decisão e não estava registrado: veja a
-pendência de `titulo_pagar.categoria_id` no fim desta seção.
+Fora deste conjunto estão **Ordens de Serviço** e **Estoque**: aparecem no
+[Anexo B](B-maquinas-de-estado.md) e no [Anexo F](F-glossario.md), mas **nunca
+foram especificados neste formato** — não têm módulo aqui, e portanto não têm
+regras de negócio, endpoints nem critérios de aceite. São pendência de
+especificação antes de serem pendência de construção.
 
 ---
 
