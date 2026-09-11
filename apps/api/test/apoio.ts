@@ -280,6 +280,20 @@ export const CONTA_RECEBIMENTO = '11111111-1111-4111-8111-11111111cb02'
 /* --------------------------------------------------- contas a receber */
 
 export const CLIENTE_ALFA = '11111111-1111-4111-8111-11111111c101'
+
+/* ------------------------------------------------------- portal do cliente */
+
+/** Escopo CLIENTE, sem vínculo de unidade: vê o próprio CNPJ inteiro. */
+export const USUARIO_CLIENTE_ADMIN = '11111111-1111-4111-8111-1111111190c1'
+/** Escopo LOCAL_CLIENTE, vinculado só à Matriz Alfa. */
+export const USUARIO_CLIENTE_UNIDADE = '11111111-1111-4111-8111-1111111190c2'
+/** Do outro cliente: é o token que tem de receber 404, nunca 403. */
+export const USUARIO_CLIENTE_GAMA = '11111111-1111-4111-8111-1111111190c3'
+
+export const LOCAL_MATRIZ_ALFA = '11111111-1111-4111-8111-11111111b101'
+export const LOCAL_NORTE_ALFA = '11111111-1111-4111-8111-11111111b103'
+export const CONTRATO_ALFA = '11111111-1111-4111-8111-1111111170a1'
+export const CONTRATO_GAMA = '11111111-1111-4111-8111-1111111170a3'
 export const CLIENTE_GAMA = '11111111-1111-4111-8111-11111111c102'
 /** ATIVO, com consumo de 2026-06: gera título contratual sem exceção. */
 export const CONTRATO_COM_CONSUMO = '11111111-1111-4111-8111-1111111170a1'

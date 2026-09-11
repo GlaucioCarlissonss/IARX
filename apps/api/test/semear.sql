@@ -466,3 +466,64 @@ insert into public.recorrencia
    'PAGAR', 'Aluguel do vizinho', 500.0000, 'MENSAL', 1,
    '2026-04-01', (select id from public.empresa where tenant_id = '22222222-2222-4222-8222-222222222222' limit 1),
    'DESPESA_FIXA', '22222222-2222-4222-8222-222222220001', '2026-01-06T09:00:00-03:00');
+
+-- -----------------------------------------------------------------------------
+-- Portal do cliente (Módulo 5) — usuários de cliente e o recorte por unidade
+--
+-- Acrescentado no fim de propósito: mexer nas seções acima deslocaria dados que
+-- outros arquivos da suíte endereçam por id.
+--
+-- Duas unidades do **mesmo** cliente, e é isso que torna o recorte da 0024
+-- verificável: com uma unidade só, "vê a sua" e "vê todas" dão o mesmo número, e
+-- o teste passaria sem provar nada.
+-- -----------------------------------------------------------------------------
+insert into public.local_operacao (id, tenant_id, cliente_id, codigo, nome, created_at) values
+  ('11111111-1111-4111-8111-11111111b103', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111c101', 'ALF-N', 'Filial Alfa Norte', '2026-01-05T09:00:00-03:00');
+
+-- Cada item de contrato passa a declarar onde o ativo está. Sem local, o recorte
+-- por unidade não tem sobre o que agir — e `contrato_item.local_operacao_id` é o
+-- único caminho confiável até a unidade: `equipamento.local_atual_tipo` é texto
+-- sem CHECK.
+update public.contrato_item set local_operacao_id = '11111111-1111-4111-8111-11111111b101'
+ where equipamento_id = '11111111-1111-4111-8111-11111111a001';
+update public.contrato_item set local_operacao_id = '11111111-1111-4111-8111-11111111b103'
+ where equipamento_id = '11111111-1111-4111-8111-11111111a004';
+
+update public.consumo_competencia set local_operacao_id = '11111111-1111-4111-8111-11111111b101'
+ where equipamento_id = '11111111-1111-4111-8111-11111111a001';
+update public.consumo_competencia set local_operacao_id = '11111111-1111-4111-8111-11111111b103'
+ where equipamento_id = '11111111-1111-4111-8111-11111111a004';
+
+insert into public.usuario
+  (id, tenant_id, nome, email, status, tipo, cliente_id) values
+  -- Administrador do cliente: escopo CLIENTE, **sem vínculo de unidade**. É ele
+  -- que provaria uma implementação errada do recorte, se ele dependesse da
+  -- existência de vínculos em vez do escopo.
+  ('11111111-1111-4111-8111-1111111190c1', '11111111-1111-4111-8111-111111111111',
+   'Admin do Cliente Alfa', 'admin@alfa.cliente', 'ATIVO', 'CLIENTE',
+   '11111111-1111-4111-8111-11111111c101'),
+  -- Gestor de unidade: escopo LOCAL_CLIENTE, vinculado só à Matriz.
+  ('11111111-1111-4111-8111-1111111190c2', '11111111-1111-4111-8111-111111111111',
+   'Gestor da Matriz Alfa', 'matriz@alfa.cliente', 'ATIVO', 'CLIENTE',
+   '11111111-1111-4111-8111-11111111c101'),
+  -- Usuário do outro cliente: é o token que tem de receber 404, nunca 403.
+  ('11111111-1111-4111-8111-1111111190c3', '11111111-1111-4111-8111-111111111111',
+   'Admin do Cliente Gama', 'admin@gama.cliente', 'ATIVO', 'CLIENTE',
+   '11111111-1111-4111-8111-11111111c102');
+
+insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo, escopo_id)
+select '11111111-1111-4111-8111-111111111111', u.id, p.id, u.escopo::app.escopo_tipo, u.local
+  from (values
+    ('11111111-1111-4111-8111-1111111190c1'::uuid, 'CLIENTE', null::uuid, 'Administrador do cliente'),
+    ('11111111-1111-4111-8111-1111111190c2'::uuid, 'LOCAL_CLIENTE',
+     '11111111-1111-4111-8111-11111111b101'::uuid, 'Gestor de unidade do cliente'),
+    ('11111111-1111-4111-8111-1111111190c3'::uuid, 'CLIENTE', null::uuid, 'Administrador do cliente')
+  ) as u(id, escopo, local, perfil)
+  join public.perfil p
+    on p.tenant_id = '11111111-1111-4111-8111-111111111111'
+   and p.nome = u.perfil;
+
+insert into public.usuario_local_cliente (tenant_id, usuario_id, local_operacao_id) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111190c2',
+   '11111111-1111-4111-8111-11111111b101');

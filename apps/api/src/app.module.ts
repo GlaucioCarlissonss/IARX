@@ -67,6 +67,9 @@ import {
 } from './modulos/despesas/despesas.controller.js'
 import { DespesasRepositorio } from './modulos/despesas/despesas.repositorio.js'
 import { DespesasService } from './modulos/despesas/despesas.service.js'
+import { PortalController } from './modulos/portal/portal.controller.js'
+import { PortalRepositorio } from './modulos/portal/portal.repositorio.js'
+import { PortalService } from './modulos/portal/portal.service.js'
 import { LocaisController } from './modulos/locais/locais.controller.js'
 import { LocaisRepositorio } from './modulos/locais/locais.repositorio.js'
 import { LocaisService } from './modulos/locais/locais.service.js'
@@ -118,6 +121,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     CategoriasDespesaController,
     OrcamentosController,
     DespesasController,
+    PortalController,
   ],
   providers: [
     BancoService,
@@ -150,6 +154,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     FluxoCaixaService,
     DespesasRepositorio,
     DespesasService,
+    PortalRepositorio,
+    PortalService,
     { provide: APP_FILTER, useClass: ProblemaFilter },
     { provide: APP_GUARD, useClass: AutenticacaoGuard },
     { provide: APP_GUARD, useClass: PermissaoGuard },
