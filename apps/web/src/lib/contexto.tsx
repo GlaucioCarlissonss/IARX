@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { api, assinarMudancas } from '../dados/api'
+import { escopoDoUsuario } from '../dados/portal'
+import type { EscopoDoPortal } from '../dados/portal'
 import type { Permissao, Perfil } from './permissoes'
 
 /**
@@ -22,6 +24,17 @@ interface Sessao {
 
 interface ContextoSessao extends Sessao {
   perfis: Perfil[]
+  /**
+   * O recorte de cliente de quem está na sessão — nulo para quem opera a
+   * locadora.
+   *
+   * É o que decide **qual aplicação** a pessoa vê: com escopo, o portal; sem
+   * escopo, a operação. Vem da identidade, não do perfil: trocar de perfil
+   * demonstra o efeito das permissões sobre o menu e as ações, e não muda de
+   * audiência — da mesma forma que, no servidor, o que separa `/portal` das
+   * rotas da operação é o `cliente_id` do token, e não as permissões dele.
+   */
+  escopo: EscopoDoPortal | null
   trocarPerfil: (id: string) => void
   definirFilial: (id: string) => void
   pode: (p: Permissao) => boolean
@@ -50,10 +63,11 @@ const SessaoCtx = createContext<ContextoSessao | null>(null)
  * `PERFIS` continua existindo em `lib/permissoes.ts`, agora no seu único papel
  * honesto: semente da massa de demonstração, lida por `dados/gerar.ts`.
  */
-function lerPerfis(): Perfil[] {
+function lerPerfis(): (Perfil & { tipo: 'INTERNO' | 'CLIENTE' })[] {
   return api.baseSincrona().perfis.map((p) => ({
     id: p.id,
     nome: p.nome,
+    tipo: p.tipo,
     permissoes: p.permissoes as Permissao[],
   }))
 }
@@ -73,7 +87,7 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
   const [usuarioId, setUsuarioId] = useState(USUARIO_INICIAL)
   const [perfilId, setPerfilId] = useState<string | null>(null)
   const [filialId, setFilialId] = useState<string | 'todas'>('todas')
-  const [perfis, setPerfis] = useState<Perfil[]>(lerPerfis)
+  const [perfis, setPerfis] = useState<ReturnType<typeof lerPerfis>>(lerPerfis)
 
   /*
    * Reusa a assinatura que as telas já usam. Sem ela, salvar um perfil só
@@ -87,6 +101,17 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
   const conta = contas.find((u) => u.id === usuarioId) ?? contas[0]!
 
   /*
+   * O seletor de perfil oferece só os perfis do **tipo da conta**.
+   *
+   * Atribuir perfil interno a usuário de cliente é o que `convidarUsuario`
+   * recusa, e por boa razão: o perfil interno carrega permissões que a lista
+   * branca da 0011 proíbe a cliente, e a conta passaria a enxergar a operação
+   * da locadora. Oferecer a troca na barra reintroduziria pela demonstração
+   * exatamente o que o comando impede.
+   */
+  const perfisDaConta = perfis.filter((p) => p.tipo === conta.tipo)
+
+  /*
    * `perfilId` nulo significa "o perfil de quem entrou", e não um padrão fixo.
    *
    * Guardar o id resolvido no lugar do nulo faria a troca de usuário manter o
@@ -95,14 +120,15 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
    * de novo volta o nulo e a identidade retoma o controle.
    */
   const perfil =
-    perfis.find((p) => p.id === (perfilId ?? conta.perfilIds[0])) ?? perfis[0]!
+    perfisDaConta.find((p) => p.id === (perfilId ?? conta.perfilIds[0])) ?? perfisDaConta[0] ?? perfis[0]!
 
   const valor = useMemo<ContextoSessao>(
     () => ({
       usuario: { id: conta.id, nome: conta.nome, email: conta.email },
       perfil,
       filialId,
-      perfis,
+      perfis: perfisDaConta,
+      escopo: escopoDoUsuario(conta),
       trocarPerfil: setPerfilId,
       definirFilial: setFilialId,
       // O front esconde para reduzir ruído; a autorização real é do servidor.
@@ -117,7 +143,7 @@ export function ProvedorSessao({ children }: { children: ReactNode }) {
         setFilialId('todas')
       },
     }),
-    [conta, perfil, perfis, filialId],
+    [conta, perfil, perfis, perfisDaConta, filialId],
   )
 
   return <SessaoCtx.Provider value={valor}>{children}</SessaoCtx.Provider>

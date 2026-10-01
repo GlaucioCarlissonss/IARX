@@ -20,7 +20,7 @@ export interface ItemNavegacao {
   rotulo: string
   glifo: string
   permissao: Permissao
-  grupo: 'Operação' | 'Serviço' | 'Financeiro' | 'Administração'
+  grupo: 'Operação' | 'Serviço' | 'Financeiro' | 'Administração' | 'Meu contrato' | 'Consumo'
   /** Frase curta para a paleta de comandos — o menu não a exibe. */
   detalhe: string
 }
@@ -50,7 +50,30 @@ export const NAVEGACAO: ItemNavegacao[] = [
   { para: '/perfis', rotulo: 'Perfis de acesso', glifo: '⊞', permissao: 'perfil:gerenciar', grupo: 'Administração', detalhe: 'permissões por módulo, tela e ação' },
 ]
 
+/**
+ * A navegação do portal — a segunda audiência.
+ *
+ * Lista separada, e não um `grupo` a mais na primeira, porque as duas nunca
+ * aparecem juntas: quem opera a locadora não abre o portal, e quem é do cliente
+ * não abre a operação. Uma lista só obrigaria todo consumidor a filtrar por
+ * audiência antes de usá-la, e o consumidor que esquecesse ofereceria à pessoa
+ * errada o caminho para a tela errada.
+ *
+ * As permissões são as mesmas que a lista branca da 0011 autoriza a perfil de
+ * cliente — nenhuma nova. É por isso que o rail do portal fica mais curto para
+ * o Visualizador do que para o Administrador do cliente, sem nenhuma regra
+ * escrita aqui.
+ */
+export const NAVEGACAO_PORTAL: ItemNavegacao[] = [
+  { para: '/portal', rotulo: 'Meu painel', glifo: '◧', permissao: 'equipamento:ler', grupo: 'Meu contrato', detalhe: 'o mês corrente e o que vence' },
+  { para: '/portal/contratos', rotulo: 'Meus contratos', glifo: '◰', permissao: 'contrato:ler', grupo: 'Meu contrato', detalhe: 'vigência, equipamentos e franquia' },
+  { para: '/portal/parque', rotulo: 'Meus equipamentos', glifo: '▤', permissao: 'equipamento:ler', grupo: 'Meu contrato', detalhe: 'onde está cada máquina' },
+  { para: '/portal/consumo', rotulo: 'Consumo e custos', glifo: '◱', permissao: 'medicao:ler', grupo: 'Consumo', detalhe: 'páginas, franquia e memória de cálculo' },
+]
+
+export const GRUPOS_PORTAL = ['Meu contrato', 'Consumo'] as const
+
 /** Título da página, para a migalha de pão. Derivado, nunca uma segunda lista. */
 export const TITULOS: Record<string, string> = Object.fromEntries(
-  NAVEGACAO.map((i) => [i.para, i.rotulo]),
+  [...NAVEGACAO, ...NAVEGACAO_PORTAL].map((i) => [i.para, i.rotulo]),
 )

@@ -62,6 +62,169 @@ const descrever = (vs) =>
     )
     .join('\n  ')
 
+/* ------------------------------------------------------------------ portal */
+
+const SENHA_DEMO = 'iarx-demo'
+
+const ROTAS_PORTAL = [
+  { hash: '#/portal', nome: 'portal · painel', titulo: /.+/ },
+  { hash: '#/portal/contratos', nome: 'portal · contratos', titulo: 'Meus contratos' },
+  { hash: '#/portal/parque', nome: 'portal · equipamentos', titulo: 'Meus equipamentos' },
+  { hash: '#/portal/consumo', nome: 'portal · consumo', titulo: 'Consumo e custos' },
+]
+
+/**
+ * Entra como usuário de cliente — a segunda audiência.
+ *
+ * Pela tela de entrada, e não por atalho de estado: é o caminho que a pessoa
+ * percorre, e é o que prova que a conta do portal está de fato alcançável em
+ * quem abre a demonstração.
+ */
+async function entrarComoCliente(page, email = 'portal@cliente.demo', opcoes = {}) {
+  await abrir(page, { hash: '#/entrar', ...opcoes })
+  /*
+   * Recarrega de propósito: a sessão é estado em memória, e `goto` para um
+   * endereço que difere só no fragmento **não** recarrega o documento. Sem isto,
+   * entrar duas vezes no mesmo teste encontraria o formulário já montado sobre a
+   * sessão anterior.
+   */
+  await page.reload()
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+  await page.getByLabel('E-mail').fill(email)
+  await page.getByLabel('Senha').fill(SENHA_DEMO)
+  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  /*
+   * Espera o redirecionamento assentar antes de devolver o controle.
+   *
+   * Entrar leva a `/`, e a raiz manda quem tem escopo para `/portal` — em dois
+   * passos. Sem esta espera, a navegação seguinte do teste trocava o fragmento
+   * e o redirecionamento pendente o sobrescrevia logo depois: a tela voltava
+   * para o painel e o teste acusava a tela errada de não existir.
+   */
+  await expect(page).toHaveURL(/#\/portal$/)
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+}
+
+/**
+ * Navega **dentro** da aplicação, sem recarregar.
+ *
+ * `page.goto` recarrega o documento e com ele a sessão volta à conta inicial —
+ * o teste de portal abriria a tela como operador e só veria a recusa. Trocar o
+ * fragmento é o que o próprio menu faz.
+ */
+async function irPara(page, hash) {
+  await page.evaluate((h) => {
+    window.location.hash = h.replace(/^#/, '')
+  }, hash)
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+}
+
+for (const tema of ['light', 'dark']) {
+  for (const rota of ROTAS_PORTAL) {
+    test(`axe · ${rota.nome} · tema ${tema}`, async ({ page }) => {
+      await entrarComoCliente(page, 'portal@cliente.demo', { tema })
+      await irPara(page, rota.hash)
+      await expect(page.getByRole('heading', { level: 1, name: rota.titulo })).toBeVisible()
+      const v = await violacoes(page)
+      expect(v, `violações bloqueantes:\n  ${descrever(v)}`).toEqual([])
+    })
+  }
+}
+
+test('o portal reflui em 320 px sem rolagem lateral', async ({ page }) => {
+  await entrarComoCliente(page, 'portal@cliente.demo', { largura: 320, altura: 720 })
+  for (const rota of ROTAS_PORTAL) {
+    await irPara(page, rota.hash)
+    const transbordo = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    )
+    expect(transbordo, `${rota.nome} não deve rolar lateralmente em 320 px`).toBeLessThanOrEqual(1)
+  }
+})
+
+/**
+ * O defeito que esta rodada corrigiu, por fora.
+ *
+ * Antes do segundo shell, entrar como usuário de cliente abria **sete telas da
+ * operação** — entre elas a carteira de clientes com rentabilidade e o
+ * faturamento do locador —, porque o perfil de cliente tem `cliente:ler`,
+ * `contrato:ler` e `fatura:ler` e a verificação de rota só olhava permissão.
+ * Permissão responde "pode ler contrato?"; audiência responde "contrato de
+ * quem?".
+ */
+test('entrar como cliente abre o portal, e não a aplicação da operação', async ({ page }) => {
+  await entrarComoCliente(page)
+
+  await expect(page).toHaveURL(/#\/portal$/)
+
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+  await expect(menu.getByRole('link', { name: 'Meu painel' })).toBeVisible()
+  for (const tela of ['Clientes', 'Faturamento', 'Contratos', 'Painel do dia', 'Parque instalado']) {
+    await expect(menu.getByRole('link', { name: tela, exact: true })).toHaveCount(0)
+  }
+
+  // E nem por endereço montado à mão: é o par da recusa que o servidor dá a um
+  // token sem `cliente_id` em `/portal`, no sentido oposto.
+  for (const hash of ['#/clientes', '#/faturamento', '#/resultado', '#/contas-receber']) {
+    await irPara(page, hash)
+    await expect(page.getByText('Esta área é da operação da locadora')).toBeVisible()
+  }
+})
+
+test('a busca global do cliente não alcança a carteira da locadora', async ({ page }) => {
+  await entrarComoCliente(page)
+  await page.keyboard.press('Control+k')
+
+  /*
+   * Buscar não é ação separada de ler: sem recortar a paleta, digitar um CNPJ
+   * devolveria o cliente dono dele, e nenhuma permissão impediria — a fuga mais
+   * fácil de todas, por um campo que existe para ser rápido.
+   */
+  await page.getByLabel('Termo de busca').fill('a')
+
+  const lista = page.getByRole('listbox')
+  await expect(lista).toBeVisible()
+  const itens = (await lista.allInnerTexts()).join(' ')
+  for (const grupo of ['Clientes', 'Contratos', 'Chamados', 'Equipamentos']) {
+    expect(itens, `a paleta do cliente ofereceu o grupo ${grupo} da locadora`).not.toContain(grupo)
+  }
+})
+
+test('o gestor de unidade vê menos que o administrador do cliente, e a tela diz isso', async ({ page }) => {
+  await entrarComoCliente(page, 'portal@cliente.demo')
+  await irPara(page, '#/portal/parque')
+  const doGrupo = await page.locator('tbody tr').count()
+
+  await entrarComoCliente(page, 'unidade@cliente.demo')
+  await expect(page.getByText(/unidade\(s\) no seu acesso/)).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Você vê as unidades a que foi vinculado' }),
+  ).toBeVisible()
+
+  await irPara(page, '#/portal/parque')
+  const daUnidade = await page.locator('tbody tr').count()
+
+  expect(daUnidade, 'o gestor de unidade viu o parque do grupo inteiro').toBeLessThan(doGrupo)
+
+  // E o contrato continua visível — é o documento que a empresa dele assinou —,
+  // mas sem os equipamentos das outras unidades.
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+  await expect(menu.getByRole('link', { name: 'Meus contratos' })).toHaveCount(0)
+})
+
+test('RN-L33: a competência aberta aparece como parcial, com a data da leitura', async ({ page }) => {
+  await entrarComoCliente(page)
+  await irPara(page, '#/portal/consumo')
+
+  /*
+   * O número parcial não é errado; apresentá-lo como fechado é que seria, e o
+   * cliente planejaria caixa sobre uma medição que ainda vai crescer. A
+   * declaração vem antes dos números de propósito.
+   */
+  await expect(page.getByText('Parcial').first()).toBeVisible()
+  await expect(page.getByText(/leitura mais recente em|Última leitura em/).first()).toBeVisible()
+})
+
 /* ------------------------------------------------------------ acessibilidade */
 
 for (const tema of ['light', 'dark']) {

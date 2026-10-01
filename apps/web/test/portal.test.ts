@@ -219,3 +219,51 @@ test('o resumo do gestor de unidade é menor, e diz quantas unidades ele vê', (
    */
   assert.equal(admin.cliente.id, gestor.cliente.id)
 })
+
+/* ------------------------------------------------------- audiência e menu */
+
+test('a navegação do portal não pede permissão fora da lista branca da 0011', async () => {
+  const { NAVEGACAO, NAVEGACAO_PORTAL } = await import('../src/lib/navegacao.ts')
+
+  /*
+   * A mesma lista que o gatilho `perfil_cliente_somente_leitura` impõe no
+   * banco. Uma tela de portal que exigisse permissão de fora dela seria uma
+   * tela que nenhum perfil de cliente consegue abrir — e o defeito apareceria
+   * só para quem usa o portal, nunca para quem o constrói.
+   */
+  const BRANCA = [
+    'contrato:ler', 'equipamento:ler', 'fatura:ler', 'medicao:ler',
+    'os:ler', 'os:criar', 'mapa:ler', 'relatorio:ler', 'cliente:ler',
+  ]
+  for (const item of NAVEGACAO_PORTAL) {
+    assert.ok(BRANCA.includes(item.permissao), `${item.para} exige ${item.permissao}, fora da lista branca`)
+  }
+
+  // As duas listas nunca se cruzam: o prefixo `/portal` é o que torna trivial
+  // auditar que nenhuma tela de cliente alcança dado do locador.
+  const daOperacao = new Set(NAVEGACAO.map((i) => i.para))
+  for (const item of NAVEGACAO_PORTAL) {
+    assert.ok(!daOperacao.has(item.para), `${item.para} está nas duas navegações`)
+    assert.ok(item.para === '/portal' || item.para.startsWith('/portal/'))
+  }
+})
+
+test('cada perfil de cliente abre o que as permissões dele permitem, e nada além', async () => {
+  const { NAVEGACAO_PORTAL } = await import('../src/lib/navegacao.ts')
+
+  const alcance = (perfilId: string) => {
+    const p = b.perfis.find((x) => x.id === perfilId)
+    assert.ok(p, `a massa não tem o perfil ${perfilId}`)
+    return NAVEGACAO_PORTAL.filter((i) => p.permissoes.includes(i.permissao)).map((i) => i.para)
+  }
+
+  /*
+   * O Visualizador não tem `contrato:ler` nem `fatura:ler`: ele vê o parque e o
+   * consumo, e não o contrato nem o custo. O rail dele encurta sozinho, sem
+   * nenhuma regra escrita na navegação — é a lista branca da 0011 chegando até
+   * a tela.
+   */
+  assert.deepEqual(alcance('perf-cliente-admin'), ['/portal', '/portal/contratos', '/portal/parque', '/portal/consumo'])
+  assert.deepEqual(alcance('perf-cliente-gestor'), ['/portal', '/portal/parque', '/portal/consumo'])
+  assert.deepEqual(alcance('perf-cliente'), ['/portal', '/portal/parque', '/portal/consumo'])
+})

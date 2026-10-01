@@ -5,7 +5,8 @@ import { api } from '../../dados/api'
 import { FILIAIS } from '../../dados/catalogo'
 import { Botao } from '../ui/primitivos'
 import { PaletaComandos } from './PaletaComandos'
-import { GRUPOS, NAVEGACAO, TITULOS } from '../../lib/navegacao'
+import { GRUPOS, GRUPOS_PORTAL, NAVEGACAO, NAVEGACAO_PORTAL, TITULOS } from '../../lib/navegacao'
+import type { ItemNavegacao } from '../../lib/navegacao'
 
 /**
  * Estrutura da aplicação: rail de navegação, barra superior e área de conteúdo.
@@ -31,7 +32,7 @@ const CONTADORES: Record<string, (i: Awaited<ReturnType<typeof api.indicadores>>
 }
 
 export function AppShell() {
-  const { usuario, perfil, perfis, trocarPerfil, filialId, definirFilial, pode, sair } = useSessao()
+  const { usuario, perfil, perfis, trocarPerfil, filialId, definirFilial, pode, sair, escopo } = useSessao()
   const navegar = useNavigate()
   const [paletaAberta, setPaletaAberta] = useState(false)
   const [tema, setTema] = useState<'sistema' | 'light' | 'dark'>('sistema')
@@ -59,9 +60,19 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', atalho)
   }, [])
 
-  const visiveis = NAVEGACAO.filter((i) => pode(i.permissao))
-  const grupos = GRUPOS
+  /*
+   * A audiência vem do **escopo**, e o escopo vem da identidade.
+   *
+   * Não é "o perfil é de cliente?": trocar de perfil demonstra o efeito das
+   * permissões e não muda de aplicação. É a mesma separação do servidor, onde o
+   * que distingue `/portal` das rotas da operação é o `cliente_id` do token, e
+   * não as permissões dele.
+   */
+  const doPortal = escopo !== null
+  const visiveis = (doPortal ? NAVEGACAO_PORTAL : NAVEGACAO).filter((i) => pode(i.permissao))
+  const grupos: readonly ItemNavegacao['grupo'][] = doPortal ? GRUPOS_PORTAL : GRUPOS
   const tituloAtual = TITULOS[local.pathname] ?? 'IARX'
+  const raiz = doPortal ? '/portal' : '/'
 
   return (
     <>
@@ -77,7 +88,7 @@ export function AppShell() {
             </span>
             <span className="pilha marca__texto">
               <span className="marca__nome">IARX</span>
-              <span className="marca__desc">Locação de TI</span>
+              <span className="marca__desc">{doPortal ? 'Portal do cliente' : 'Locação de TI'}</span>
             </span>
           </div>
 
@@ -95,7 +106,7 @@ export function AppShell() {
                       <NavLink
                         key={item.para}
                         to={item.para}
-                        end={item.para === '/'}
+                        end={item.para === raiz}
                         className="nav__item"
                         style={{ textDecoration: 'none' }}
                         aria-current={local.pathname === item.para ? 'page' : undefined}
@@ -133,21 +144,36 @@ export function AppShell() {
               trata. Manter o texto forçaria a barra a três linhas em notebook,
               empurrando o conteúdo para baixo da dobra. */}
           <div className="barra__controles">
-            <label className="barra__campo">
-              <span className="barra__campo__rotulo">Filial</span>
-              <select
-                value={filialId}
-                onChange={(e) => definirFilial(e.target.value)}
-                aria-label="Escopo de filial"
-              >
-                <option value="todas">Todas as filiais</option>
-                {FILIAIS.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.codigo} — {f.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {/*
+              Filial é dimensão do **locador**: para quem é do cliente ela não
+              existe, e oferecê-la sugeriria um recorte que não é o dele. No
+              lugar dela, o escopo que de fato se aplica — e ele aparece escrito
+              porque um recorte silencioso faz quem vê uma unidade ler o número
+              como se fosse o do grupo.
+            */}
+            {doPortal ? (
+              <p className="barra__campo texto-secundario" style={{ margin: 0 }}>
+                {escopo!.locaisIds === null
+                  ? 'Todas as unidades'
+                  : `${escopo!.locaisIds.length} unidade(s) no seu acesso`}
+              </p>
+            ) : (
+              <label className="barra__campo">
+                <span className="barra__campo__rotulo">Filial</span>
+                <select
+                  value={filialId}
+                  onChange={(e) => definirFilial(e.target.value)}
+                  aria-label="Escopo de filial"
+                >
+                  <option value="todas">Todas as filiais</option>
+                  {FILIAIS.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.codigo} — {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             {/* Troca de perfil: existe para demonstrar o efeito das permissões
                 na navegação e nas ações. Em produção viria do login. */}
@@ -200,9 +226,9 @@ export function AppShell() {
         <main className="conteudo" id="principal">
           {/* Migalhas com um nível: a hierarquia é rasa de propósito. Some na
               raiz, onde não acrescentaria informação. */}
-          {local.pathname !== '/' && (
+          {local.pathname !== raiz && (
             <nav className="migalhas" aria-label="Trilha de navegação">
-              <Link to="/">Painel do dia</Link>
+              <Link to={raiz}>{doPortal ? 'Meu painel' : 'Painel do dia'}</Link>
               <span aria-hidden="true">/</span>
               <span aria-current="page">{tituloAtual}</span>
             </nav>

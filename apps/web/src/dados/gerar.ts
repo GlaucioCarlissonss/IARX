@@ -587,7 +587,15 @@ export function gerarBase(semente = 20260730): BaseDados {
     {
       id: 'usr-cliente',
       nome: clientes[0]!.contato.nome,
-      email: clientes[0]!.contato.email,
+      /*
+       * Endereço fixo, e não o do contato do cliente.
+       *
+       * O portal precisa ser alcançável em quem abre a demonstração: com um
+       * e-mail derivado da massa, a única porta de entrada do segundo shell
+       * seria adivinhar o endereço gerado. É também o que dá ao teste de ponta
+       * a ponta um alvo estável.
+       */
+      email: 'portal@cliente.demo',
       tipo: 'CLIENTE',
       clienteId: clientes[0]!.id,
       escopoCliente: { tipo: 'CLIENTE' },
@@ -610,7 +618,7 @@ export function gerarBase(semente = 20260730): BaseDados {
     {
       id: 'usr-cliente-unidade',
       nome: `${clientes[0]!.contato.nome.split(' ')[0]} Matriz`,
-      email: `unidade.${clientes[0]!.contato.email}`,
+      email: 'unidade@cliente.demo',
       tipo: 'CLIENTE',
       clienteId: clientes[0]!.id,
       escopoCliente: {

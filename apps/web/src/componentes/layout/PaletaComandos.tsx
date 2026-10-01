@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../../dados/api'
 import { nomeModelo } from '../../dados/catalogo'
 import { useSessao } from '../../lib/contexto'
-import { NAVEGACAO } from '../../lib/navegacao'
+import { NAVEGACAO, NAVEGACAO_PORTAL } from '../../lib/navegacao'
+import { equipamentosDoCliente } from '../../dados/portal'
 
 /**
  * Busca global e navegação rápida.
@@ -30,7 +31,7 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
   const campoRef = useRef<HTMLInputElement>(null)
   const origemRef = useRef<Element | null>(null)
   const navegar = useNavigate()
-  const { pode } = useSessao()
+  const { pode, escopo } = useSessao()
 
   useEffect(() => {
     const ativo = document.activeElement
@@ -59,15 +60,40 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
      * paleta oferecia ir para telas que o perfil não abre, e o usuário só
      * descobria ao chegar em "esta área não faz parte do seu perfil".
      */
-    const comandos: Resultado[] = NAVEGACAO.filter((i) => pode(i.permissao)).map((i) => ({
-      id: `c-${i.para}`,
-      grupo: 'Ir para',
-      titulo: i.rotulo,
-      detalhe: i.detalhe,
-      destino: i.para,
-    }))
+    const comandos: Resultado[] = (escopo ? NAVEGACAO_PORTAL : NAVEGACAO)
+      .filter((i) => pode(i.permissao))
+      .map((i) => ({
+        id: `c-${i.para}`,
+        grupo: 'Ir para',
+        titulo: i.rotulo,
+        detalhe: i.detalhe,
+        destino: i.para,
+      }))
 
     if (!t) return comandos
+
+    /*
+     * A busca do portal percorre **o parque do escopo**, e nada mais.
+     *
+     * As listas abaixo são as da locadora: equipamento de qualquer cliente,
+     * carteira inteira, contratos e chamados de todo mundo. Uma busca global
+     * sobre elas numa sessão de cliente seria a fuga mais fácil de todas —
+     * digitar um CNPJ e receber a resposta —, e nenhuma permissão a impediria,
+     * porque buscar não é uma ação separada de ler.
+     */
+    if (escopo) {
+      const meus: Resultado[] = equipamentosDoCliente(base, escopo)
+        .filter((e) => e.patrimonio.toLowerCase().includes(t) || e.numeroSerie.toLowerCase().includes(t))
+        .slice(0, 8)
+        .map((e) => ({
+          id: e.id,
+          grupo: 'Meus equipamentos',
+          titulo: `${e.patrimonio} · ${e.modelo}`,
+          detalhe: e.localNome ?? 'sem unidade definida',
+          destino: `/portal/parque?q=${e.patrimonio}`,
+        }))
+      return [...meus, ...comandos.filter((c) => c.titulo.toLowerCase().includes(t))]
+    }
 
     const equipamentos: Resultado[] = base.equipamentos
       .filter((e) => e.patrimonio.includes(t) || e.numeroSerie.toLowerCase().includes(t))
@@ -121,7 +147,7 @@ export function PaletaComandos({ aoFechar }: { aoFechar: () => void }) {
     const comandosFiltrados = comandos.filter((c) => c.titulo.toLowerCase().includes(t))
 
     return [...equipamentos, ...clientes, ...contratos, ...ordens, ...comandosFiltrados]
-  }, [termo, base, pode])
+  }, [termo, base, pode, escopo])
 
   useEffect(() => {
     setAtivo(0)

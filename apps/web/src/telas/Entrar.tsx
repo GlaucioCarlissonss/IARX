@@ -183,8 +183,18 @@ function Credencial({ id, neutra, aoEntrar, aoPedirSenha, aoEsquecer }: Credenci
       <div className="entrar__demo">
         <p className="entrar__demo__titulo">Credencial de demonstração</p>
         <p>
-          E-mail <code className="dado">operacao@iarx.app</code> · senha{' '}
+          Operação <code className="dado">operacao@iarx.app</code> · senha{' '}
           <code className="dado">{SENHA_DEMONSTRACAO}</code>
+        </p>
+        {/*
+          A conta do portal fica à vista porque sem ela o segundo shell é
+          inalcançável: quem abre a demonstração não tem como adivinhar o
+          endereço de um usuário de cliente, e veria só a aplicação da operação
+          — metade do produto, sem nada dizendo que a outra metade existe.
+        */}
+        <p>
+          Portal do cliente <code className="dado">portal@cliente.demo</code> · gestor de uma unidade{' '}
+          <code className="dado">unidade@cliente.demo</code>
         </p>
         <p className="texto-atenuado">
           Vale para qualquer conta ativa da base de demonstração. Não é credencial real e não existe fora
