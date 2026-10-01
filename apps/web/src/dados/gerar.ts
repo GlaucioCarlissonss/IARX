@@ -544,6 +544,7 @@ export function gerarBase(semente = 20260730): BaseDados {
       email: 'operacao@iarx.app',
       tipo: 'INTERNO',
       clienteId: null,
+      escopoCliente: null,
       status: 'ATIVO',
       perfilIds: ['perf-admin'],
       filiaisIds: [],
@@ -557,6 +558,7 @@ export function gerarBase(semente = 20260730): BaseDados {
       email: `${t.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]+/g, '.')}@iarx.app`,
       tipo: 'INTERNO' as const,
       clienteId: null,
+      escopoCliente: null,
       // Um inativo e um sem convite aceito: os dois estados que a tela precisa
       // saber exibir e que uma massa só de contas felizes esconderia.
       status: (i === 4 ? 'INATIVO' : 'ATIVO') as Usuario['status'],
@@ -588,11 +590,38 @@ export function gerarBase(semente = 20260730): BaseDados {
       email: clientes[0]!.contato.email,
       tipo: 'CLIENTE',
       clienteId: clientes[0]!.id,
+      escopoCliente: { tipo: 'CLIENTE' },
       status: 'ATIVO',
       perfilIds: ['perf-cliente-admin'],
       filiaisIds: [],
       ultimoAcesso: iso(somarDias(HOJE, -2)),
       criadoEm: iso(somarMeses(HOJE, -6)),
+      conviteAceito: true,
+    },
+    /*
+     * O gestor de **uma** unidade do mesmo cliente.
+     *
+     * Existe para o recorte ter sujeito: sem uma conta com escopo
+     * `LOCAL_CLIENTE`, a diferença entre "vê o grupo" e "vê a própria unidade"
+     * não teria como ser demonstrada nem testada — e um recorte que ninguém
+     * exercita é um recorte que ninguém percebe quebrar. É o mesmo argumento
+     * que fez a massa distribuir seis perfis internos em vez de dois.
+     */
+    {
+      id: 'usr-cliente-unidade',
+      nome: `${clientes[0]!.contato.nome.split(' ')[0]} Matriz`,
+      email: `unidade.${clientes[0]!.contato.email}`,
+      tipo: 'CLIENTE',
+      clienteId: clientes[0]!.id,
+      escopoCliente: {
+        tipo: 'LOCAL_CLIENTE',
+        locaisIds: locais.filter((l) => l.clienteId === clientes[0]!.id).slice(0, 1).map((l) => l.id),
+      },
+      status: 'ATIVO',
+      perfilIds: ['perf-cliente-gestor'],
+      filiaisIds: [],
+      ultimoAcesso: iso(somarDias(HOJE, -1)),
+      criadoEm: iso(somarMeses(HOJE, -3)),
       conviteAceito: true,
     },
   ]
@@ -657,7 +686,19 @@ export function gerarBase(semente = 20260730): BaseDados {
             : 0
           acumuladoMono += mono
           acumuladoColor += color
-          historicoConsumo.push({ competencia: comp, mono, color })
+          /*
+           * A leitura cai no dia 1 do mês seguinte ao da competência, que é
+           * quando o fechamento a coleta. Para a competência corrente — a que
+           * ainda está aberta — isso cairia no futuro, e por isso ela é lida
+           * "hoje": é exatamente o caso que RN-L33 declara parcial.
+           */
+          const fim = new Date(Number(comp.slice(0, 4)), mes, 1)
+          historicoConsumo.push({
+            competencia: comp,
+            mono,
+            color,
+            lidaEm: iso(fim > HOJE ? HOJE : fim),
+          })
         })
         // Contador histórico anterior aos 12 meses observados
         acumuladoMono += s.int(20000, 420000)

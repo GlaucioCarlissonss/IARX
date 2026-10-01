@@ -553,6 +553,16 @@ export function convidarUsuario(base: BaseDados, dados: DadosConvite): Resultado
     email,
     tipo: dados.tipo,
     clienteId: dados.tipo === 'CLIENTE' ? dados.clienteId : null,
+    /*
+     * Convidado de cliente nasce com escopo de grupo.
+     *
+     * O escopo de **unidade** depende de vínculos (`usuario_local_cliente`), e
+     * conceder um deles aqui exigiria escolher as unidades no mesmo formulário
+     * que ainda nem criou a conta. Nasce com o escopo que não depende de
+     * vínculo nenhum, e o recorte por unidade é ato separado — que esta
+     * aplicação ainda não oferece em tela, e isso está registrado como lacuna.
+     */
+    escopoCliente: dados.tipo === 'CLIENTE' ? { tipo: 'CLIENTE' } : null,
     status: 'ATIVO',
     perfilIds: [perfil.id],
     filiaisIds: dados.filiaisIds,
@@ -1600,7 +1610,15 @@ export function registrarLeitura(base: BaseDados, equipamentoId: string, dados: 
   const consumoColor = categoria.temContadorColor ? dados.color - eq.contadorColor : 0
   eq.contadorMono = dados.mono
   if (categoria.temContadorColor) eq.contadorColor = dados.color
-  eq.historicoConsumo.push({ competencia: dados.competencia, mono: consumoMono, color: consumoColor })
+  // Lida agora: a leitura registrada pela tela acontece no instante em que
+  // alguém a digita, e é essa data que o portal mostra ao declarar a
+  // competência parcial.
+  eq.historicoConsumo.push({
+    competencia: dados.competencia,
+    mono: consumoMono,
+    color: consumoColor,
+    lidaEm: HOJE.toISOString().slice(0, 10),
+  })
   eq.historicoConsumo.sort((a, b) => a.competencia.localeCompare(b.competencia))
   return sucesso(eq)
 }
@@ -1725,7 +1743,12 @@ export function resolverMedicao(
         : 0
     eq.contadorMono += media
     eq.contadorColor += mediaColor
-    eq.historicoConsumo.push({ competencia, mono: media, color: mediaColor })
+    eq.historicoConsumo.push({
+      competencia,
+      mono: media,
+      color: mediaColor,
+      lidaEm: HOJE.toISOString().slice(0, 10),
+    })
   }
 
   return sucesso({ equipamentoId, competencia, origem: dados.origem })

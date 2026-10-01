@@ -190,6 +190,15 @@ export interface LeituraContador {
   competencia: string
   mono: number
   color: number
+  /**
+   * Quando o contador foi lido.
+   *
+   * Espelha `consumo_competencia.updated_at`, e existe por RN-L33: a
+   * competência aberta é apresentada como **parcial**, com a data da última
+   * leitura. Sem a data, "parcial" não diz o quanto — e o cliente não sabe se o
+   * número é de ontem ou do dia 2.
+   */
+  lidaEm: string
 }
 
 export interface Equipamento {
@@ -325,6 +334,23 @@ export interface Tecnico {
 
 export type StatusUsuario = 'ATIVO' | 'INATIVO' | 'BLOQUEADO'
 
+/**
+ * O recorte de um usuário de cliente.
+ *
+ * Espelha `usuario_perfil.escopo_tipo` mais `usuario_local_cliente` do banco, e
+ * carrega a decisão D-27 na própria forma: **o `tipo` decide se o recorte se
+ * aplica, e `locaisIds` diz quais unidades**. Com `CLIENTE`, o grupo; com
+ * `LOCAL_CLIENTE`, só as unidades vinculadas — e nenhuma, se a lista estiver
+ * vazia (RN-L26, negado por omissão).
+ *
+ * A leitura oposta — "quem tem vínculo é recortado, quem não tem vê tudo" — é a
+ * que parece natural e é a perigosa: apagar um vínculo por engano promoveria o
+ * gestor de unidade a administrador do grupo, sem erro nenhum.
+ */
+export type EscopoCliente =
+  | { tipo: 'CLIENTE' }
+  | { tipo: 'LOCAL_CLIENTE'; locaisIds: string[] }
+
 export interface Usuario {
   id: string
   nome: string
@@ -338,6 +364,8 @@ export interface Usuario {
    */
   tipo: 'INTERNO' | 'CLIENTE'
   clienteId: string | null
+  /** Nulo para quem opera a locadora: não há o que recortar. */
+  escopoCliente: EscopoCliente | null
   status: StatusUsuario
   perfilIds: string[]
   /** Vazio significa "todas" — o escopo do perfil é quem restringe de fato. */
