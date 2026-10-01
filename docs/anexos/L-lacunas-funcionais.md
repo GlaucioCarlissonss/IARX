@@ -888,6 +888,13 @@ O recorte de dados **não** é responsabilidade do shell — é da RLS (RN-L24).
 front esconde para reduzir ruído; o servidor é a autoridade. É a mesma regra já
 aplicada no resto do sistema.
 
+**Construído.** O segundo shell tem navegação própria (`NAVEGACAO_PORTAL`),
+quatro telas e guarda de audiência nos dois sentidos. O que faltava não era a
+RLS e sim a pergunta que ela não responde: permissão diz "pode ler contrato?",
+audiência diz "contrato de quem?". Sem a segunda, o usuário de cliente abria
+sete telas da operação com as permissões que legitimamente tem — ver
+[Anexo W](W-portal-do-cliente.md) §W.9.
+
 ### Modelagem de Dados
 
 Nenhuma tabela nova. O portal é composição de leitura sobre o que existe, com
@@ -974,8 +981,9 @@ cliente alcança dado do locador.
   [Anexo V](V-controle-de-despesas.md) §V.8)
 - [ ] Alertas de vencimento e de franquia respeitam a preferência do usuário —
   **não construído**: RN-L36 não tem tabela nem granularidade definida
-- [ ] Portal atende WCAG 2.2 AA no mesmo gate já existente — **sem tela**: as
-  rotas existem e são verificadas por teste; a tela é passo próprio
+- [x] Portal atende WCAG 2.2 AA no mesmo gate já existente — quatro telas no
+  segundo shell, com axe nos dois temas e refluxo em 320 px
+      ([Anexo W](W-portal-do-cliente.md) §W.9)
 
 ### Lacunas e Decisões Pendentes
 - ~~**[DECISÃO D-09]**~~ **Resolvida** ([Anexo M](M-decisoes-mercado-brasileiro.md)
@@ -2436,7 +2444,7 @@ nenhuma estava registrada:
 | **4.5** | **Revisão de código — permissões** | Módulo 4 | **Crítica** | Média | ✅ Feito — verificador de CI, hoje 86/86 rotas (Anexo Q §Q.8) |
 | 6 | Consumo de Impressões | Módulo 2 | Alta | Baixa-Média | ✅ Feito (Anexo P) |
 | 7 | Mapa Geográfico | Módulo 6 | Média | Média | ✅ Feito (Anexo O) |
-| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | ✅ API feita — migração 0024 e sete rotas ([Anexo W](W-portal-do-cliente.md)). Falta a tela, a exportação e as preferências de notificação |
+| 5 | Portal do Cliente | Módulos 2, 3, 4, 6 | Alta | Média | ✅ Feito — migração 0024, sete rotas e o segundo shell com quatro telas ([Anexo W](W-portal-do-cliente.md)). Faltam exportação e preferências de notificação |
 | **8** | **Centros de Custo** | — | Alta | Baixa | ✅ Feito (Anexo R) |
 | **9** | **Contas Bancárias** | — | Alta | Média | ✅ Feito (Anexo R) — falta a importação de extrato |
 | **10** | **Contas a Pagar** | Módulos 8, 9 | Alta | **Alta** | ✅ Feito (Anexo S) — nove invariantes, alçada configurável, delegação |
@@ -2451,12 +2459,13 @@ terminar, já que suas outras dependências (2, 3, 6) estão prontas.
 
 Executado até aqui: **4, 4.5, 5 (API), 8, 9, 10, 11, 12, 13 e 14**.
 
-Do Módulo 5 falta a **tela** — audiência diferente de todas as outras, é o
-cliente e não o operador —, a exportação PDF/Excel e as preferências de
-notificação, ambas por ausência de infraestrutura e não por decisão. O recorte
-por unidade que o Portal exigia está construído: RN-L26/RN-L34 sobre
-`usuario_local_cliente`, na migração `0024`, com o defeito medido antes de
-corrigido ([Anexo W](W-portal-do-cliente.md) §W.1).
+Do Módulo 5 faltam a exportação PDF/Excel e as preferências de notificação,
+ambas por ausência de infraestrutura e não por decisão. O recorte por unidade
+que o Portal exigia está construído — RN-L26/RN-L34 sobre
+`usuario_local_cliente`, na migração `0024` — e o segundo shell também, com o
+defeito medido antes de corrigido nos dois casos: no banco, o gestor de unidade
+via o grupo inteiro; no front, o usuário de cliente abria sete telas da operação
+([Anexo W](W-portal-do-cliente.md) §W.1 e §W.9).
 
 Fora deste conjunto estão **Ordens de Serviço** e **Estoque**: aparecem no
 [Anexo B](B-maquinas-de-estado.md) e no [Anexo F](F-glossario.md), mas **nunca

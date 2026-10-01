@@ -130,6 +130,35 @@ Perfis de referência entregues no provisionamento; cada tenant pode derivar os 
 | `Consulta` | `FILIAL`/`TENANT` | Somente leitura |
 | `Integração (conta de serviço)` | `TENANT` | Escopos mínimos declarados por integração |
 
+### Perfis de cliente — e por que não estão na matriz de C.4
+
+A tabela acima lista os perfis de **quem opera a locadora**. O locatário tem os
+seus, provisionados por `app.provisionar_perfis_cliente` na migração `0011` e
+recriados a cada tenant novo por gatilho:
+
+| Perfil | Escopo típico | Permissões |
+| --- | --- | --- |
+| `Administrador do cliente` | `CLIENTE` | `contrato:ler` · `equipamento:ler` · `fatura:ler` · `medicao:ler` · `os:ler` · `os:criar` · `mapa:ler` · `relatorio:ler` · `cliente:ler` |
+| `Gestor de unidade do cliente` | `LOCAL_CLIENTE` | `equipamento:ler` · `os:ler` · `os:criar` · `medicao:ler` · `mapa:ler` |
+| `Visualizador do cliente` | `CLIENTE` | `equipamento:ler` · `os:ler` · `medicao:ler` |
+
+**Eles não entram na matriz de C.4, e a razão é estrutural.** A matriz cruza
+perfis com o catálogo inteiro, e o conjunto que um perfil de cliente pode ter
+não é uma escolha de linha a linha: é uma **lista branca fechada**, imposta pelo
+gatilho `perfil_cliente_somente_leitura`. Marcar ✔ e — para cada uma das 127
+permissões sugeriria que a decisão é por célula, quando na verdade tudo fora da
+lista é recusado pelo banco, inclusive num perfil derivado criado pelo locatário.
+
+A exceção deliberada da lista é `os:criar`: o cliente **abre** chamado, e é o
+único ato de escrita que o portal permite — com triagem obrigatória e sem
+escolher prioridade (D-10).
+
+Essas três linhas ficaram ausentes deste anexo desde a `0011`. A ausência não
+causou defeito porque o gatilho é a autoridade; causou outra coisa, menos
+visível: a audiência de cliente não aparecia em lugar nenhum da especificação de
+permissões, e o front construiu a aplicação inteira sem ela — ver
+[Anexo W](W-portal-do-cliente.md) §W.9.
+
 ---
 
 ## C.4 Matriz perfil × permissão

@@ -197,15 +197,66 @@ proíbe.
 
 | Item | Por quê |
 | --- | --- |
-| **A tela do portal** | Audiência diferente de todas as outras — é o cliente, não o operador. Merece passo próprio de desenho, e as rotas são verificáveis por teste sem ela |
+| **A tela de vínculo de unidade** | Não há onde conceder ou retirar um `usuario_local_cliente` pela interface: o convite nasce com escopo de grupo, e o vínculo é ato separado que só existe no banco. É a tela que falta para o recorte ser administrável por quem o usa |
 | **`POST /portal/exportacoes`** (RN-L35) | Exportação assíncrona exige geração de PDF/XLSX no servidor, que não existe em lugar nenhum do projeto — a mesma ausência registrada no [Anexo V](V-controle-de-despesas.md) §V.8 |
 | **Preferências de notificação** (RN-L36) | Não há tabela de preferência por usuário nem limiar cadastrável, e a especificação não diz a granularidade (por canal? por tipo? por limiar?). É estrutura nova sobre decisão ausente |
 | **Visões materializadas** `mv_consumo_mensal_filial` e `mv_contrato_resumo_cliente` | Otimização sem medição é aposta. As consultas diretas respondem, os índices da `0013` as cobrem, e uma visão materializada acrescenta o problema de quando atualizar — inclusive a janela em que o cliente lê número velho logo depois do fechamento |
-| **Chamado pelo portal** (D-10) | Depende do módulo de Ordens de Serviço, que tem seis lacunas bloqueantes na própria especificação |
+| **Chamado pelo portal** (D-10) | `os:criar` está na lista branca e os perfis de cliente a têm; o que não existe é o módulo de Ordens de Serviço, que nunca foi especificado no formato do Anexo L |
+| **Grupo econômico no front** | A massa de demonstração não modela grupo econômico, então `clientes_no_escopo` é sempre 1 ali. Na API o número vem da política de cliente e pode ser maior — a diferença é da massa, não do produto |
 
 ---
 
-## W.9 Verificação
+## W.9 O segundo shell
+
+O Anexo L pede **um app, dois shells**: mesma base de código, mesmo design
+system, mesma API; o perfil determina o menu, as rotas e o recorte. O segundo
+shell não existia, e a consequência era medível.
+
+**Antes dele, entrar como usuário de cliente abria a aplicação da operação.** O
+Administrador do cliente alcançava sete das vinte telas da locadora — entre elas
+a carteira de clientes com rentabilidade, o faturamento do locador e o painel de
+exceções da operação —, porque o perfil dele tem `cliente:ler`, `contrato:ler` e
+`fatura:ler`, e a verificação de rota olhava só permissão.
+
+A separação que faltava cabe em uma frase: **permissão responde "pode ler
+contrato?"; audiência responde "contrato de quem?"**. É a segunda pergunta que o
+prefixo `/portal` separa, e ela não se deduz da primeira.
+
+Três consequências de desenho:
+
+- **A audiência vem da identidade, não do perfil.** Trocar de perfil demonstra o
+  efeito das permissões sobre o menu e as ações; não muda de aplicação. É o
+  espelho do servidor, onde o que distingue `/portal` é o `cliente_id` do token.
+- **A guarda vale nos dois sentidos.** Rota da operação recusa quem tem escopo de
+  cliente, e rota do portal recusa quem não tem — o par de `exigirCliente()`.
+- **A busca global foi recortada junto.** Era o caminho mais fácil de todos:
+  digitar um CNPJ na paleta devolvia o cliente dono dele. Buscar não é ação
+  separada de ler, e nenhuma permissão o impediria.
+
+Na barra, o seletor de filial some para quem é do cliente — filial é dimensão do
+locador — e no lugar dele fica o escopo que de fato se aplica, **escrito**. Pelo
+mesmo motivo de `unidades_no_escopo` existir na API: quem enxerga uma unidade
+precisa saber que enxerga uma.
+
+A matriz perfil × tela passou a ter duas metades, porque são duas audiências que
+nunca se encontram:
+
+```
+Operação: AP 20/20 · D 18/20 · AF 17/20 · GF 14/20 · C 14/20 · OA 12/20 · SM 8/20 · CL 7/20 · TM 6/20
+Portal:   Administrador do cliente 4/4 · Gestor de unidade 3/4 · Visualizador 3/4
+```
+
+O Visualizador não tem `contrato:ler` nem `fatura:ler`: o rail dele encurta
+sozinho, sem nenhuma regra escrita na navegação — é a lista branca da `0011`
+chegando até a tela.
+
+Consumo e custos ficaram na **mesma** tela, embora o Anexo L os separe: a
+pergunta do cliente é uma — quanto vou pagar, e por quê — e separar obrigaria a
+ir e vir entre duas telas para responder metade de cada vez.
+
+---
+
+## W.10 Verificação
 
 O que se mediu, e não o que se declarou.
 
@@ -219,6 +270,8 @@ quem opera a locadora seria o pior resultado possível desta rodada.
 ```
 packages/db/tests/17_escopo_de_unidade.sql   6 casos
 apps/api/test/portal.test.ts                 11 casos
+apps/web/test/portal.test.ts                 10 casos
+apps/web/a11y.spec.mjs                       13 casos de portal
 ```
 
 Portões, com as contagens medidas na rodada:
@@ -228,14 +281,14 @@ npm run tipos                               três pacotes
 npm run db:test                             198 asserções
 npm run api:test                            277/277
 node apps/api/scripts/verificar-rotas.mjs   126/126 declaram autorização
-npm run web:test                            211
-npm run build && npm run a11y:dom           212
+npm run web:test                            221 (eram 211)
+npm run build && npm run a11y:dom           225 (eram 212)
 npm run a11y:tokens                         202/202
 ```
 
 ---
 
-## W.10 Defeitos encontrados ao construir
+## W.11 Defeitos encontrados ao construir
 
 1. **`usuario_local_cliente` sem leitor** — o defeito que abriu a rodada, medido
    antes de corrigido.
@@ -265,3 +318,12 @@ npm run a11y:tokens                         202/202
    fechou" — defeitos diferentes, e um teste que os confunde acusa o código
    errado. Agora ele constrói a própria competência, numa que nenhum outro
    arquivo alcança.
+6. **A sessão sobrevivia à navegação do teste.** `goto` para um endereço que
+   difere só no fragmento **não** recarrega o documento: entrar duas vezes no
+   mesmo teste encontrava o formulário montado sobre a sessão anterior, e a tela
+   abria como operador. Defeito do teste, não da aplicação — mas que acusaria a
+   aplicação.
+7. **Uma corrida com o redirecionamento pós-entrada.** Entrar leva a `/`, e a
+   raiz manda quem tem escopo para `/portal`: em dois passos. Trocar o fragmento
+   antes de isso assentar era sobrescrito logo depois, e o teste acusava a tela
+   de não existir quando o que houve foi uma corrida.
