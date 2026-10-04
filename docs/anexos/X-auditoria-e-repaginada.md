@@ -396,3 +396,64 @@ rotas 126/126 · a11y:dom 225 · a11y:tokens 202/202.
 | Remover `mascararCnpj` | Único vestígio de `dados_sensiveis:ver_completo`, que o Anexo C exige e a interface não cumpre. Apagar esconderia a lacuna |
 | Remover os ~60 exports desnecessários | É padronização de superfície, não limpeza de código morto — Entrega 3 |
 | Tocar nos comentários | São o registro das decisões, e o ativo mais caro de reconstruir |
+
+---
+
+## X.11 Resultado da Entrega 3 — executada
+
+Dois commits: `512eb88`, `cb1f374`.
+
+| | Antes | Depois |
+| --- | --- | --- |
+| Token declarado na folha global | 2 blocos + 1 redeclaração escondida | **0**, com portão |
+| Estilos inline sem token | 43 | **13**, todos geometria calculada ou medida de uso único |
+| Telas do portal sem estado de carregamento | 4 | **0** |
+| Blocos de erro escritos à mão | 1 + 4 ausências | **0**, um componente |
+| `web:test` | 223 | **224** |
+
+Demais portões imóveis: tipos ✓ · db:test 198 · api:test 277/277 ·
+rotas 126/126 · a11y:dom 225 · a11y:tokens 202/202.
+
+### A divisão de token, agora por origem
+
+- `@iarx/tokens` — **cor**, gerada de `palette.json`, verificada por contraste
+  e por distinção sob daltonismo no CI. Não se edita à mão.
+- `apps/web/src/estilos/escalas.css` — espaço, tipografia, peso, raio, medida e
+  tempo. Escrito à mão, sem o que validar além da coerência.
+- `global.css` — reset, utilitários e componentes. **Não declara token nenhum.**
+
+O portão nasceu de um caso real: `--largura-rail` estava declarado no topo da
+folha e **redeclarado numa media query oitocentas linhas abaixo**. Quem
+procurasse "quanto mede o rail" acharia um dos dois valores sem saber do outro.
+
+### Duas escalas que faltavam
+
+**Peso por papel, não por número.** Os quatro valores existiam espalhados em
+doze estilos inline, e a diferença não era arbitrária: **620 acompanha a
+monoespaçada**, porque fonte mono tem peso ótico menor no mesmo valor numérico.
+O token é `--peso-dado`, não `--peso-620`, para quem o usar saber quando.
+
+**Largura mínima de campo.** Nove telas envolviam a busca num `div` com
+`minWidth` inline para o mesmo fim.
+
+### Dois defeitos que só a migração assíncrona revelou
+
+1. `PortalConsumo` inicializava a competência com `useState(() => custos[0])`.
+   O inicializador roda na primeira renderização, quando a lista assíncrona
+   ainda está vazia: o seletor nasceria vazio e nunca se corrigiria.
+2. `PortalInicio` mostrava "1 de 4 unidades" ao gestor de unidade — e aquele 4
+   vinha de uma contagem da base que **o recorte existe para não entregar**.
+
+### Pendências da Entrega 3 que não se fecharam aqui
+
+| Item | Por quê |
+| --- | --- |
+| Reduzir os ~60 exports desnecessários | Baixo retorno e risco de remover tipo que uma assinatura pública precisa nomear. Fica para uma passagem com verificação automática, depois de corrigida a falha de colisão de nome |
+| Renomear `primitivos/formulario/graficos` | São **coleções** de componentes, não componentes. O minúsculo está certo pelo conteúdo e errado pela convenção; renomear sugeriria um componente chamado `Primitivos`. Precisa de decisão, não de refatoração |
+| Trocar a família tipográfica | Depende da decisão de X.9.2, e é Entrega 4 |
+
+### Observação de instabilidade
+
+Numa execução do `a11y:dom`, "a prévia da conversão não conta tentativa" falhou
+e passou isolada e na repetição completa. Sem relação com as mudanças desta
+entrega — registrado como teste intermitente a investigar.
