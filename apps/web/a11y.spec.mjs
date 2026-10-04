@@ -56,6 +56,18 @@ async function assentar(page) {
     { timeout: 15000 },
   )
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+
+  /*
+   * E **continua** sem região ocupada.
+   *
+   * Algumas telas carregam em duas fases: a segunda consulta só sabe o que
+   * pedir depois que a primeira responde — em "Consumo e custos" a memória de
+   * cálculo depende da competência que o histórico acabou de trazer. Entre as
+   * duas há um instante sem nada ocupado, e uma verificação que passe ali lê a
+   * tela no meio do caminho. O axe chegou a reprovar uma dessas frestas.
+   */
+  await page.waitForTimeout(120)
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
 }
 
 async function abrir(page, { hash = '', tema = 'light', largura = 1360, altura = 900 } = {}) {

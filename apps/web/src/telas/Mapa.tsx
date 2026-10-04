@@ -7,7 +7,7 @@ import { baixar } from '../lib/baixar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, moeda } from '../lib/formato'
-import { Aviso, Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca } from '../componentes/ui/filtros'
 import { Mapa as MapaGeografico } from '../componentes/ui/Mapa'
 import { Rolagem } from '../componentes/ui/Rolagem'
@@ -37,7 +37,7 @@ interface Local {
 
 export function Mapa() {
   const { pode } = useSessao()
-  const { situacao, dado, recarregar } = useConsulta(() => api.clientes(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.clientes(), [])
   const [texto, setTexto] = useState('')
   const [recorte, setRecorte] = useState('')
   const [calor, setCalor] = useState(false)
@@ -257,6 +257,19 @@ export function Mapa() {
     // letras no nome do arquivo seria absurdo — o conteúdo é o mesmo.
     const r = await baixar('distribuicao-geografica.csv', csv, 'distribuicao-geografica.txt')
     setExportacao(r.situacao === 'cancelado' ? null : (r.aviso ?? null))
+  }
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar o mapa" erro={erro} aoTentarNovamente={recarregar} />
+    )
   }
 
   return (

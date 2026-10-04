@@ -22,17 +22,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useFormulario } from '../lib/useFormulario'
 import { useSessao, useToast } from '../lib/contexto'
 import { competenciaCurta, data, moeda, percentual } from '../lib/formato'
-import {
-  Aviso,
-  Botao,
-  Carregando,
-  Cartao,
-  Chip,
-  Entrada,
-  Metrica,
-  Selecao,
-  Skeleton,
-} from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import type { Severidade } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
@@ -113,7 +103,7 @@ const ROTULO_ORIGEM: Record<OrigemReceber, string> = {
 export function ContasReceber() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado, recarregar } = useConsulta(() => api.titulosReceber(), [])
+  const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.titulosReceber(), [])
   const [aberto, setAberto] = useState<Aberto>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [filtroStatus, setFiltroStatus] = useState<'todos' | StatusReceber>('todos')
@@ -302,6 +292,19 @@ export function ContasReceber() {
       },
     },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar as contas a receber" erro={erroConsulta} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

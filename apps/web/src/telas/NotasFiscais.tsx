@@ -6,7 +6,7 @@ import { formatarChave, formatarCnpj } from '../dados/nfe'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { data, moeda } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -54,7 +54,7 @@ type Aberto =
 export function NotasFiscais() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado } = useConsulta(() => api.notasFiscais(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.notasFiscais(), [])
   const [texto, setTexto] = useState('')
   const [filtro, setFiltro] = useState('')
   const [aberto, setAberto] = useState<Aberto>(null)
@@ -218,6 +218,19 @@ export function NotasFiscais() {
       ),
     },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar as notas fiscais" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

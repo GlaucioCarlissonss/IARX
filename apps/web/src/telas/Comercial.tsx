@@ -6,7 +6,7 @@ import type { LinhaSimulacao } from '../dados/comercial'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { data, inteiro, moeda } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { Tabela } from '../componentes/ui/Tabela'
 import { Combo, LinhaCampos } from '../componentes/ui/formulario'
@@ -35,10 +35,23 @@ type Aba = 'simulador' | 'franquia' | 'preco'
 
 export function Comercial() {
   const { pode } = useSessao()
-  const { situacao } = useConsulta(() => api.clientes(), [])
+  const { situacao, erro, recarregar } = useConsulta(() => api.clientes(), [])
   const [aba, setAba] = useState<Aba>('simulador')
 
   const base = api.baseSincrona()
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar a política comercial" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

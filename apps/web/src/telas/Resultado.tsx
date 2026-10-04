@@ -3,7 +3,7 @@ import { api } from '../dados/api'
 import { agregadoPorRegiao, linhasClientes, linhasParque } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { duracaoHoras, inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Carregando, Cartao, Chip, Metrica, Skeleton } from '../componentes/ui/primitivos'
+import { Carregando, Cartao, Chip, ErroConsulta, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { BarrasHorizontais, BarrasMensais, Sparkline } from '../componentes/ui/graficos'
 import { Rolagem } from '../componentes/ui/Rolagem'
 
@@ -14,11 +14,25 @@ import { Rolagem } from '../componentes/ui/Rolagem'
  * todos com comparação de período, e no máximo dois níveis até o registro-fonte.
  */
 export function Resultado() {
-  const { situacao, dado } = useConsulta(() => api.indicadores(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.indicadores(), [])
 
   const parque = useMemo(() => (dado ? linhasParque() : []), [dado])
   const clientes = useMemo(() => (dado ? linhasClientes() : []), [dado])
   const regioes = useMemo(() => (dado ? agregadoPorRegiao() : []), [dado])
+
+  /*
+   * Antes da guarda de carregamento, e não depois.
+   *
+   * `situacao === 'carregando' || !dado` engole o estado de erro: com a carga
+   * falhada `dado` é nulo, a condição dá verdadeiro e a tela fica **no
+   * esqueleto para sempre** — a espera infinita, que é pior que a lista vazia,
+   * porque não dá nem o que tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar o resultado" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   if (situacao === 'carregando' || !dado) {
     return (

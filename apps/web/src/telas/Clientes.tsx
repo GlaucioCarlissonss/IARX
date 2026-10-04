@@ -5,7 +5,7 @@ import { linhasClientes } from '../dados/consultas'
 import type { LinhaCliente } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -39,7 +39,7 @@ const CREDITO = {
  */
 export function Clientes() {
   const [params] = useSearchParams()
-  const { situacao, dado } = useConsulta(() => api.clientes(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.clientes(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [recorte, setRecorte] = useState('')
   const [aberto, setAberto] = useState<Aberto>(null)
@@ -186,6 +186,19 @@ export function Clientes() {
       ),
     },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar a carteira" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

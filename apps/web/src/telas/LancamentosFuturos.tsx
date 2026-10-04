@@ -15,7 +15,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useFormulario } from '../lib/useFormulario'
 import { useSessao, useToast } from '../lib/contexto'
 import { data, moeda } from '../lib/formato'
-import { Aviso, Botao, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Cartao, Chip, Entrada, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import type { Severidade } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
@@ -64,7 +64,7 @@ const SEVERIDADE: Record<StatusLancamento, Severidade> = {
 export function LancamentosFuturos() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado, recarregar } = useConsulta(() => api.lancamentosFuturos(), [])
+  const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.lancamentosFuturos(), [])
   const [aberto, setAberto] = useState<Aberto>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [filtroStatus, setFiltroStatus] = useState<'todos' | StatusLancamento>('todos')
@@ -224,6 +224,19 @@ export function LancamentosFuturos() {
     // A permissão é do lado, não da tela: quem pode lançar despesa não emite
     // cobrança. É a mesma regra que o serviço aplica no servidor.
     return lado === 'PAGAR' ? pode('pagar:criar') : pode('receber:criar')
+  }
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar os lançamentos futuros" erro={erroConsulta} aoTentarNovamente={recarregar} />
+    )
   }
 
   return (

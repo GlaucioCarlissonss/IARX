@@ -7,7 +7,7 @@ import { HOJE } from '../dados/gerar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { duracaoHoras, moeda, percentual, prazoRestante } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -46,7 +46,7 @@ const STATUS_ROTULO: Record<string, { rotulo: string; sev: 'disponivel' | 'uso' 
 export function Chamados() {
   const [params] = useSearchParams()
   const { pode } = useSessao()
-  const { situacao, dado } = useConsulta(() => api.ordens(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.ordens(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [prioridade, setPrioridade] = useState('')
   const [status, setStatus] = useState('')
@@ -168,6 +168,19 @@ export function Chamados() {
       },
     },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar os chamados" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

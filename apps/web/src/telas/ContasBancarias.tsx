@@ -5,17 +5,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useFormulario } from '../lib/useFormulario'
 import { useSessao, useToast } from '../lib/contexto'
 import { data, moeda } from '../lib/formato'
-import {
-  Aviso,
-  Botao,
-  Carregando,
-  Cartao,
-  Chip,
-  Entrada,
-  Metrica,
-  Selecao,
-  Skeleton,
-} from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import { ResumoErros } from '../componentes/ui/formulario'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
@@ -37,7 +27,7 @@ import type { ContaBancaria, Movimentacao } from '../dados/tipos'
 export function ContasBancarias() {
   const { pode } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado, recarregar } = useConsulta(() => api.contasBancarias(), [])
+  const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.contasBancarias(), [])
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null)
   const [aberto, setAberto] = useState<
     | { tipo: 'conta'; conta: ContaBancaria | null }
@@ -148,6 +138,19 @@ export function ContasBancarias() {
         ) : null,
     },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar as contas bancárias" erro={erroConsulta} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

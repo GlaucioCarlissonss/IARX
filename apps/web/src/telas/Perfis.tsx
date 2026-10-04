@@ -3,7 +3,7 @@ import { api } from '../dados/api'
 import { usuariosComPerfil } from '../dados/comandos'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
-import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, Metrica, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { ArvorePermissoes } from '../componentes/ui/ArvorePermissoes'
 import type { Permissao } from '../lib/permissoes'
 import type { PerfilGravado } from '../dados/tipos'
@@ -24,7 +24,7 @@ import type { PerfilGravado } from '../dados/tipos'
 export function Perfis() {
   const { pode } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado, recarregar } = useConsulta(() => api.perfis(), [])
+  const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.perfis(), [])
 
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null)
   const [rascunho, setRascunho] = useState<{ nome: string; descricao: string; permissoes: Permissao[] } | null>(null)
@@ -86,6 +86,19 @@ export function Perfis() {
     } else {
       setErro(r.erro.mensagem)
     }
+  }
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar os perfis" erro={erroConsulta} aoTentarNovamente={recarregar} />
+    )
   }
 
   return (

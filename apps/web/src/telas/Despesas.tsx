@@ -6,7 +6,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { baixar } from '../lib/baixar'
 import { competenciaLonga, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import { BarrasHorizontais } from '../componentes/ui/graficos'
 import { Rolagem } from '../componentes/ui/Rolagem'
@@ -38,7 +38,7 @@ const LIMIAR: Record<LimiarExecucao, { rotulo: string; sev: 'disponivel' | 'aten
 export function Despesas() {
   const { pode } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado } = useConsulta(() => api.orcamentos(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.orcamentos(), [])
   const base = api.baseSincrona()
 
   const competencias = base.competencias
@@ -129,6 +129,19 @@ export function Despesas() {
       .join('\n')
     const r = await baixar(`execucao-${competencia}.csv`, cabecalho + corpo, `execucao-${competencia}.txt`)
     if (r.aviso) avisar({ tom: 'atencao', titulo: 'Exportação', texto: r.aviso })
+  }
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar o orçamento" erro={erro} aoTentarNovamente={recarregar} />
+    )
   }
 
   return (

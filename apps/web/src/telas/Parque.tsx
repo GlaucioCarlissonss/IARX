@@ -7,7 +7,7 @@ import { CATEGORIAS, filialPorId } from '../dados/catalogo'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, ErroConsulta, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -48,7 +48,7 @@ const ESTADO: Record<EquipamentoStatus, { rotulo: string; sev: 'disponivel' | 'u
 export function Parque() {
   const [params, setParams] = useSearchParams()
   const { filialId, pode } = useSessao()
-  const { situacao, dado } = useConsulta(() => api.equipamentos(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.equipamentos(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [aberto, setAberto] = useState<Aberto>(null)
 
@@ -197,6 +197,19 @@ export function Parque() {
     categoria && { chave: 'categoria', texto: `Categoria: ${CATEGORIAS.find((c) => c.codigo === categoria)?.nome}` },
     familia && { chave: 'familia', texto: `Família: ${familia === 'IMPRESSAO' ? 'Impressão' : familia === 'COMPUTACAO' ? 'Computação' : 'Contingência'}` },
   ].filter(Boolean) as { chave: string; texto: string }[]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar o parque" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>

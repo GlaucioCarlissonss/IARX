@@ -4,17 +4,7 @@ import { nivelDoCentro } from '../dados/comandos'
 import { useConsulta } from '../lib/useConsulta'
 import { useFormulario } from '../lib/useFormulario'
 import { useSessao, useToast } from '../lib/contexto'
-import {
-  Aviso,
-  Botao,
-  Carregando,
-  Cartao,
-  Chip,
-  Entrada,
-  Metrica,
-  Selecao,
-  Skeleton,
-} from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import { AreaTexto, ResumoErros } from '../componentes/ui/formulario'
 import type { CentroCusto } from '../dados/tipos'
@@ -35,7 +25,7 @@ import type { CentroCusto } from '../dados/tipos'
 export function CentrosCusto() {
   const { pode } = useSessao()
   const { avisar } = useToast()
-  const { situacao, dado, recarregar } = useConsulta(() => api.centrosCusto(), [])
+  const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.centrosCusto(), [])
   const [aberto, setAberto] = useState<
     { tipo: 'novo'; paiId: string | null } | { tipo: 'editar'; centro: CentroCusto } | null
   >(null)
@@ -72,6 +62,19 @@ export function CentrosCusto() {
     } else {
       setErro([r.erro.mensagem, ...(r.erro.acoes ?? [])].join(' '))
     }
+  }
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar os centros de custo" erro={erroConsulta} aoTentarNovamente={recarregar} />
+    )
   }
 
   return (

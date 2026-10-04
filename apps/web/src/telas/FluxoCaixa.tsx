@@ -8,7 +8,7 @@ import {
 } from '../dados/comandos'
 import { useConsulta } from '../lib/useConsulta'
 import { data, moeda } from '../lib/formato'
-import { Aviso, Botao, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import { ProjecaoCaixa } from '../componentes/ui/graficos'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
@@ -43,7 +43,7 @@ const ROTULO_ALERTA: Record<AlertaCaixa['tipo'], string> = {
 }
 
 export function FluxoCaixa() {
-  const { situacao, dado } = useConsulta(() => api.cenariosCaixa(), [])
+  const { situacao, dado, erro, recarregar } = useConsulta(() => api.cenariosCaixa(), [])
   const [dias, setDias] = useState<number>(90)
   const [cenarioId, setCenarioId] = useState<string>('')
   const [contaId, setContaId] = useState<string>('')
@@ -102,6 +102,19 @@ export function FluxoCaixa() {
     },
     { chave: 'detalhe', titulo: 'O que aconteceu', celula: (a) => a.detalhe },
   ]
+
+  /*
+   * Falha de carga é dita, e não disfarçada de lista vazia.
+   *
+   * Sem isto a tela renderizava `dado ?? []` e a tabela anunciava
+   * "nenhum registro" — uma resposta errada apresentada como certa. Quem
+   * lê conclui que não há o que ver e vai embora, em vez de tentar de novo.
+   */
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta titulo="Não foi possível carregar a projeção de caixa" erro={erro} aoTentarNovamente={recarregar} />
+    )
+  }
 
   return (
     <>
