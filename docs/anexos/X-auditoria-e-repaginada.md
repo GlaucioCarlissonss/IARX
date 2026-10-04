@@ -527,3 +527,60 @@ ruído até que se prove que é.**
 Capturas nos dois temas, em três telas, conferidas — não só os portões.
 "Bold e memorável" tem limite numa tela de operação densa: o que se buscou foi
 hierarquia clara e assinatura discreta, não ornamento.
+
+---
+
+## X.13 Resultado da Entrega 5 — executada
+
+Dois commits: `4d285b5`, `6418680`.
+
+| | Antes | Depois |
+| --- | --- | --- |
+| Telas com consulta que tratam erro | 5 de 24 | **24 de 24**, com portão |
+| Telas que ficam no esqueleto para sempre ao falhar | 1 | **0** |
+| Telas que filtram e oferecem desfazer | 0 de 16 | **8**, inclusive o portal |
+| `web:test` | 224 | **227** |
+| `a11y:dom` | 225 | **227** |
+
+### O defeito de feedback, medido
+
+**Dezenove das vinte e quatro telas** renderizavam `dado ?? []` quando a carga
+falhava, e a tabela anunciava "nenhum registro" com a mesma cara de uma busca
+sem resultado. É a pior forma de falha de feedback: **uma resposta errada
+apresentada como certa**. Quem lê conclui que não há o que ver e vai embora,
+sem saber que houve falha e sem ter o que tentar.
+
+Uma era pior. `Resultado` guardava com `if (situacao === 'carregando' ||
+!dado)`: com a carga falhada `dado` é nulo, a condição dá verdadeiro, e a tela
+ficava **no esqueleto para sempre**. A espera infinita não oferece nem o
+caminho de volta.
+
+O portão (`estados-de-tela.test.ts`) tem três asserções, e a segunda é a que
+guarda a lição: **o tratamento de erro vem antes de qualquer guarda que teste
+a ausência de dado**. A ordem é o que separa "diz que falhou" de "espera para
+sempre".
+
+### Três verificações que precisaram de segunda tentativa
+
+Vale registrar porque o padrão se repete: **a primeira versão de um portão
+costuma medir a coisa errada**.
+
+1. A detecção de guarda invertida reprovava três telas corretas, confundindo
+   `if (!dado) return []` dentro de um `useMemo` com guarda que interrompe a
+   renderização. Portão que acusa quem está certo é abandonado antes de pegar
+   quem está errado.
+2. O teste de "limpar filtros" contava `tbody tr` para provar que o filtro
+   estreita a lista — e a tabela pagina em 25, de modo que filtrada e inteira
+   exibem o mesmo número de linhas. Media a paginação, não o filtro.
+3. O auxiliar `assentar` passava na fresta entre duas fases de carga: em
+   "Consumo e custos" a memória só sabe o que pedir depois que o histórico
+   responde, e o axe chegou a reprovar esse instante. Agora a tela precisa
+   estar assentada **e continuar assim**.
+
+### O que a Entrega 5 não fez
+
+| Item | Por quê |
+| --- | --- |
+| Ligar a saída de filtro nas outras oito telas | São faixas de um controle só, ou de competência — zerar um seletor único não precisa de botão para zerar um seletor único |
+| Revisar fluxos de "projetos / SLA / suporte" | Não existem nesta base (X.0) |
+| Mexer em contraste, teclado ou foco | Já cobertos: 227 testes de a11y e 208 verificações de token. Não havia lacuna a fechar |
