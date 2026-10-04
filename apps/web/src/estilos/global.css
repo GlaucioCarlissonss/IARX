@@ -42,7 +42,7 @@ body {
   margin: 0;
   font-family: var(--fonte-ui);
   font-size: var(--t-15);
-  line-height: 1.5;
+  line-height: var(--altura-corpo);
   color: var(--cor-text-primary);
   background: var(--cor-surface);
   -webkit-font-smoothing: antialiased;
@@ -54,14 +54,25 @@ h2,
 h3,
 h4 {
   margin: 0;
-  line-height: 1.25;
-  font-weight: 650;
+  line-height: var(--altura-titulo);
+  font-weight: var(--peso-destaque);
+  letter-spacing: var(--trilha-titulo);
   text-wrap: balance;
 }
 
+/*
+ * O título da página é o único lugar com presença de display.
+ *
+ * Vinte e um pixels em 650 não hierarquizam nada: ficam a meio caminho do
+ * texto, e a página abre sem dizer onde começa. Vinte e sete em 700, com
+ * trilha fechada e entrelinha curta, dão o degrau — e é o degrau, não o
+ * tamanho, que faz a composição parecer decidida.
+ */
 h1 {
-  font-size: var(--t-21);
-  letter-spacing: -0.01em;
+  font-size: var(--t-27);
+  font-weight: var(--peso-display);
+  letter-spacing: var(--trilha-display);
+  line-height: var(--altura-display);
 }
 h2 {
   font-size: var(--t-17);
@@ -113,7 +124,7 @@ svg {
 .dado {
   font-family: var(--fonte-dado);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: var(--trilha-dado);
 }
 
 .num {
@@ -200,7 +211,7 @@ svg {
 .pares dt {
   font-size: var(--t-11);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-muted);
   margin-bottom: 2px;
 }
@@ -215,7 +226,7 @@ svg {
 .rotulo-secao {
   font-size: var(--t-11);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-muted);
   font-weight: 650;
 }
@@ -291,18 +302,18 @@ svg {
   gap: var(--e3);
   padding: 0 var(--e2);
 }
-.marca__sigla {
+/*
+ * O símbolo da marca.
+ *
+ * Sem placa de fundo: as barras ficam sobre o próprio fundo do rail, como o
+ * logotipo impresso fica sobre o papel. Uma placa colorida resolveria o
+ * contraste do ouro e tiraria dele exatamente o que o torna o acento da marca.
+ */
+.marca__simbolo {
   width: 30px;
-  height: 30px;
-  border-radius: var(--raio-1);
-  background: var(--cor-primary);
-  color: var(--cor-text-on-accent);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: var(--t-13);
-  letter-spacing: -0.02em;
+  height: 28px;
   flex: none;
+  overflow: visible;
 }
 .marca__nome {
   font-size: var(--t-15);
@@ -322,7 +333,7 @@ svg {
 .nav__grupo {
   font-size: var(--t-11);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-muted);
   font-weight: 650;
   padding: var(--e4) var(--e2) var(--e1);
@@ -636,7 +647,7 @@ input::placeholder {
 .cartao__titulo {
   font-size: var(--t-12);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-secondary);
   font-weight: 680;
 }
@@ -823,7 +834,7 @@ td {
 thead th {
   font-size: var(--t-11);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-secondary);
   font-weight: 680;
   white-space: nowrap;
@@ -1133,7 +1144,7 @@ th.numerico {
 .paleta__grupo {
   font-size: var(--t-11);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--trilha-etiqueta);
   color: var(--cor-text-muted);
   font-weight: 650;
   padding: var(--e3) var(--e2) var(--e1);

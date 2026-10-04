@@ -38,12 +38,31 @@ const ROTAS = [
 
 const BLOQUEANTES = ['critical', 'serious']
 
+/**
+ * Espera a tela assentar: montada **e** sem região ocupada.
+ *
+ * As duas condições, e nesta ordem. Só a segunda passa cedo demais: se a
+ * verificação acontece antes do primeiro commit do React, não há `aria-busy`
+ * no documento porque não há documento — e o teste segue lendo uma tela vazia.
+ * Foi a causa de duas intermitências distintas, cada uma aparecendo como
+ * defeito de uma tela diferente.
+ */
+async function assentar(page) {
+  // `#raiz` e não `#principal`: a tela de entrada fica **fora** do AppShell e
+  // não tem `#principal` nenhum. Esperar por ele travava as rotas sem shell.
+  await page.waitForFunction(
+    () => (document.querySelector('#raiz')?.childElementCount ?? 0) > 0,
+    null,
+    { timeout: 15000 },
+  )
+  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+}
+
 async function abrir(page, { hash = '', tema = 'light', largura = 1360, altura = 900 } = {}) {
   await page.setViewportSize({ width: largura, height: altura })
   await page.emulateMedia({ colorScheme: tema })
   await page.goto(APP + hash)
-  // Espera o fim do carregamento assíncrono: nenhuma região continua ocupada.
-  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+  await assentar(page)
 }
 
 async function violacoes(page) {
@@ -116,7 +135,7 @@ async function irPara(page, hash) {
   await page.evaluate((h) => {
     window.location.hash = h.replace(/^#/, '')
   }, hash)
-  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+  await assentar(page)
 }
 
 for (const tema of ['light', 'dark']) {
@@ -3333,14 +3352,25 @@ test('a prévia da conversão não conta tentativa', async ({ page }) => {
   await abrir(page, { hash: '#/lancamentos-futuros' })
   await page.getByLabel('Só a fila de exceção').check()
 
-  const antes = await page.getByRole('table').first().getByRole('row').nth(1).innerText()
-  await page.getByRole('table').first().getByRole('row').nth(1)
-    .getByRole('button', { name: /^Converter/ }).click()
+  /*
+   * A tabela é endereçada pelo **nome**, e não por posição.
+   *
+   * `getByRole('table').first()` falhava uma vez em três por duas razões
+   * somadas: a tela tem duas tabelas, e marcar o filtro não é instantâneo —
+   * a leitura seguinte podia pegar a lista ainda sem filtro. O nome acessível
+   * da tabela muda com o filtro (`legenda`), então esperar por ele resolve as
+   * duas coisas de uma vez: a tabela certa, já filtrada.
+   */
+  const fila = page.getByRole('table', { name: 'Fila de exceção de conversão' })
+  await expect(fila).toBeVisible()
+
+  const antes = await fila.getByRole('row').nth(1).innerText()
+  await fila.getByRole('row').nth(1).getByRole('button', { name: /^Converter/ }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Voltar' }).click()
 
   // Abrir e desistir não muda o contador: se a prévia "simulasse" convertendo, ele
   // subiria por curiosidade.
-  const depois = await page.getByRole('table').first().getByRole('row').nth(1).innerText()
+  const depois = await fila.getByRole('row').nth(1).innerText()
   expect(depois).toBe(antes)
 })
 
@@ -3435,7 +3465,13 @@ test('o fluxo de caixa diz que a janela começa hoje', async ({ page }) => {
   await abrir(page, { hash: '#/fluxo-caixa' })
 
   await expect(page.getByText(/o passado tem extrato, não projeção/)).toBeVisible()
-  const janela = page.getByLabel('Janela')
+  /*
+   * `exact: true` porque o gráfico se chama "Saldo projetado — 90 dias ·
+   * janela a partir de hoje": sem isso, o rótulo casa com dois elementos. A
+   * ambiguidade sempre existiu e só aparecia às vezes, porque o gráfico
+   * depende da carga — o teste passava quando chegava antes dele.
+   */
+  const janela = page.getByLabel('Janela', { exact: true })
   await expect(janela).toContainText('30 dias')
   await expect(janela).toContainText('180 dias')
 })

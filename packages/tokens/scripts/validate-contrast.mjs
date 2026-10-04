@@ -142,6 +142,25 @@ function regrasContraste(tema) {
     })
   }
 
+  /*
+   * Cores do logotipo.
+   *
+   * WCAG 1.4.3 e 1.4.11 **isentam** logotipo de contraste mínimo: a marca é
+   * identidade, não informação, e não é por ela que alguém lê a tela. A
+   * isenção, porém, não torna aceitável uma marca que some — a 30px no rail,
+   * uma barra invisível não é estilo, é defeito.
+   *
+   * Então o critério aqui não é normativo, é de silhueta: **três das quatro
+   * barras sustentam a forma**, e essas três passam por 1.4.11 como elemento
+   * gráfico. O ouro é a quarta, e é claro de propósito — é assim no logotipo
+   * impresso, onde o "I" dourado é o acento sobre fundo branco. Ele fica de
+   * fora da verificação, declarado e com motivo, em vez de escurecido até
+   * virar outro ouro.
+   */
+  for (const cor of ['marca-aco', 'marca-navio', 'marca-rubro']) {
+    add(`${cor} / bg`, cor, 'bg', componente_ui, 'WCAG 1.4.11 silhueta do logotipo')
+  }
+
   // Marcas de gráfico precisam ser legíveis contra o fundo do painel
   for (const i of SERIES) {
     add(`serie-${i} / bg`, `serie-${i}`, 'bg', componente_ui, 'WCAG 1.4.11 marca de gráfico')

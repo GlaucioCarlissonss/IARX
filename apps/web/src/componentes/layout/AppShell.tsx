@@ -4,6 +4,7 @@ import { useSessao } from '../../lib/contexto'
 import { api } from '../../dados/api'
 import { FILIAIS } from '../../dados/catalogo'
 import { Botao } from '../ui/primitivos'
+import { MarcaIarx } from '../ui/MarcaIarx'
 import { PaletaComandos } from './PaletaComandos'
 import { GRUPOS, GRUPOS_PORTAL, NAVEGACAO, NAVEGACAO_PORTAL, TITULOS } from '../../lib/navegacao'
 import type { ItemNavegacao } from '../../lib/navegacao'
@@ -83,9 +84,12 @@ export function AppShell() {
       <div className="app">
         <div className="rail">
           <div className="marca">
-            <span className="marca__sigla" aria-hidden="true">
-              IX
-            </span>
+            {/*
+              A marca é o rótulo acessível do rail quando ele colapsa: abaixo de
+              1024px o texto ao lado some, e o `aria-label` do símbolo é tudo o
+              que resta para dizer de que aplicação é esta janela.
+            */}
+            <MarcaIarx titulo={doPortal ? 'IARX — Portal do cliente' : 'IARX'} />
             <span className="pilha marca__texto">
               <span className="marca__nome">IARX</span>
               <span className="marca__desc">{doPortal ? 'Portal do cliente' : 'Locação de TI'}</span>

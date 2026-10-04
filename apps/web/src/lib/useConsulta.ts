@@ -27,18 +27,32 @@ export function useConsulta<T>(
   const buscarRef = useRef(buscar)
   buscarRef.current = buscar
 
-  // `revisao` sobe a cada escrita e precisa reexecutar a busca sem voltar ao
-  // estado de carregamento. Guardá-la em ref, em vez de na lista de
-  // dependências, é o que separa "buscar de novo" de "mostrar skeleton".
-  const revisaoRef = useRef(revisao)
-  const silencioso = revisaoRef.current !== revisao
-  revisaoRef.current = revisao
+  /*
+   * `revisao` sobe a cada escrita e precisa reexecutar a busca **sem** voltar
+   * ao estado de carregamento: trocar a lista por skeleton depois de salvar faz
+   * a pessoa perder o lugar em que estava, e pisca a página inteira por causa
+   * de uma linha que mudou.
+   *
+   * A comparação acontece **dentro do efeito**, e a ref só avança quando o
+   * efeito de fato roda. A versão anterior a atualizava durante a renderização,
+   * e isso é a fonte de um defeito intermitente real: React pode renderizar sem
+   * efetivar — uma atualização de estado concorrente, um `Suspense`, um
+   * `StrictMode` — e a ref ficava adiantada para uma renderização descartada.
+   * O efeito seguinte então lia `silencioso = false` e a tabela sumia por um
+   * instante, substituída por skeleton, **de vez em quando**.
+   *
+   * Foi assim que apareceu: um teste de ponta a ponta que lia a primeira linha
+   * da tabela antes e depois de abrir um diálogo falhava uma vez em três — e o
+   * que ele lia depois era a primeira linha de **outra** tabela da mesma tela,
+   * porque a primeira havia virado skeleton no intervalo.
+   */
+  const revisaoEfetivada = useRef(revisao)
 
   useEffect(() => {
     let vivo = true
-    // Recarga após escrita mantém o conteúdo na tela: trocar a lista por
-    // skeleton depois de salvar faz o usuário perder o lugar em que estava, e
-    // pisca a página inteira por causa de uma linha que mudou.
+    const silencioso = revisaoEfetivada.current !== revisao
+    revisaoEfetivada.current = revisao
+
     if (!silencioso) setEstado({ situacao: 'carregando', dado: null, erro: null })
 
     buscarRef

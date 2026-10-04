@@ -17,15 +17,15 @@
     --cor-text-secondary: #535c6b;
     --cor-text-muted: #616a76;
     --cor-text-on-accent: #ffffff;
-    --cor-primary: #0b4fa8;
-    --cor-primary-hover: #093f88;
-    --cor-primary-subtle-bg: #e8f0fb;
-    --cor-primary-subtle-fg: #0a4794;
+    --cor-primary: #1f3a6e;
+    --cor-primary-hover: #162b52;
+    --cor-primary-subtle-bg: #e9edf6;
+    --cor-primary-subtle-fg: #1d3665;
     --cor-disponivel: #0a6b41;
     --cor-disponivel-bg: #e4f4ec;
     --cor-disponivel-mark: #0d8150;
-    --cor-em-uso: #0b4fa8;
-    --cor-em-uso-bg: #e8f0fb;
+    --cor-em-uso: #1f3a6e;
+    --cor-em-uso-bg: #e9edf6;
     --cor-em-uso-mark: #1160c4;
     --cor-atencao: #79500a;
     --cor-atencao-bg: #fdf3dd;
@@ -36,11 +36,15 @@
     --cor-inativo: #5b6472;
     --cor-inativo-bg: #eef0f3;
     --cor-inativo-mark: #68717f;
-    --cor-serie-1: #0b4fa8;
+    --cor-serie-1: #1f3a6e;
     --cor-serie-2: #ca7805;
     --cor-serie-3: #6d4025;
     --cor-serie-4: #1a9c8f;
     --cor-serie-5: #9475f9;
+    --cor-marca-ouro: #e6d15c;
+    --cor-marca-aco: #6e93c4;
+    --cor-marca-navio: #2a3458;
+    --cor-marca-rubro: #cc2229;
 
   /* Indicador de foco em anel duplo: permanece visível sobre qualquer fundo,
      inclusive sobre o botão primário (WCAG 2.4.11 / 2.4.13). */
@@ -68,15 +72,15 @@
       --cor-text-secondary: #a9b2c0;
       --cor-text-muted: #98a1af;
       --cor-text-on-accent: #08121f;
-      --cor-primary: #7fb2ff;
-      --cor-primary-hover: #a3c8ff;
-      --cor-primary-subtle-bg: #152437;
-      --cor-primary-subtle-fg: #9cc4ff;
+      --cor-primary: #8fb0e0;
+      --cor-primary-hover: #aec8ea;
+      --cor-primary-subtle-bg: #16203a;
+      --cor-primary-subtle-fg: #a8c2e8;
       --cor-disponivel: #4cc98a;
       --cor-disponivel-bg: #10251c;
       --cor-disponivel-mark: #3fbd7d;
-      --cor-em-uso: #7fb2ff;
-      --cor-em-uso-bg: #152437;
+      --cor-em-uso: #8fb0e0;
+      --cor-em-uso-bg: #16203a;
       --cor-em-uso-mark: #6aa5ff;
       --cor-atencao: #e8b23d;
       --cor-atencao-bg: #2a2110;
@@ -87,11 +91,15 @@
       --cor-inativo: #9aa3b1;
       --cor-inativo-bg: #1a1e25;
       --cor-inativo-mark: #8b95a3;
-      --cor-serie-1: #7fb2ff;
+      --cor-serie-1: #8fb0e0;
       --cor-serie-2: #915952;
       --cor-serie-3: #febbc0;
       --cor-serie-4: #66638f;
       --cor-serie-5: #9ba904;
+      --cor-marca-ouro: #e6d15c;
+      --cor-marca-aco: #8fb0e0;
+      --cor-marca-navio: #5b78b5;
+      --cor-marca-rubro: #e05259;
   }
 }
 
@@ -109,15 +117,15 @@
     --cor-text-secondary: #535c6b;
     --cor-text-muted: #616a76;
     --cor-text-on-accent: #ffffff;
-    --cor-primary: #0b4fa8;
-    --cor-primary-hover: #093f88;
-    --cor-primary-subtle-bg: #e8f0fb;
-    --cor-primary-subtle-fg: #0a4794;
+    --cor-primary: #1f3a6e;
+    --cor-primary-hover: #162b52;
+    --cor-primary-subtle-bg: #e9edf6;
+    --cor-primary-subtle-fg: #1d3665;
     --cor-disponivel: #0a6b41;
     --cor-disponivel-bg: #e4f4ec;
     --cor-disponivel-mark: #0d8150;
-    --cor-em-uso: #0b4fa8;
-    --cor-em-uso-bg: #e8f0fb;
+    --cor-em-uso: #1f3a6e;
+    --cor-em-uso-bg: #e9edf6;
     --cor-em-uso-mark: #1160c4;
     --cor-atencao: #79500a;
     --cor-atencao-bg: #fdf3dd;
@@ -128,11 +136,15 @@
     --cor-inativo: #5b6472;
     --cor-inativo-bg: #eef0f3;
     --cor-inativo-mark: #68717f;
-    --cor-serie-1: #0b4fa8;
+    --cor-serie-1: #1f3a6e;
     --cor-serie-2: #ca7805;
     --cor-serie-3: #6d4025;
     --cor-serie-4: #1a9c8f;
     --cor-serie-5: #9475f9;
+    --cor-marca-ouro: #e6d15c;
+    --cor-marca-aco: #6e93c4;
+    --cor-marca-navio: #2a3458;
+    --cor-marca-rubro: #cc2229;
 }
 
 :root[data-theme='dark'] {
@@ -148,15 +160,15 @@
     --cor-text-secondary: #a9b2c0;
     --cor-text-muted: #98a1af;
     --cor-text-on-accent: #08121f;
-    --cor-primary: #7fb2ff;
-    --cor-primary-hover: #a3c8ff;
-    --cor-primary-subtle-bg: #152437;
-    --cor-primary-subtle-fg: #9cc4ff;
+    --cor-primary: #8fb0e0;
+    --cor-primary-hover: #aec8ea;
+    --cor-primary-subtle-bg: #16203a;
+    --cor-primary-subtle-fg: #a8c2e8;
     --cor-disponivel: #4cc98a;
     --cor-disponivel-bg: #10251c;
     --cor-disponivel-mark: #3fbd7d;
-    --cor-em-uso: #7fb2ff;
-    --cor-em-uso-bg: #152437;
+    --cor-em-uso: #8fb0e0;
+    --cor-em-uso-bg: #16203a;
     --cor-em-uso-mark: #6aa5ff;
     --cor-atencao: #e8b23d;
     --cor-atencao-bg: #2a2110;
@@ -167,11 +179,15 @@
     --cor-inativo: #9aa3b1;
     --cor-inativo-bg: #1a1e25;
     --cor-inativo-mark: #8b95a3;
-    --cor-serie-1: #7fb2ff;
+    --cor-serie-1: #8fb0e0;
     --cor-serie-2: #915952;
     --cor-serie-3: #febbc0;
     --cor-serie-4: #66638f;
     --cor-serie-5: #9ba904;
+    --cor-marca-ouro: #e6d15c;
+    --cor-marca-aco: #8fb0e0;
+    --cor-marca-navio: #5b78b5;
+    --cor-marca-rubro: #e05259;
 }
 
 /* Foco visível sempre, e nunca removido sem substituto equivalente. */

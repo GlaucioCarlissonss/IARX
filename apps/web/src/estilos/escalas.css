@@ -49,6 +49,32 @@
   --peso-dado: 620;
   --peso-destaque: 650;
   --peso-total: 700;
+  --peso-display: 700;
+
+  /*
+   * Entrelinha e trilha por papel — a parte do sistema tipográfico que faz a
+   * identidade sem custar um byte de fonte.
+   *
+   * O entregável é um HTML único, abrível sem servidor: embutir uma família em
+   * base64 custaria entre 60 e 200 kB. O que distingue uma tela bem composta de
+   * uma genérica, porém, quase nunca é a família — é a **relação** entre
+   * tamanho, peso, trilha e entrelinha. Título grande pede trilha negativa
+   * porque o espaço entre letras cresce com o corpo e a palavra se desmancha;
+   * etiqueta em versalete pede trilha positiva porque maiúscula colada não tem
+   * o desenho das minúsculas para separar uma letra da outra.
+   *
+   * `--trilha-etiqueta` substitui seis valores escolhidos à mão entre 0,06 e
+   * 0,09em, em seis lugares que fazem a mesma coisa.
+   */
+  --trilha-display: -0.022em;
+  --trilha-titulo: -0.012em;
+  --trilha-dado: -0.01em;
+  --trilha-etiqueta: 0.08em;
+
+  --altura-display: 1.12;
+  --altura-titulo: 1.25;
+  --altura-corpo: 1.5;
+  --altura-dado: 1.35;
 
   /* --------------------------------------------------------------- espaço */
 
