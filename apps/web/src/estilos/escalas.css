@@ -113,9 +113,30 @@
   --campo-busca-largo-min: 240px;
   --grafico-min: 520px;
 
+  /* ------------------------------------------------------------- elevação */
+
+  /*
+   * Três degraus, e cada um tem um papel: o que levanta ao passar o cursor, o
+   * que flutua ancorado a um controle, e o que cobre a tela.
+   *
+   * A sombra é tinta do **texto**, não preto fixo. `rgb(0 0 0 / 12%)` sobre
+   * fundo escuro é uma sombra que não existe: preto sobre quase-preto. Com
+   * `color-mix` sobre `--cor-text-primary`, a tinta inverte com o tema e o
+   * degrau continua legível nos dois. Havia seis sombras escritas à mão, e
+   * quatro delas eram preto fixo.
+   */
+  --sombra-1: 0 2px 6px -2px color-mix(in srgb, var(--cor-text-primary) 18%, transparent);
+  --sombra-2: 0 12px 28px -10px color-mix(in srgb, var(--cor-text-primary) 30%, transparent);
+  --sombra-3: 0 18px 48px -12px color-mix(in srgb, var(--cor-text-primary) 34%, transparent);
+
   /* ----------------------------------------------------------------- tempo */
 
   --transicao: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+  /*
+   * Superfície grande se move mais devagar que controle pequeno — 120ms num
+   * diálogo inteiro parece um salto, e 220ms num botão parece lentidão.
+   */
+  --transicao-superficie: 220ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 /*
