@@ -343,7 +343,7 @@ export function Mapa() {
                 altura={520}
                 sobreposicao={
                   <>
-                    <div style={{ minWidth: 220, flex: 1 }}>
+                    <div className="campo-busca">
                       <Busca
                         rotulo="Buscar cliente, cidade ou UF"
                         rotuloOculto

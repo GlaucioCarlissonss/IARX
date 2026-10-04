@@ -25,15 +25,17 @@ import { dirname, join } from 'node:path'
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const APP = join(raiz, 'apps', 'web', 'src', 'estilos', 'global.css')
+const ESCALAS = join(raiz, 'apps', 'web', 'src', 'estilos', 'escalas.css')
 const TOKENS = join(raiz, 'packages', 'tokens', 'dist', 'tokens.css')
 
 const css = readFileSync(APP, 'utf8')
+const escalas = readFileSync(ESCALAS, 'utf8')
 const tokens = readFileSync(TOKENS, 'utf8')
 
 /** Nomes declarados em qualquer um dos dois arquivos de token. */
 function declarados(): Set<string> {
   const nomes = new Set<string>()
-  for (const fonte of [css, tokens]) {
+  for (const fonte of [css, escalas, tokens]) {
     for (const m of fonte.matchAll(/(^|[;{\s])(--[a-z0-9-]+)\s*:/gi)) nomes.add(m[2]!)
   }
   return nomes
@@ -93,5 +95,30 @@ test('o CSS da aplicação não reintroduz cor crua fora dos tokens', () => {
     [],
     'cor fora do sistema de tokens: não passa pela verificação de contraste nem muda no tema escuro.\n' +
       'Se for deliberada, declare a razão em CORES_CRUAS_JUSTIFICADAS.',
+  )
+})
+
+test('token mora em dois lugares, e a folha global não é nenhum deles', () => {
+  /*
+   * A divisão é por **origem**: `@iarx/tokens` é gerado de `palette.json` e
+   * verificado por contraste; `escalas.css` é escrito à mão e não tem o que
+   * validar além da coerência. `global.css` só consome.
+   *
+   * Sem este portão, a terceira declaração entra em qualquer regra no meio das
+   * duas mil linhas da folha global, e quem for procurar "quanto mede o rail"
+   * acha um dos dois valores e não sabe que existe o outro — foi exatamente o
+   * caso do `--largura-rail`, declarado no topo e redeclarado numa media query
+   * oitocentas linhas abaixo.
+   */
+  const declaradas = [...css.matchAll(/(^|[;{\s])(--[a-z0-9-]+)\s*:/gi)].map((m) => ({
+    nome: m[2]!,
+    linha: css.slice(0, m.index).split('\n').length,
+  }))
+
+  assert.deepEqual(
+    declaradas.map((d) => `${d.nome} (linha ${d.linha})`),
+    [],
+    'token declarado na folha global: o valor passa a existir em dois lugares, e o segundo se descobre por acidente.\n' +
+      'Cor vai para packages/tokens/src/palette.json; o resto, para apps/web/src/estilos/escalas.css.',
   )
 })

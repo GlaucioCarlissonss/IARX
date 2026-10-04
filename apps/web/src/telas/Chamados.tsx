@@ -214,7 +214,7 @@ export function Chamados() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Chamado, patrimônio, cliente ou sintoma"
               valor={texto}

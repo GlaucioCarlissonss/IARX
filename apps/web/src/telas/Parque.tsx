@@ -216,7 +216,7 @@ export function Parque() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Patrimônio, série, modelo ou cliente"
               valor={texto}

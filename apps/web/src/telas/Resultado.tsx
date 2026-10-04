@@ -162,7 +162,7 @@ export function Resultado() {
               <tbody>
                 {regioes.map((r) => (
                   <tr key={r.regiao.id}>
-                    <th scope="row" style={{ fontWeight: 600 }}>
+                    <th scope="row" className="peso-rotulo">
                       {r.regiao.nome}
                       <br />
                       <span className="texto-atenuado">{r.clientes} clientes</span>
@@ -236,7 +236,7 @@ export function Resultado() {
                 <tbody>
                   {deficitarios.slice(0, 8).map((l) => (
                     <tr key={l.equipamento.id}>
-                      <th scope="row" className="dado" style={{ fontWeight: 620 }}>
+                      <th scope="row" className="dado peso-dado">
                         {l.equipamento.patrimonio}
                       </th>
                       <td>{l.modelo}</td>

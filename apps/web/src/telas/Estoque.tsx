@@ -213,7 +213,7 @@ export function Estoque() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Código, descrição ou fornecedor"
               valor={texto}

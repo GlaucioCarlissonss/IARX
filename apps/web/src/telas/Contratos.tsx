@@ -270,7 +270,7 @@ export function Contratos() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Número do contrato ou cliente"
               valor={texto}

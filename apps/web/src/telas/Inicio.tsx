@@ -235,7 +235,7 @@ export function Inicio() {
                     const p = prazoRestante(c.ordem.prazoSolucaoEm, HOJE)
                     return (
                       <tr key={c.ordem.id}>
-                        <th scope="row" className="dado" style={{ fontWeight: 620 }}>
+                        <th scope="row" className="dado peso-dado">
                           {c.ordem.numero}
                         </th>
                         <td>{c.clienteNome ?? '—'}</td>
@@ -280,7 +280,7 @@ export function Inicio() {
               <tbody>
                 {reposicao.map((r) => (
                   <tr key={r.peca.id}>
-                    <th scope="row" style={{ fontWeight: 600 }}>
+                    <th scope="row" className="peso-rotulo">
                       <span className="dado">{r.peca.codigo}</span>
                       <br />
                       <span className="texto-atenuado">{r.peca.descricao}</span>

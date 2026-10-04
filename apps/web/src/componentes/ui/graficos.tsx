@@ -106,14 +106,14 @@ export function BarrasMensais({ titulo, series, formatarValor, altura = 210 }: B
     .join('; ')
 
   return (
-    <figure className="pilha g3" style={{ margin: 0 }}>
+    <figure className="pilha g3 sem-margem">
       <Rolagem rotulo={titulo}>
         <svg
           className="grafico"
           viewBox={`0 0 ${w} ${altura}`}
           role="img"
           aria-labelledby={`${id}-titulo`}
-          style={{ minWidth: 520 }}
+          style={{ minWidth: 'var(--grafico-min)' }}
         >
           <title id={`${id}-titulo`}>{`${titulo}. ${resumo}. A tabela abaixo traz os mesmos valores.`}</title>
 
@@ -201,7 +201,7 @@ export function BarrasMensais({ titulo, series, formatarValor, altura = 210 }: B
       </div>
 
       <details>
-        <summary className="texto-atenuado" style={{ cursor: 'pointer' }}>
+        <summary className="texto-atenuado clicavel">
           Ver os mesmos dados em tabela
         </summary>
         <Rolagem rotulo={`${titulo} em tabela`}>
@@ -268,7 +268,7 @@ export function BarrasHorizontais({
       <tbody>
         {itens.map((i) => (
           <tr key={i.rotulo}>
-            <th scope="row" style={{ fontWeight: 600, width: '42%' }}>
+            <th scope="row" className="peso-rotulo" style={{ width: '42%' }}>
               {i.rotulo}
             </th>
             <td>
@@ -283,7 +283,7 @@ export function BarrasHorizontais({
                     />
                   </div>
                 </div>
-                <span className="dado" style={{ minWidth: 78, textAlign: 'right' }}>
+                <span className="dado grafico__valor">
                   {formatarValor(i.valor)}
                 </span>
               </div>
@@ -360,14 +360,14 @@ export function ProjecaoCaixa({
     : `Saldo projetado permanece positivo em toda a janela; o menor é ${formatarValor(menor.saldoAcumulado)} em ${menor.dia}.`
 
   return (
-    <figure className="pilha g3" style={{ margin: 0 }}>
+    <figure className="pilha g3 sem-margem">
       <Rolagem rotulo={titulo}>
         <svg
           className="grafico"
           viewBox={`0 0 ${w} ${altura}`}
           role="img"
           aria-labelledby={`${id}-titulo`}
-          style={{ minWidth: 520 }}
+          style={{ minWidth: 'var(--grafico-min)' }}
         >
           <title id={`${id}-titulo`}>{`${titulo}. ${resumo} A tabela abaixo traz os mesmos valores.`}</title>
 
@@ -441,7 +441,7 @@ export function ProjecaoCaixa({
       </div>
 
       <details>
-        <summary className="texto-atenuado" style={{ cursor: 'pointer' }}>
+        <summary className="texto-atenuado clicavel">
           Ver os mesmos dados em tabela
         </summary>
         <Rolagem rotulo={`${titulo} em tabela`}>

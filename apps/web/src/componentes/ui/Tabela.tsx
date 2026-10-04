@@ -152,7 +152,7 @@ export function Tabela<T>({
                     <th
                       key={c.chave}
                       scope="row"
-                      style={{ fontWeight: 620 }}
+                      className="peso-dado"
                       data-mobile={c.ocultarEmMobile ? 'oculto' : undefined}
                     >
                       {c.celula(item)}

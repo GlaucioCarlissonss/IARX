@@ -360,7 +360,7 @@ export function Faturamento() {
               <tbody>
                 {detalhe.medicao.itens.slice(0, 12).map((it) => (
                   <tr key={it.equipamentoPatrimonio}>
-                    <th scope="row" style={{ fontWeight: 600 }}>
+                    <th scope="row" className="peso-rotulo">
                       <span className="dado">{it.equipamentoPatrimonio}</span>
                       <br />
                       <span className="texto-atenuado">{it.descricao}</span>
@@ -379,15 +379,15 @@ export function Faturamento() {
                         ? moeda(it.valorExcedenteMono + it.valorExcedenteColor)
                         : '—'}
                     </td>
-                    <td className="numerico dado" style={{ fontWeight: 650 }}>{moeda(it.total)}</td>
+                    <td className="numerico dado peso-destaque">{moeda(it.total)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr>
-                  <th scope="row" style={{ fontWeight: 700 }}>Valor líquido da competência</th>
+                  <th scope="row" className="peso-total">Valor líquido da competência</th>
                   <td colSpan={4} />
-                  <td className="numerico dado" style={{ fontWeight: 700 }}>{moeda(detalhe.medicao.valorLiquido)}</td>
+                  <td className="numerico dado peso-total">{moeda(detalhe.medicao.valorLiquido)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -404,7 +404,7 @@ export function Faturamento() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Fatura, cliente ou contrato"
               valor={texto}

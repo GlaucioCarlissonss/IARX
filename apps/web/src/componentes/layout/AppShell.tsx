@@ -107,8 +107,7 @@ export function AppShell() {
                         key={item.para}
                         to={item.para}
                         end={item.para === raiz}
-                        className="nav__item"
-                        style={{ textDecoration: 'none' }}
+                        className="nav__item sem-sublinhado"
                         aria-current={local.pathname === item.para ? 'page' : undefined}
                       >
                         <span className="nav__glifo" aria-hidden="true">
@@ -152,7 +151,7 @@ export function AppShell() {
               como se fosse o do grupo.
             */}
             {doPortal ? (
-              <p className="barra__campo texto-secundario" style={{ margin: 0 }}>
+              <p className="barra__campo texto-secundario sem-margem">
                 {escopo!.locaisIds === null
                   ? 'Todas as unidades'
                   : `${escopo!.locaisIds.length} unidade(s) no seu acesso`}

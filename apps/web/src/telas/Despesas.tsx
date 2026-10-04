@@ -233,7 +233,7 @@ export function Despesas() {
               <tbody>
                 {estouradas.map((l) => (
                   <tr key={l.orcamento.id}>
-                    <th scope="row" style={{ fontWeight: 620 }}>{l.categoriaNome}</th>
+                    <th scope="row" className="peso-dado">{l.categoriaNome}</th>
                     <td className="numerico dado">{moeda(l.valorOrcado)}</td>
                     <td className="numerico dado">{moeda(l.realizado)}</td>
                     <td className="numerico dado">{moeda(l.realizado - l.valorOrcado)}</td>

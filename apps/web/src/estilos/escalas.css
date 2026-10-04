@@ -1,0 +1,106 @@
+/**
+ * Escalas próprias da aplicação — o segundo lugar onde mora um token, e o
+ * último.
+ *
+ * O primeiro é `@iarx/tokens`: **cor**, gerada de `palette.json` e verificada
+ * por contraste e por distinção sob daltonismo no CI. Aqui ficam as escalas que
+ * não são cor — espaço, tipografia, peso, raio, medida e tempo — e que não têm
+ * o que validar além da própria coerência.
+ *
+ * A divisão é por **origem**, não por conveniência: o que é gerado não se edita
+ * à mão, e o que é escrito à mão não se mistura com o gerado. `global.css`, daqui
+ * para baixo, não declara token nenhum — só consome. Há portão para isso em
+ * `apps/web/test/css-tokens.test.ts`.
+ *
+ * Toda escala é curta de propósito. Nove tamanhos de texto cabem na cabeça de
+ * quem escreve a próxima tela; vinte não cabem, e a vigésima primeira vira um
+ * valor solto no meio do CSS.
+ */
+
+:root {
+  /* ----------------------------------------------------------- tipografia */
+
+  --fonte-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Monoespaçada para identificadores: patrimônio, série, nº de contrato,
+     valores. É como se lê etiqueta de ativo e coluna de fatura. */
+  --fonte-dado: ui-monospace, 'SF Mono', SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  --t-11: 11px;
+  --t-12: 12px;
+  --t-13: 13px;
+  --t-14: 14px;
+  --t-15: 15px;
+  --t-17: 17px;
+  --t-21: 21px;
+  --t-27: 27px;
+  --t-34: 34px;
+
+  /*
+   * Pesos, por papel e não por número.
+   *
+   * Os quatro já existiam espalhados em doze estilos inline — 600, 620, 650 e
+   * 700 — e a diferença entre eles não era arbitrária: **620 acompanha a
+   * monoespaçada**. Fonte mono tem peso ótico menor que a de interface no mesmo
+   * valor numérico, e um patrimônio em 600 ao lado de um rótulo em 600 parece
+   * mais fraco que ele. Vinte pontos compensam, e é por isso que o token é
+   * `--peso-dado` e não `--peso-600`: quem for usá-lo precisa saber quando.
+   */
+  --peso-rotulo: 600;
+  --peso-dado: 620;
+  --peso-destaque: 650;
+  --peso-total: 700;
+
+  /* --------------------------------------------------------------- espaço */
+
+  --e1: 4px;
+  --e2: 8px;
+  --e3: 12px;
+  --e4: 16px;
+  --e5: 24px;
+  --e6: 32px;
+  --e7: 48px;
+
+  --raio-1: 6px;
+  --raio-2: 10px;
+  --raio-3: 14px;
+
+  /* -------------------------------------------------------------- medidas */
+
+  --largura-rail: 244px;
+  --altura-barra: 60px;
+  --alvo-toque: 44px;
+  /* Medida máxima da coluna de conteúdo. Acima disto a leitura piora em vez de
+     melhorar: a linha fica longa demais para o olho voltar ao início certo, e
+     um cartão de KPI no canto direito de uma tela de 27" exige mover a cabeça
+     para ler o número que está sendo comparado. O espaço extra vira margem. */
+  --largura-max-conteudo: 1440px;
+
+  /*
+   * Larguras mínimas de campo e de gráfico.
+   *
+   * Eram números soltos em treze estilos inline. O de busca é o que mais
+   * importa: abaixo de 220px o campo deixa de caber um termo de busca inteiro,
+   * e a faixa de filtros quebra de um jeito que empurra o conteúdo para baixo
+   * da dobra em notebook.
+   */
+  --campo-busca-min: 220px;
+  --campo-busca-largo-min: 240px;
+  --grafico-min: 520px;
+
+  /* ----------------------------------------------------------------- tempo */
+
+  --transicao: 120ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/*
+ * O rail encolhe para só os glifos antes do conteúdo começar a espremer.
+ *
+ * Fica aqui, e não na folha global, porque é **valor de escala** e não regra de
+ * componente: quem procura "quanto mede o rail" precisa achar os dois números
+ * no mesmo lugar, senão descobre o segundo por acidente.
+ */
+@media (max-width: 1024px) {
+  :root {
+    --largura-rail: 68px;
+  }
+}

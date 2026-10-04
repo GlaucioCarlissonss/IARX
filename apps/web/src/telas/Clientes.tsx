@@ -253,7 +253,7 @@ export function Clientes() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Cliente, CNPJ ou segmento"
               valor={texto}

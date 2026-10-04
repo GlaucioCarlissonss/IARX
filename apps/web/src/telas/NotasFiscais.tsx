@@ -261,7 +261,7 @@ export function NotasFiscais() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 220 }}>
+          <div className="campo-busca">
             <Busca
               rotulo="Número, chave ou fornecedor"
               valor={texto}

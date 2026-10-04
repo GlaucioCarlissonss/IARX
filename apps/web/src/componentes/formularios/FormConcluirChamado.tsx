@@ -281,7 +281,7 @@ export function FormConcluirChamado({ ordem, aoFechar }: Props) {
             </div>
             <div>
               <dt>Custo total do atendimento</dt>
-              <dd className="dado" style={{ fontWeight: 700 }}>
+              <dd className="dado peso-total">
                 {moeda(custoMaoObra + custoPecas)}
               </dd>
             </div>

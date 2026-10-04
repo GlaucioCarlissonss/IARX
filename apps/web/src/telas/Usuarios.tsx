@@ -188,7 +188,7 @@ export function Usuarios() {
 
       <Cartao>
         <Filtros>
-          <div style={{ minWidth: 240, flex: 1 }}>
+          <div className="campo-busca campo-busca--largo">
             <Busca
               rotulo="Buscar por nome ou e-mail"
               valor={texto}
