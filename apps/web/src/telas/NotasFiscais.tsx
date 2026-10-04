@@ -503,6 +503,12 @@ function DetalheNota({ nota, aoFechar, aoEditarSeries, aoAnexos, aoCancelar }: D
 
         <section aria-label="Itens da nota" className="pilha g3">
           <h3>Itens</h3>
+          {/*
+            Dentro de diálogo, e limitada pelo documento: os itens são os que a
+            nota tem. Paginar dentro de um modal esconde conteúdo atrás de um
+            controle que compete com o próprio diálogo — é a mesma razão pela
+            qual as tabelas dos formulários também ficam cruas.
+          */}
           <Rolagem rotulo="Tabela de dados">
             <table>
               <caption className="so-leitor">

@@ -202,58 +202,63 @@ export function Faturamento() {
             Itens com cobrança por franquia e excedente não fecham sem leitura do período. Cada pendência é tratada
             individualmente — em lote, a estimativa vira o caminho fácil e a coleta de leitura acaba.
           </p>
-          <Rolagem rotulo="Tabela de dados">
-            <table>
-              <caption className="so-leitor">
-                Equipamentos locados sem leitura de contador na competência em fechamento
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Patrimônio</th>
-                  <th scope="col">Cliente</th>
-                  <th scope="col" className="numerico">
-                    Sem leitura há
-                  </th>
-                  <th scope="col" className="numerico">
-                    Média histórica
-                  </th>
-                  <th scope="col">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendencias.map((p) => (
-                  <tr key={p.equipamento.id}>
-                    <th scope="row" className="dado">
-                      {p.equipamento.patrimonio}
-                    </th>
-                    <td>{p.clienteNome}</td>
-                    <td className="numerico">
-                      <Chip severidade={p.mesesSemLeitura > 1 ? 'critico' : 'atencao'}>
-                        {p.mesesSemLeitura} {p.mesesSemLeitura === 1 ? 'mês' : 'meses'}
-                      </Chip>
-                    </td>
-                    <td className="numerico dado">{inteiro(p.mediaMono)} pág</td>
-                    <td>
-                      {pode('prefatura:aprovar') ? (
-                        <Botao
-                          pequeno
-                          variante="primario"
-                          onClick={() =>
-                            setMedicao({ equipamento: p.equipamento, competencia: p.competencia })
-                          }
-                        >
-                          Tratar
-                          <span className="so-leitor"> medição do patrimônio {p.equipamento.patrimonio}</span>
-                        </Botao>
-                      ) : (
-                        <span className="texto-atenuado">sem permissão</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Rolagem>
+          <Tabela
+            legenda="Equipamentos locados sem leitura de contador na competência em fechamento"
+            itens={pendencias}
+            chaveDe={(p) => p.equipamento.id}
+            ordemInicial={{ chave: 'semLeitura', direcao: 'desc' }}
+            colunas={[
+              {
+                chave: 'patrimonio',
+                titulo: 'Patrimônio',
+                identificadora: true,
+                ordenarPor: (p) => p.equipamento.patrimonio,
+                celula: (p) => <span className="dado">{p.equipamento.patrimonio}</span>,
+              },
+              {
+                chave: 'cliente',
+                titulo: 'Cliente',
+                ordenarPor: (p) => p.clienteNome,
+                celula: (p) => p.clienteNome,
+              },
+              {
+                chave: 'semLeitura',
+                titulo: 'Sem leitura há',
+                numerico: true,
+                ordenarPor: (p) => p.mesesSemLeitura,
+                celula: (p) => (
+                  <Chip severidade={p.mesesSemLeitura > 1 ? 'critico' : 'atencao'}>
+                    {p.mesesSemLeitura} {p.mesesSemLeitura === 1 ? 'mês' : 'meses'}
+                  </Chip>
+                ),
+              },
+              {
+                chave: 'media',
+                titulo: 'Média histórica',
+                numerico: true,
+                ocultarEmMobile: true,
+                ordenarPor: (p) => p.mediaMono,
+                celula: (p) => <span className="dado">{inteiro(p.mediaMono)} pág</span>,
+              },
+              {
+                chave: 'acao',
+                titulo: 'Ação',
+                celula: (p) =>
+                  pode('prefatura:aprovar') ? (
+                    <Botao
+                      pequeno
+                      variante="primario"
+                      onClick={() => setMedicao({ equipamento: p.equipamento, competencia: p.competencia })}
+                    >
+                      Tratar
+                      <span className="so-leitor"> medição do patrimônio {p.equipamento.patrimonio}</span>
+                    </Botao>
+                  ) : (
+                    <span className="texto-atenuado">sem permissão</span>
+                  ),
+              },
+            ]}
+          />
         </Cartao>
       )}
 
@@ -280,33 +285,41 @@ export function Faturamento() {
 
       {excecoes.length > 0 && (
         <Cartao comoRegiao titulo={`Itens que pedem conferência — ${competenciaLonga(compAtual)}`}>
-          <Rolagem rotulo="Tabela de dados">
-            <table>
-              <caption className="so-leitor">Medições da competência corrente sinalizadas para revisão</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Contrato</th>
-                  <th scope="col">Cliente</th>
-                  <th scope="col">Motivo do destaque</th>
-                  <th scope="col" className="numerico">Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {excecoes.map((e) => (
-                  <tr key={e.medicao.id}>
-                    <th scope="row" className="dado" style={{ fontWeight: 620 }}>
-                      {e.contratoNumero}
-                    </th>
-                    <td>{e.clienteNome}</td>
-                    <td>
-                      <Chip severidade={e.severidade === 'critico' ? 'critico' : 'atencao'}>{e.motivo}</Chip>
-                    </td>
-                    <td className="numerico dado">{moeda(e.medicao.valorLiquido)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Rolagem>
+          <Tabela
+            legenda="Medições da competência corrente sinalizadas para revisão"
+            itens={excecoes}
+            chaveDe={(e) => e.medicao.id}
+            colunas={[
+              {
+                chave: 'contrato',
+                titulo: 'Contrato',
+                identificadora: true,
+                ordenarPor: (e) => e.contratoNumero,
+                celula: (e) => <span className="dado">{e.contratoNumero}</span>,
+              },
+              {
+                chave: 'cliente',
+                titulo: 'Cliente',
+                ordenarPor: (e) => e.clienteNome,
+                celula: (e) => e.clienteNome,
+              },
+              {
+                chave: 'motivo',
+                titulo: 'Motivo do destaque',
+                ordenarPor: (e) => e.motivo,
+                celula: (e) => (
+                  <Chip severidade={e.severidade === 'critico' ? 'critico' : 'atencao'}>{e.motivo}</Chip>
+                ),
+              },
+              {
+                chave: 'valor',
+                titulo: 'Valor',
+                numerico: true,
+                ordenarPor: (e) => e.medicao.valorLiquido,
+                celula: (e) => <span className="dado">{moeda(e.medicao.valorLiquido)}</span>,
+              },
+            ]}
+          />
         </Cartao>
       )}
 

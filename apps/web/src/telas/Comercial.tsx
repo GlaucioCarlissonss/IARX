@@ -8,6 +8,7 @@ import { useSessao } from '../lib/contexto'
 import { data, inteiro, moeda } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { Rolagem } from '../componentes/ui/Rolagem'
+import { Tabela } from '../componentes/ui/Tabela'
 import { Combo, LinhaCampos } from '../componentes/ui/formulario'
 import type { Severidade } from '../componentes/ui/primitivos'
 import type { TabelaFranquia, TabelaPreco, TabelaStatus } from '../dados/tipos'
@@ -451,41 +452,71 @@ function CartaoFranquia({ tabela, podeEditar }: { tabela: TabelaFranquia; podeEd
           </div>
         )}
 
-        <Rolagem rotulo="Tabela de dados">
-          <table>
-            <caption className="so-leitor">Linhas de franquia de {tabela.nome}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Alvo</th>
-                <th scope="col" className="numerico">Franquia mono</th>
-                <th scope="col" className="numerico">Franquia color</th>
-                <th scope="col" className="numerico">Excedente mono</th>
-                <th scope="col" className="numerico">Excedente color</th>
-                <th scope="col">Escopo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabela.itens.map((i) => (
-                <tr key={i.id}>
-                  <th scope="row">
-                    {rotuloAlvo(i)}
-                    <br />
-                    <span className="texto-atenuado">{i.modeloId ? 'por modelo' : 'por categoria'}</span>
-                  </th>
-                  <td className="numerico dado">{inteiro(i.franquiaMono)}</td>
-                  <td className="numerico dado">
-                    {i.franquiaColor > 0 ? inteiro(i.franquiaColor) : <span className="texto-atenuado">—</span>}
-                  </td>
-                  <td className="numerico dado">{moeda(i.excedenteMono)}</td>
-                  <td className="numerico dado">
-                    {i.excedenteColor > 0 ? moeda(i.excedenteColor) : <span className="texto-atenuado">—</span>}
-                  </td>
-                  <td>{i.escopo === 'ITEM' ? 'Por ativo' : 'Por contrato'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Rolagem>
+        <Tabela
+          legenda={`Linhas de franquia de ${tabela.nome}`}
+          itens={tabela.itens}
+          chaveDe={(i) => i.id}
+          porPagina={0}
+          colunas={[
+            {
+              chave: 'alvo',
+              titulo: 'Alvo',
+              identificadora: true,
+              ordenarPor: (i) => rotuloAlvo(i),
+              celula: (i) => (
+                <>
+                  {rotuloAlvo(i)}
+                  <br />
+                  <span className="texto-atenuado">{i.modeloId ? 'por modelo' : 'por categoria'}</span>
+                </>
+              ),
+            },
+            {
+              chave: 'franquiaMono',
+              titulo: 'Franquia mono',
+              numerico: true,
+              ordenarPor: (i) => i.franquiaMono,
+              celula: (i) => <span className="dado">{inteiro(i.franquiaMono)}</span>,
+            },
+            {
+              chave: 'franquiaColor',
+              titulo: 'Franquia color',
+              numerico: true,
+              ordenarPor: (i) => i.franquiaColor,
+              celula: (i) =>
+                i.franquiaColor > 0 ? (
+                  <span className="dado">{inteiro(i.franquiaColor)}</span>
+                ) : (
+                  <span className="texto-atenuado">—</span>
+                ),
+            },
+            {
+              chave: 'excedenteMono',
+              titulo: 'Excedente mono',
+              numerico: true,
+              ordenarPor: (i) => i.excedenteMono,
+              celula: (i) => <span className="dado">{moeda(i.excedenteMono)}</span>,
+            },
+            {
+              chave: 'excedenteColor',
+              titulo: 'Excedente color',
+              numerico: true,
+              ordenarPor: (i) => i.excedenteColor,
+              celula: (i) =>
+                i.excedenteColor > 0 ? (
+                  <span className="dado">{moeda(i.excedenteColor)}</span>
+                ) : (
+                  <span className="texto-atenuado">—</span>
+                ),
+            },
+            {
+              chave: 'escopo',
+              titulo: 'Escopo',
+              ordenarPor: (i) => i.escopo,
+              celula: (i) => (i.escopo === 'ITEM' ? 'Por ativo' : 'Por contrato'),
+            },
+          ]}
+        />
       </div>
     </Cartao>
   )
@@ -518,35 +549,59 @@ function CartaoPreco({ tabela }: { tabela: TabelaPreco }) {
           {tabela.mesesReajuste} meses
         </p>
 
-        <Rolagem rotulo="Tabela de dados">
-          <table>
-            <caption className="so-leitor">Preços de {tabela.nome}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Alvo</th>
-                <th scope="col" className="numerico">Mensal</th>
-                <th scope="col" className="numerico">Instalação</th>
-                <th scope="col" className="numerico">Retirada</th>
-                <th scope="col" className="numerico">Prazo mínimo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tabela.itens.map((i) => (
-                <tr key={i.id}>
-                  <th scope="row">{rotuloAlvo(i)}</th>
-                  <td className="numerico dado">{moeda(i.valorMensal)}</td>
-                  <td className="numerico dado">
-                    {i.valorInstalacao > 0 ? moeda(i.valorInstalacao) : <span className="texto-atenuado">isenta</span>}
-                  </td>
-                  <td className="numerico dado">{moeda(i.valorRetirada)}</td>
-                  <td className="numerico dado">
-                    {i.prazoMinimoMeses ? `${i.prazoMinimoMeses} m` : <span className="texto-atenuado">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Rolagem>
+        <Tabela
+          legenda={`Preços de ${tabela.nome}`}
+          itens={tabela.itens}
+          chaveDe={(i) => i.id}
+          porPagina={0}
+          colunas={[
+            {
+              chave: 'alvo',
+              titulo: 'Alvo',
+              identificadora: true,
+              ordenarPor: (i) => rotuloAlvo(i),
+              celula: (i) => rotuloAlvo(i),
+            },
+            {
+              chave: 'mensal',
+              titulo: 'Mensal',
+              numerico: true,
+              ordenarPor: (i) => i.valorMensal,
+              celula: (i) => <span className="dado">{moeda(i.valorMensal)}</span>,
+            },
+            {
+              chave: 'instalacao',
+              titulo: 'Instalação',
+              numerico: true,
+              ordenarPor: (i) => i.valorInstalacao,
+              celula: (i) =>
+                i.valorInstalacao > 0 ? (
+                  <span className="dado">{moeda(i.valorInstalacao)}</span>
+                ) : (
+                  <span className="texto-atenuado">isenta</span>
+                ),
+            },
+            {
+              chave: 'retirada',
+              titulo: 'Retirada',
+              numerico: true,
+              ordenarPor: (i) => i.valorRetirada,
+              celula: (i) => <span className="dado">{moeda(i.valorRetirada)}</span>,
+            },
+            {
+              chave: 'prazo',
+              titulo: 'Prazo mínimo',
+              numerico: true,
+              ordenarPor: (i) => i.prazoMinimoMeses ?? -1,
+              celula: (i) =>
+                i.prazoMinimoMeses ? (
+                  <span className="dado">{i.prazoMinimoMeses} m</span>
+                ) : (
+                  <span className="texto-atenuado">—</span>
+                ),
+            },
+          ]}
+        />
         <p className="texto-atenuado">
           Instalação e retirada são eventos, não recorrência: entram na primeira fatura e na fatura seguinte à
           devolução, e nunca compõem o MRR.

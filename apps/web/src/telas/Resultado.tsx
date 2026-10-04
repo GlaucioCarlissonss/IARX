@@ -216,6 +216,11 @@ export function Resultado() {
               Custo de manutenção acima da receita gerada. Três competências consecutivas assim tornam o ativo
               candidato a desmobilização.
             </p>
+            {/*
+              Oito linhas, ordenadas pela margem mais negativa: é a lista que
+              responde "o que desmobilizar primeiro". Reordená-la por patrimônio
+              não serve a ninguém, e é o que o componente ofereceria.
+            */}
             <Rolagem rotulo="Tabela de dados">
               <table>
                 <caption className="so-leitor">Equipamentos cujo custo excede a receita</caption>

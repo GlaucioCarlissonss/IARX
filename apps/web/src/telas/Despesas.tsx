@@ -213,6 +213,11 @@ export function Despesas() {
 
       {estouradas.length > 0 && (
         <Cartao comoRegiao titulo={`${estouradas.length} categoria(s) acima do orçado em ${competenciaLonga(competencia)}`}>
+          {/*
+            Crua de propósito: são as categorias estouradas do mês, poucas por
+            definição — se forem muitas, o problema não é a tabela. A execução
+            completa, essa sim, usa o componente logo abaixo.
+          */}
           <Rolagem rotulo="Tabela de dados">
             <table>
               <caption className="so-leitor">Categorias com execução acima de 100% do orçado</caption>

@@ -212,6 +212,13 @@ export function Inicio() {
           {filaCritica.length === 0 ? (
             <p className="texto-secundario">Nenhum chamado em risco de prazo. Fila sob controle.</p>
           ) : (
+            /*
+             * Tabela crua de propósito, e não o componente `Tabela`: isto é um
+             * resumo de **seis linhas já ordenadas por risco**. Ordenação por
+             * outra coluna desfaria o que dá sentido à lista, e paginação não
+             * tem o que paginar. A lista inteira está em Chamados, com o
+             * componente.
+             */
             <Rolagem rotulo="Tabela de dados">
               <table>
                 <caption className="so-leitor">Chamados com menos de 4 horas de prazo restante</caption>
@@ -254,6 +261,7 @@ export function Inicio() {
             </button>
           }
         >
+          {/* Mesmo caso: seis linhas ordenadas por urgência de reposição. */}
           <Rolagem rotulo="Tabela de dados">
             <table>
               <caption className="so-leitor">Peças abaixo do mínimo ou no ponto de pedido</caption>
