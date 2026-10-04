@@ -16,6 +16,7 @@ import { useFormulario } from '../lib/useFormulario'
 import { useSessao, useToast } from '../lib/contexto'
 import { data, moeda } from '../lib/formato'
 import { Aviso, Botao, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import type { Severidade } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import { AreaTexto, CampoMoeda, CampoNumero, Combo, GrupoOpcoes, LinhaCampos, ResumoErros } from '../componentes/ui/formulario'
@@ -335,7 +336,7 @@ export function LancamentosFuturos() {
       </Cartao>
 
       <Cartao titulo="Compromissos programados" comoRegiao>
-        <div className="filtros">
+        <Filtros>
           <Entrada
             rotulo="Buscar por descrição, cliente ou fornecedor"
             rotuloOculto
@@ -381,7 +382,7 @@ export function LancamentosFuturos() {
             />
             Só a fila de exceção
           </label>
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Skeleton linhas={6} />

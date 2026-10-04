@@ -5,7 +5,8 @@ import { linhasClientes } from '../dados/consultas'
 import type { LinhaCliente } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { BarrasHorizontais } from '../componentes/ui/graficos'
@@ -251,14 +252,13 @@ export function Clientes() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Cliente, CNPJ ou segmento"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: Farmax ou Saúde"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: Farmax ou Saúde"
             />
           </div>
           <Selecao
@@ -272,7 +272,7 @@ export function Clientes() {
               { valor: 'margem_baixa', texto: 'Margem abaixo de 20%' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando carteira de clientes">

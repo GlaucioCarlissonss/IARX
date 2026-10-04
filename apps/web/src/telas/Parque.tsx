@@ -7,7 +7,8 @@ import { CATEGORIAS, filialPorId } from '../dados/catalogo'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import type { Equipamento, EquipamentoStatus } from '../dados/tipos'
@@ -214,14 +215,13 @@ export function Parque() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Patrimônio, série, modelo ou cliente"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: 10042 ou Farmax"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: 10042 ou Farmax"
             />
           </div>
           <Selecao
@@ -250,7 +250,7 @@ export function Parque() {
               ...(Object.keys(ESTADO) as EquipamentoStatus[]).map((k) => ({ valor: k, texto: ESTADO[k].rotulo })),
             ]}
           />
-        </div>
+        </Filtros>
 
         {fichas.length > 0 && (
           <div className="fichas">

@@ -5,6 +5,7 @@ import type { ContratoDoCliente } from '../dados/portal'
 import { useSessao } from '../lib/contexto'
 import { data, inteiro, moeda } from '../lib/formato'
 import { Cartao, Chip, EstadoVazio, Selecao } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 
@@ -96,7 +97,7 @@ export function PortalContratos() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <Selecao
             rotulo="Situação"
             value={status}
@@ -109,7 +110,7 @@ export function PortalContratos() {
               })),
             ]}
           />
-        </div>
+        </Filtros>
 
         <Tabela
           legenda="Contratos do cliente"

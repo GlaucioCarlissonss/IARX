@@ -9,6 +9,7 @@ import {
 import { useConsulta } from '../lib/useConsulta'
 import { data, moeda } from '../lib/formato'
 import { Aviso, Botao, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import { ProjecaoCaixa } from '../componentes/ui/graficos'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
 import type { AlertaCaixa } from '../dados/tipos'
@@ -115,7 +116,7 @@ export function FluxoCaixa() {
         </div>
       </div>
 
-      <div className="filtros">
+      <Filtros>
         <Selecao
           rotulo="Janela"
           value={String(dias)}
@@ -152,7 +153,7 @@ export function FluxoCaixa() {
             ...base.filiais.map((f) => ({ valor: f.id, texto: f.nome })),
           ]}
         />
-      </div>
+      </Filtros>
 
       <div className="grade grade--metricas">
         <Cartao compacto>

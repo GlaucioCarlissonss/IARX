@@ -7,7 +7,8 @@ import { HOJE } from '../dados/gerar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { duracaoHoras, moeda, percentual, prazoRestante } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { FormAbrirChamado } from '../componentes/formularios/FormAbrirChamado'
@@ -212,14 +213,13 @@ export function Chamados() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Chamado, patrimônio, cliente ou sintoma"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: OS-4812 ou atolamento"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: OS-4812 ou atolamento"
             />
           </div>
           <Selecao
@@ -246,7 +246,7 @@ export function Chamados() {
               })),
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando fila de chamados">

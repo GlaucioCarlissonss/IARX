@@ -7,6 +7,7 @@ import { useSessao, useToast } from '../lib/contexto'
 import { baixar } from '../lib/baixar'
 import { competenciaLonga, moeda, moedaCompacta, percentual } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import { BarrasHorizontais } from '../componentes/ui/graficos'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { Tabela } from '../componentes/ui/Tabela'
@@ -259,14 +260,14 @@ export function Despesas() {
       )}
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <Selecao
             rotulo="Competência"
             value={competencia}
             onChange={(e) => setCompetencia(e.target.value)}
             opcoes={competencias.map((c) => ({ valor: c, texto: competenciaLonga(c) }))}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando execução orçamentária">

@@ -5,6 +5,7 @@ import type { ConsumoDoCliente, CustoDaCompetencia } from '../dados/portal'
 import { useSessao } from '../lib/contexto'
 import { competenciaLonga, data, inteiro, moeda } from '../lib/formato'
 import { BarraMedida, Cartao, Chip, EstadoVazio, Metrica, Selecao } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 
@@ -200,7 +201,7 @@ export function PortalConsumo() {
       </Cartao>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <Selecao
             rotulo="Memória de cálculo da competência"
             value={competencia}
@@ -210,7 +211,7 @@ export function PortalConsumo() {
               texto: competenciaLonga(c.competencia) + (c.parcial ? ' (parcial)' : ''),
             }))}
           />
-        </div>
+        </Filtros>
 
         {!memoria ? (
           <p className="texto-secundario medida-leitura">

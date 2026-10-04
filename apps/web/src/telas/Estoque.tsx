@@ -5,7 +5,8 @@ import type { LinhaPeca } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { inteiro, moeda } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { FormEstoque } from '../componentes/formularios/FormEstoque'
@@ -211,14 +212,13 @@ export function Estoque() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Código, descrição ou fornecedor"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: toner ou Kyocera"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: toner ou Kyocera"
             />
           </div>
           <Selecao
@@ -234,7 +234,7 @@ export function Estoque() {
               { valor: 'ACESSORIO', texto: 'Acessórios' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando estoque">

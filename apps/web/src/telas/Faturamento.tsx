@@ -5,7 +5,8 @@ import type { LinhaCobranca } from '../dados/consultas'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { competenciaLonga, data, inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -402,14 +403,13 @@ export function Faturamento() {
       )}
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Fatura, cliente ou contrato"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: 00042 ou Meridiano"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: 00042 ou Meridiano"
             />
           </div>
           <Selecao
@@ -423,7 +423,7 @@ export function Faturamento() {
               { valor: 'atraso', texto: 'Em atraso' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando o ciclo de faturamento">

@@ -4,6 +4,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { data } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import { LinhaCampos, ResumoErros } from '../componentes/ui/formulario'
 import { Tabela } from '../componentes/ui/Tabela'
@@ -186,14 +187,13 @@ export function Usuarios() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 240, flex: 1 }}>
-            <Entrada
+            <Busca
               rotulo="Buscar por nome ou e-mail"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Buscar por nome ou e-mail…"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="Buscar por nome ou e-mail…"
             />
           </div>
           <Selecao
@@ -208,7 +208,7 @@ export function Usuarios() {
               { valor: 'cliente', texto: 'Usuários do locatário' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando usuários">

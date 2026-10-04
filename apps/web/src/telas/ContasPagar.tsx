@@ -29,6 +29,7 @@ import {
   Selecao,
   Skeleton,
 } from '../componentes/ui/primitivos'
+import { Filtros } from '../componentes/ui/filtros'
 import type { Severidade } from '../componentes/ui/primitivos'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import {
@@ -369,7 +370,7 @@ export function ContasPagar() {
           ) : null
         }
       >
-        <div className="filtros">
+        <Filtros>
           <Entrada
             rotulo="Buscar por descrição, fornecedor ou contrato"
             rotuloOculto
@@ -409,7 +410,7 @@ export function ContasPagar() {
             />
             Só os vencidos em aberto
           </label>
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando títulos">

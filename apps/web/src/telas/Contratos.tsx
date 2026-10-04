@@ -6,7 +6,8 @@ import { HOJE } from '../dados/gerar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { data, moeda, moedaCompacta } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import type { Contrato, ContratoStatus } from '../dados/tipos'
@@ -268,14 +269,13 @@ export function Contratos() {
       )}
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Número do contrato ou cliente"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: SP-2025 ou Andirá"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: SP-2025 ou Andirá"
             />
           </div>
           <Selecao
@@ -291,7 +291,7 @@ export function Contratos() {
               { valor: 'encerrados', texto: 'Encerrados' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando contratos">

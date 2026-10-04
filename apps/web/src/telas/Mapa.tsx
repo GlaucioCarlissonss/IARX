@@ -7,7 +7,8 @@ import { baixar } from '../lib/baixar'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, moeda } from '../lib/formato'
-import { Aviso, Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Aviso, Botao, Carregando, Cartao, Chip, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca } from '../componentes/ui/filtros'
 import { Mapa as MapaGeografico } from '../componentes/ui/Mapa'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import type { AlvoMapa, PontoMapa } from '../componentes/ui/Mapa'
@@ -343,13 +344,12 @@ export function Mapa() {
                 sobreposicao={
                   <>
                     <div style={{ minWidth: 220, flex: 1 }}>
-                      <Entrada
+                      <Busca
                         rotulo="Buscar cliente, cidade ou UF"
                         rotuloOculto
-                        type="search"
-                        value={texto}
-                        onChange={(e) => setTexto(e.target.value)}
-                        placeholder="Buscar cliente, cidade ou UF…"
+                        valor={texto}
+                        aoMudar={setTexto}
+                        exemplo="Buscar cliente, cidade ou UF…"
                       />
                     </div>
                     <Selecao

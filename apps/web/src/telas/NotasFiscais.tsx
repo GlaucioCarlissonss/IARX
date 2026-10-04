@@ -7,6 +7,7 @@ import { useConsulta } from '../lib/useConsulta'
 import { useSessao, useToast } from '../lib/contexto'
 import { data, moeda } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, Entrada, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { Dialogo } from '../componentes/ui/Dialogo'
@@ -259,14 +260,13 @@ export function NotasFiscais() {
       </div>
 
       <Cartao>
-        <div className="filtros">
+        <Filtros>
           <div style={{ minWidth: 220 }}>
-            <Entrada
+            <Busca
               rotulo="Número, chave ou fornecedor"
-              type="search"
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="ex.: 41205 ou Printech"
+              valor={texto}
+              aoMudar={setTexto}
+              exemplo="ex.: 41205 ou Printech"
             />
           </div>
           <Selecao
@@ -282,7 +282,7 @@ export function NotasFiscais() {
               { valor: 'CANCELADA', texto: 'Canceladas' },
             ]}
           />
-        </div>
+        </Filtros>
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando notas fiscais">

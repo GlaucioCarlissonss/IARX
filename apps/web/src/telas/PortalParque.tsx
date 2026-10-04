@@ -4,6 +4,7 @@ import { equipamentosDoCliente, locaisDoEscopo } from '../dados/portal'
 import type { EquipamentoDoCliente } from '../dados/portal'
 import { useSessao } from '../lib/contexto'
 import { Cartao, Chip, EstadoVazio, Selecao } from '../componentes/ui/primitivos'
+import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
 
@@ -106,16 +107,13 @@ export function PortalParque() {
       </div>
 
       <Cartao>
-        <div className="filtros">
-          <label className="campo">
-            <span className="campo__rotulo">Patrimônio ou série</span>
-            <input
-              type="search"
-              value={termo}
-              onChange={(e) => setTermo(e.target.value)}
-              placeholder="Ex.: 004213"
-            />
-          </label>
+        <Filtros>
+          <Busca
+            rotulo="Patrimônio ou série"
+            valor={termo}
+            aoMudar={setTermo}
+            exemplo="Ex.: 004213"
+          />
           <Selecao
             rotulo="Unidade"
             value={local}
@@ -125,7 +123,7 @@ export function PortalParque() {
               ...unidades.map((u) => ({ valor: u.id, texto: u.nome })),
             ]}
           />
-        </div>
+        </Filtros>
 
         <Tabela
           legenda="Equipamentos do cliente"
