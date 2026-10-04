@@ -29,27 +29,12 @@ export const decimal = (v: number) => decimalFmt.format(v)
 export const percentual = (v: number, casas = 1) =>
   `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`
 
-/** Pontos percentuais — a unidade correta para variação de um percentual. */
-export const pontosPercentuais = (v: number, casas = 1) =>
-  `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })} p.p.`
-
 export const variacao = (atual: number, anterior: number) =>
   anterior === 0 ? 0 : (atual - anterior) / Math.abs(anterior)
-
-export const variacaoTexto = (atual: number, anterior: number) => {
-  const v = variacao(atual, anterior)
-  const sinal = v >= 0 ? '+' : '−'
-  return `${sinal}${Math.abs(v * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
-}
 
 export const data = (iso: string | Date) => {
   const d = typeof iso === 'string' ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso) : iso
   return d.toLocaleDateString('pt-BR')
-}
-
-export const dataHora = (iso: string | Date) => {
-  const d = typeof iso === 'string' ? new Date(iso) : iso
-  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -82,4 +67,13 @@ export function prazoRestante(prazoIso: string, agora: Date) {
   return { estourado, texto: estourado ? `${texto} em atraso` : texto, horas: ms / 3600000 }
 }
 
+/**
+ * Máscara de CNPJ — **escrita e nunca ligada**.
+ *
+ * Existe por `dados_sensiveis:ver_completo` (Anexo C): sem essa permissão, o
+ * documento sai mascarado. Nenhuma tela a chama hoje, e a auditoria do Anexo X
+ * a manteve de propósito: apagá-la não removeria código morto, removeria o
+ * único vestígio de um requisito que o catálogo de permissões tem e a interface
+ * não cumpre. Ligar é decisão de produto, não de limpeza.
+ */
 export const mascararCnpj = (cnpj: string) => cnpj.replace(/^(\d{2})\.(\d{3})\.(\d{3})/, '$1.***.***')

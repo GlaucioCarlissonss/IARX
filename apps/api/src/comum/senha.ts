@@ -1,5 +1,5 @@
 import { Algorithm, hash, verify } from '@node-rs/argon2'
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 
 /**
  * Hash de senha.
@@ -84,14 +84,17 @@ export function gerarTokenRecuperacao(): { token: string; hash: string } {
   return { token, hash: hashTokenRecuperacao(token) }
 }
 
+/**
+ * O token de recuperação é conferido por **busca**, não por comparação.
+ *
+ * `consumirTokenRecuperacao` procura a linha pelo hash — índice no banco —, e
+ * não há em lugar nenhum um `token === token` que pudesse vazar por relógio.
+ * Havia aqui um `tokensIguais` com `timingSafeEqual`, escrito e nunca chamado:
+ * a auditoria do Anexo X o removeu. Não era salvaguarda desligada, era
+ * salvaguarda que o desenho tornou desnecessária — e mantê-la sugeriria uma
+ * proteção que o código não exerce.
+ */
 export function hashTokenRecuperacao(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-/** Comparação em tempo constante, para o hash do token não vazar por relógio. */
-export function tokensIguais(a: string, b: string): boolean {
-  const ba = Buffer.from(a, 'utf8')
-  const bb = Buffer.from(b, 'utf8')
-  if (ba.length !== bb.length) return false
-  return timingSafeEqual(ba, bb)
-}

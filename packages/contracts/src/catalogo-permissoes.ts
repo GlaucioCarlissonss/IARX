@@ -250,6 +250,9 @@ export const ESCOPOS = [
 ] as const
 export type Escopo = (typeof ESCOPOS)[number]
 
+/* Sem consumidor (Anexo X §X.2): o escopo trafega como colunas de
+   `usuario_perfil` (`escopo_tipo` + `escopo_id`), e nenhuma fronteira usa este
+   par. Mantido como a forma acordada do conceito. */
 export interface EscopoConcedido {
   tipo: Escopo
   /** Nulo em escopo TENANT — não há id a delimitar. */

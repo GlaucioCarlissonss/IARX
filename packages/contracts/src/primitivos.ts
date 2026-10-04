@@ -60,6 +60,9 @@ export const Competencia = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'competê
  * a exclusion constraint do PostgreSQL (RN-001). Validar aqui apenas devolve o
  * erro mais cedo e com mensagem melhor.
  */
+/* Sem consumidor (Anexo X §X.2): as rotas declaram `vigencia_inicio` e
+   `vigencia_fim` campo a campo, e por isso o refinamento conjunto nunca roda —
+   a garantia continua sendo a exclusion constraint. */
 export const Vigencia = z
   .object({
     vigencia_inicio: DataHora,
@@ -97,7 +100,13 @@ export const MetaColecao = z.object({
   total_aproximado: z.number().int().optional(),
 })
 
-/** Envelope de coleção: `{ data: [...], meta: {...} }` (Anexo D.1). */
+/**
+  * Envelope de coleção: `{ data: [...], meta: {...} }` (Anexo D.1).
+  *
+  * Sem consumidor (Anexo X §X.2): a API emite esse envelope pela classe
+  * `Pagina`, que o constrói em vez de validá-lo. São duas descrições do mesmo
+  * formato, e só uma roda — unificá-las é trabalho da Entrega 3.
+  */
 export function colecao<T extends z.ZodTypeAny>(item: T) {
   return z.object({ data: z.array(item), meta: MetaColecao })
 }

@@ -26,6 +26,9 @@ export const EquipamentoStatus = z.enum(EQUIPAMENTO_STATUS)
 export type EquipamentoStatus = z.infer<typeof EquipamentoStatus>
 
 export const MEDIDOR_TIPO = ['HORIMETRO', 'CONTADOR', 'ODOMETRO', 'DIAS'] as const
+/* Sem consumidor (Anexo X §X.2): o tipo de medidor ainda não é campo de
+   nenhuma entidade nem de nenhuma rota. `MEDIDOR_TIPO` fica como o domínio
+   acordado; o esquema espera quem o use. */
 export const MedidorTipo = z.enum(MEDIDOR_TIPO)
 
 export const Equipamento = z.object({
@@ -103,6 +106,9 @@ export const BloquearEquipamento = z.object({
   ate: DataHora.nullable().default(null),
 })
 
+/* Sem consumidor (Anexo X §X.2): esquema de `equipamento:leitura_registrar`,
+   rota especificada e não construída — hoje a leitura entra pelo fechamento de
+   competência, não por rota própria. */
 export const RegistrarLeitura = z.object({
   valor: Contador,
   medido_em: DataHora,

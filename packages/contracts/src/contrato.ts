@@ -39,6 +39,9 @@ export const ContratoItemStatus = z.enum(CONTRATO_ITEM_STATUS)
  * consciente e comentada nos dois lados: a lista aqui só serve para explicar o
  * conflito ao usuário; quem impede a escrita inválida é o banco.
  */
+/* Sem consumidor (Anexo X §X.2): a lista existe para explicar o conflito de
+   sobreposição ao usuário, e nenhuma tela ou serviço a lê — a mensagem que
+   chega hoje é a do banco. Mantida: é a tradução pendente, não código morto. */
 export const STATUS_OCUPANTES = ['RESERVADO', 'EM_ENTREGA', 'ATIVO', 'SUSPENSO', 'EM_DEVOLUCAO'] as const
 
 export const MODALIDADE_COBRANCA = [
@@ -184,6 +187,9 @@ export const AlocarItem = z
 
 export type AlocarItem = z.infer<typeof AlocarItem>
 
+/* Sem consumidor (Anexo X §X.2): esquema de `contrato:item_encerrar`, rota
+   especificada no Anexo D e **não construída**. Apagá-lo removeria a
+   especificação, não código morto. */
 export const EncerrarItem = z.object({
   encerrado_em: DataHora,
   motivo: z.string().min(5),

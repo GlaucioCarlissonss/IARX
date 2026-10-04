@@ -1,7 +1,6 @@
 import { categoriaPorCodigo, modeloPorId } from './catalogo'
 import type {
   Categoria,
-  DescontoComercial,
   Equipamento,
   FranquiaItem,
   PrecoItem,
@@ -12,14 +11,21 @@ import type {
 /**
  * Resolução comercial: franquia, preço e desconto aplicáveis.
  *
- * Estas funções espelham `app.resolver_franquia`, `app.resolver_preco` e
- * `app.desconto_vigente` da migração 0012. A duplicação é deliberada e tem um
- * motivo único: **o simulador não pode prometer um número que o faturamento
- * depois não confirma**. Se a proposta calculasse por uma regra e a fatura por
- * outra, a divergência só apareceria no primeiro fechamento — na frente do
- * cliente, e sobre um valor que ele já assinou.
+ * Estas funções espelham `app.resolver_franquia` e `app.resolver_preco` da
+ * migração 0012. A duplicação é deliberada e tem um motivo único: **o simulador
+ * não pode prometer um número que o faturamento depois não confirma**. Se a
+ * proposta calculasse por uma regra e a fatura por outra, a divergência só
+ * apareceria no primeiro fechamento — na frente do cliente, e sobre um valor
+ * que ele já assinou.
  *
  * Os dois lados têm teste sobre os mesmos casos.
+ *
+ * **`app.desconto_vigente` não tem gêmeo aqui, e é de propósito.** O simulador
+ * recebe o desconto como entrada (`descontoPercentual`) em vez de resolvê-lo:
+ * quem simula está testando uma proposta, não consultando o que já foi
+ * acordado. Havia um `descontoVigente` escrito e sem chamador nenhum — a
+ * auditoria do Anexo X o removeu, porque uma função que parece gêmea e nunca
+ * roda é pior que a ausência: ela sugere uma paridade que nenhum teste sustenta.
  */
 
 /* ---------------------------------------------------------------- franquia */
@@ -112,50 +118,6 @@ export function resolverPreco(
       b.tabela.vigenciaInicio.localeCompare(a.tabela.vigenciaInicio),
   )
   return candidatos[0]!
-}
-
-/* --------------------------------------------------------------- desconto */
-
-export interface DescontoVigente {
-  desconto: DescontoComercial
-  origem: 'ITEM' | 'CONTRATO'
-}
-
-/**
- * Desconto vigente, com a regra de não acúmulo (RN-L23).
- *
- * Havendo desconto de contrato **e** de item, vale o de item. Somar os dois é o
- * erro que produz mensalidade negativa — e ele só aparece na fatura.
- */
-export function descontoVigente(
-  descontos: DescontoComercial[],
-  alvo: { contratoId: string | null; contratoItemId: string | null },
-  data: string,
-): DescontoVigente | null {
-  const aplicaveis = descontos
-    .filter((d) => d.vigenciaInicio <= data && (d.vigenciaFim === null || d.vigenciaFim >= data))
-    .filter((d) =>
-      d.contratoItemId !== null
-        ? d.contratoItemId === alvo.contratoItemId
-        : d.contratoId === alvo.contratoId,
-    )
-    .map((d): DescontoVigente => ({ desconto: d, origem: d.contratoItemId ? 'ITEM' : 'CONTRATO' }))
-
-  if (aplicaveis.length === 0) return null
-  aplicaveis.sort(
-    (a, b) =>
-      Number(b.origem === 'ITEM') - Number(a.origem === 'ITEM') ||
-      b.desconto.vigenciaInicio.localeCompare(a.desconto.vigenciaInicio),
-  )
-  return aplicaveis[0]!
-}
-
-export function aplicarDesconto(valor: number, d: DescontoComercial | null): number {
-  if (!d) return valor
-  const bruto = d.tipo === 'PERCENTUAL' ? valor * (1 - (d.percentual ?? 0) / 100) : valor - (d.valor ?? 0)
-  // Desconto maior que o valor não gera crédito: gera zero. Mensalidade
-  // negativa é sempre erro de cadastro, e propagá-la contamina o MRR.
-  return Math.max(0, arredondar(bruto))
 }
 
 /* ------------------------------------------------------------- simulador */

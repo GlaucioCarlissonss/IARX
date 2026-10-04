@@ -2095,8 +2095,8 @@ textarea {
   height: var(--alvo-toque);
   border: 0;
   background: var(--cor-surface-raised);
-  color: var(--cor-text);
-  font-size: var(--t-16);
+  color: var(--cor-text-primary);
+  font-size: var(--t-15);
   cursor: pointer;
 }
 .mapa__zoom button:hover {
@@ -2225,8 +2225,8 @@ textarea {
   gap: var(--e1);
   align-items: center;
   font-size: var(--t-12);
-  color: var(--cor-text);
-  background: var(--cor-atencao-subtle-bg);
+  color: var(--cor-text-primary);
+  background: var(--cor-atencao-bg);
   border: 1px solid var(--cor-border-strong);
   border-radius: var(--raio-1);
   padding: 2px var(--e2);
@@ -2383,7 +2383,7 @@ textarea {
 }
 .entrar__produto {
   margin: 0;
-  font-size: var(--t-16);
+  font-size: var(--t-17);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -2562,7 +2562,7 @@ textarea {
   border-radius: var(--raio-2);
   padding: var(--e3);
   font-size: var(--t-13);
-  color: var(--cor-text);
+  color: var(--cor-text-primary);
 }
 .previa-alcada p + p {
   margin-top: var(--e1);
@@ -2604,7 +2604,7 @@ textarea {
 }
 .descricoes dd {
   font-size: var(--t-14);
-  color: var(--cor-text);
+  color: var(--cor-text-primary);
   margin-top: 2px;
 }
 
@@ -2650,7 +2650,7 @@ textarea {
 .alternador:has(input:checked) {
   border-color: var(--cor-primary);
   background: var(--cor-primary-subtle-bg);
-  color: var(--cor-text);
+  color: var(--cor-text-primary);
 }
 .alternador input {
   width: 18px;
