@@ -329,8 +329,13 @@ node apps/api/scripts/verificar-rotas.mjs   126/126 rotas com autorização
 npm run web:test                            221/221
 npm run build && npm run a11y:dom           225/225
 npm run a11y:tokens                         202/202
-bundle                                      829,5 kB (234 kB gzip)
+bundle                                      854,4 kB (238,7 kB gzip)
 ```
+
+**Correção da medida do bundle.** A primeira versão deste anexo registrou
+829,5 kB: era contagem de **caracteres** do `index.html`, e não de bytes — o
+arquivo é UTF-8 e acentuação ocupa dois. O número que vale é o que o próprio
+build reporta, e é contra ele que as entregas seguintes comparam.
 
 Regressão zero significa: **os sete portões continuam verdes e os números não
 caem** — e, quando um número mudar de propósito (o bundle deve cair; a contagem
@@ -349,3 +354,45 @@ de testes deve subir), a mudança vem dita no commit.
 4. **Escopo da Entrega 6** (X.6.3): com o front desligado da API, otimização de
    banco não muda a experiência. Mantém assim mesmo, ou a rodada de ligação
    entra antes?
+
+---
+
+## X.10 Resultado da Entrega 2 — executada
+
+Três commits: `ded0dd4`, `0279786`, `ca2289c`.
+
+| | Antes | Depois |
+| --- | --- | --- |
+| `var(--x)` sem declaração e sem alternativa | 8 | **0**, com portão novo |
+| Símbolos mortos | 13 | **6**, todos com a lacuna nomeada |
+| Tabelas cruas · pelo componente | 22 · 22 | **18 · 26** |
+| Campos de busca escritos à mão | 10 | **0** |
+| Faixas de filtro repetidas | 16 | **0** |
+| `web:test` | 221 | **223** |
+| bundle | 854,4 kB | **853,4 kB** |
+
+Os demais portões não se moveram: tipos ✓ · db:test 198 · api:test 277/277 ·
+rotas 126/126 · a11y:dom 225 · a11y:tokens 202/202.
+
+### Três correções ao próprio diagnóstico
+
+1. **A auditoria errou por um símbolo.** `aplicarDesconto` passou como vivo
+   porque `comandos.ts` tem outra função de mesmo nome: colisão de nome entre
+   arquivos engana verificação textual. O total de mortos era 14, não 13.
+2. **"~18 tabelas candidatas" estava errado.** Olhando uma a uma, só **4**
+   ganhavam algo com o componente. As outras são cruas de propósito: resumos de
+   topo-N já ordenados por risco, tabelas dentro de diálogo limitadas pelo
+   documento, e a alternativa textual dos gráficos. A razão ficou escrita ao
+   lado de cada uma — é o que impede a próxima auditoria de "corrigir" uma
+   escolha deliberada.
+3. **Dos 13 mortos, 7 não eram código morto.** São superfície pública de
+   `packages/contracts` — esquemas de rotas especificadas e não construídas.
+   Foram marcados, não apagados.
+
+### O que a Entrega 2 deliberadamente não fez
+
+| Item | Por quê |
+| --- | --- |
+| Remover `mascararCnpj` | Único vestígio de `dados_sensiveis:ver_completo`, que o Anexo C exige e a interface não cumpre. Apagar esconderia a lacuna |
+| Remover os ~60 exports desnecessários | É padronização de superfície, não limpeza de código morto — Entrega 3 |
+| Tocar nos comentários | São o registro das decisões, e o ativo mais caro de reconstruir |
