@@ -35,6 +35,19 @@ export function Usuarios() {
 
   const [texto, setTexto] = useState('')
   const [recorte, setRecorte] = useState('')
+
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
+   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   */
+  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setRecorte('')
+  }
   const [aberto, setAberto] = useState<
     { tipo: 'convite' } | { tipo: 'perfil'; usuario: Usuario } | { tipo: 'desativar'; usuario: Usuario } | null
   >(null)
@@ -200,7 +213,7 @@ export function Usuarios() {
       </div>
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca campo-busca--largo">
             <Busca
               rotulo="Buscar por nome ou e-mail"

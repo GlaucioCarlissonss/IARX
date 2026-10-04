@@ -38,10 +38,30 @@ const CREDITO = {
  * está devendo" sem precisar cruzar três telas.
  */
 export function Clientes() {
-  const [params] = useSearchParams()
+  /*
+   * O escritor da URL existe por causa de "limpar filtros": estas telas só
+   * **liam** o parâmetro, para semear o estado local. Limpar sem limpar a
+   * URL faria o filtro voltar no primeiro recarregamento — desfeito na tela
+   * e intacto no endereço.
+   */
+  const [params, setParams] = useSearchParams()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.clientes(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [recorte, setRecorte] = useState('')
+
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
+   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   */
+  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setRecorte('')
+    setParams(new URLSearchParams(), { replace: true })
+  }
   const [aberto, setAberto] = useState<Aberto>(null)
   const { pode } = useSessao()
 
@@ -265,7 +285,7 @@ export function Clientes() {
       </div>
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
               rotulo="Cliente, CNPJ ou segmento"

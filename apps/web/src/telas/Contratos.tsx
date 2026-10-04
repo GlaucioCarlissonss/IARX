@@ -63,11 +63,31 @@ interface LinhaContrato {
  * vencendo, vencidos em campo, em renovação. O filtro padrão reflete isso.
  */
 export function Contratos() {
-  const [params] = useSearchParams()
+  /*
+   * O escritor da URL existe por causa de "limpar filtros": estas telas só
+   * **liam** o parâmetro, para semear o estado local. Limpar sem limpar a
+   * URL faria o filtro voltar no primeiro recarregamento — desfeito na tela
+   * e intacto no endereço.
+   */
+  const [params, setParams] = useSearchParams()
   const { pode, filialId } = useSessao()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.contratos(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [recorte, setRecorte] = useState(params.get('situacao') ?? '')
+
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
+   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   */
+  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setRecorte('')
+    setParams(new URLSearchParams(), { replace: true })
+  }
   const [aberto, setAberto] = useState<Aberto>(null)
 
   const base = api.baseSincrona()
@@ -282,7 +302,7 @@ export function Contratos() {
       )}
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
               rotulo="Número do contrato ou cliente"

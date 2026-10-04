@@ -66,6 +66,20 @@ export function Parque() {
     setParams(p, { replace: true })
   }
 
+  /*
+   * Os filtros desta tela vivem na URL — o que torna um recorte compartilhável
+   * por link — então limpar é esvaziar a consulta, e a contagem sai dela. A
+   * busca por texto é estado local e entra na conta à parte.
+   */
+  const filtrosAtivos = ['estado', 'categoria', 'familia', 'bloqueado'].filter((c) =>
+    params.get(c),
+  ).length + (texto.trim() ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setParams(new URLSearchParams(), { replace: true })
+  }
+
   const linhas = useMemo(() => (dado ? linhasParque() : []), [dado])
 
   const filtradas = useMemo(() => {
@@ -228,7 +242,7 @@ export function Parque() {
       </div>
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
               rotulo="Patrimônio, série, modelo ou cliente"

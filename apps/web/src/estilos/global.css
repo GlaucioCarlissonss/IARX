@@ -163,6 +163,31 @@ svg {
   min-width: var(--campo-busca-largo-min);
 }
 
+/*
+ * A saída da faixa de filtros.
+ *
+ * Alinhada ao fim da linha com `margin-top: auto` porque os campos ao lado têm
+ * rótulo acima: sem isso o botão flutuaria na altura do rótulo, e não na dos
+ * controles que ele desfaz.
+ */
+.filtros__limpar {
+  all: unset;
+  cursor: pointer;
+  margin-top: auto;
+  min-height: 36px;
+  padding: 0 var(--e3);
+  border-radius: var(--raio-1);
+  border: 1px solid var(--cor-border);
+  color: var(--cor-primary);
+  font-size: var(--t-13);
+  font-weight: var(--peso-rotulo);
+  transition: background var(--transicao), border-color var(--transicao);
+}
+.filtros__limpar:hover {
+  background: var(--cor-primary-subtle-bg);
+  border-color: var(--cor-border-strong);
+}
+
 /* Coluna de valor da alternativa textual do gráfico: largura fixa para os
    números alinharem à direita sem depender do conteúdo de cada linha. */
 .grafico__valor {

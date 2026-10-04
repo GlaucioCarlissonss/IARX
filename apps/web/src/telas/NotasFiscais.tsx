@@ -57,6 +57,19 @@ export function NotasFiscais() {
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.notasFiscais(), [])
   const [texto, setTexto] = useState('')
   const [filtro, setFiltro] = useState('')
+
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
+   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   */
+  const filtrosAtivos = (texto.trim() ? 1 : 0) + (filtro ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setFiltro('')
+  }
   const [aberto, setAberto] = useState<Aberto>(null)
 
   const fornecedores = api.baseSincrona().fornecedores
@@ -273,7 +286,7 @@ export function NotasFiscais() {
       </div>
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
               rotulo="Número, chave ou fornecedor"

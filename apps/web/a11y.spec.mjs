@@ -93,6 +93,53 @@ const descrever = (vs) =>
     )
     .join('\n  ')
 
+/* ----------------------------------------------------------------- filtros */
+
+/**
+ * A saída da faixa de filtros.
+ *
+ * Sem ela, quem estreita a lista por três critérios e não acha nada desfaz um
+ * por um, lembrando de cada um — e o que costuma acontecer é recarregar a
+ * página inteira, perdendo também a posição na lista.
+ *
+ * A contagem fica à vista pelo mesmo motivo: lista curta por causa de um
+ * filtro esquecido parece base vazia, e essa conclusão não se corrige sozinha.
+ */
+test('limpar filtros aparece com a contagem e devolve a lista inteira', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  /*
+   * A contagem declarada, e não as linhas do DOM: a tabela pagina em 25, então
+   * filtrada e inteira exibem o mesmo número de linhas. Contar `tbody tr` mede
+   * a paginação, não o filtro.
+   */
+  const contagem = page.getByRole('status').first()
+  const semFiltro = await contagem.innerText()
+  await expect(page.getByRole('button', { name: /Limpar \d+ filtro/ })).toHaveCount(0)
+
+  await page.getByLabel('Família').selectOption('IMPRESSAO')
+  await page.getByLabel(/Patrimônio, série/).fill('10')
+
+  const limpar = page.getByRole('button', { name: /Limpar 2 filtros/ })
+  await expect(limpar).toBeVisible()
+  await expect(contagem).not.toHaveText(semFiltro)
+
+  await limpar.click()
+  await expect(page.getByRole('button', { name: /Limpar \d+ filtro/ })).toHaveCount(0)
+  await expect(contagem).toHaveText(semFiltro)
+  await expect(page.getByLabel(/Patrimônio, série/)).toHaveValue('')
+})
+
+test('limpar filtros limpa também a URL, senão o filtro volta ao recarregar', async ({ page }) => {
+  await abrir(page, { hash: '#/parque?familia=IMPRESSAO' })
+
+  await expect(page.getByRole('button', { name: /Limpar 1 filtro/ })).toBeVisible()
+  await page.getByRole('button', { name: /Limpar 1 filtro/ }).click()
+
+  // Desfeito na tela **e** no endereço: recarregar não ressuscita o recorte.
+  expect(page.url()).not.toContain('familia=')
+})
+
 /* ------------------------------------------------------------------ portal */
 
 const SENHA_DEMO = 'iarx-demo'

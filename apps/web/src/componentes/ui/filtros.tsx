@@ -60,10 +60,37 @@ export function Busca({
 /**
  * A faixa de filtros de uma lista.
  *
- * Só o invólucro, e é o bastante: concentra num lugar o espaçamento, a quebra
- * em telas estreitas e — quando a Entrega 5 chegar — o "n filtros ativos ·
- * limpar", que hoje nenhuma tela oferece.
+ * Concentra o espaçamento, a quebra em telas estreitas e a saída: **quantos
+ * filtros estão valendo, e como desfazê-los de uma vez**.
+ *
+ * Sem essa saída, quem estreita a lista por três critérios e não acha nada
+ * precisa desfazer um por um, lembrando de cada um — e o que costuma acontecer
+ * é recarregar a página. A contagem fica à vista pelo mesmo motivo: uma lista
+ * curta por causa de um filtro esquecido parece uma base vazia, e a conclusão
+ * errada não tem como se corrigir sozinha.
+ *
+ * `ativos` e `aoLimpar` são opcionais: faixa com um controle só não precisa de
+ * botão para zerar um controle só.
  */
-export function Filtros({ children }: { children: ReactNode }) {
-  return <div className="filtros">{children}</div>
+export function Filtros({
+  children,
+  ativos = 0,
+  aoLimpar,
+}: {
+  children: ReactNode
+  /** Quantos filtros estão fora do padrão agora. */
+  ativos?: number
+  aoLimpar?: () => void
+}) {
+  return (
+    <div className="filtros">
+      {children}
+      {aoLimpar && ativos > 0 && (
+        <button type="button" className="filtros__limpar" onClick={aoLimpar}>
+          Limpar {ativos} {ativos === 1 ? 'filtro' : 'filtros'}
+          <span className="so-leitor"> e mostrar a lista inteira</span>
+        </button>
+      )}
+    </div>
+  )
 }

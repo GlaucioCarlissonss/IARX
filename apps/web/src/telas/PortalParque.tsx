@@ -34,6 +34,18 @@ export function PortalParque() {
     () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('q') ?? '',
   )
 
+  /*
+   * Mesma saída que a operação tem: quantos filtros valem, e como desfazê-los.
+   * Consistência entre os dois shells é o ponto — quem usa o portal não deveria
+   * aprender um padrão diferente para a mesma coisa.
+   */
+  const filtrosAtivos = (local !== 'todos' ? 1 : 0) + (termo.trim() ? 1 : 0)
+
+  function limparFiltros() {
+    setLocal('todos')
+    setTermo('')
+  }
+
   const { situacao, dado, erro, recarregar } = useConsulta(
     () =>
       escopo
@@ -132,7 +144,7 @@ export function PortalParque() {
       </div>
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <Busca
             rotulo="Patrimônio ou série"
             valor={termo}
