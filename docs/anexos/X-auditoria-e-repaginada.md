@@ -457,3 +457,73 @@ O token é `--peso-dado`, não `--peso-620`, para quem o usar saber quando.
 Numa execução do `a11y:dom`, "a prévia da conversão não conta tentativa" falhou
 e passou isolada e na repetição completa. Sem relação com as mudanças desta
 entrega — registrado como teste intermitente a investigar.
+
+---
+
+## X.12 Resultado da Entrega 4 — executada
+
+Dois commits: `826dd74`, `633f15d`. A decisão de X.9.2 foi tomada pelo
+operador: **identidade por sistema tipográfico**, sem arquivo de fonte — e com
+o logotipo da IARX como referência de cor e de gesto.
+
+### A marca na paleta, decidida pelo validador
+
+| | Antes | Depois |
+| --- | --- | --- |
+| `primary` claro | `#0b4fa8` genérico | **`#1f3a6e`**, o azul-marinho do logotipo |
+| `primary` escuro | `#7fb2ff` | **`#8fb0e0`**, o aço do logotipo |
+| `a11y:tokens` | 202/202 | **208/208** |
+
+As demais cores semânticas **não** mudaram: o rubro e o ouro do logotipo já
+estavam na família de `critico` e `atencao`, e mexer nelas seria trocar valores
+verificados por valores parecidos.
+
+**O ouro fica fora da verificação, declarado e com motivo.** WCAG 1.4.3 e
+1.4.11 isentam logotipo de contraste mínimo, e o ouro é claro de propósito —
+é assim no logotipo impresso. O critério que sobra não é normativo, é de
+silhueta: três das quatro barras sustentam a forma, e essas três passam.
+
+Nota de margem: o pior par de séries caiu de 24,2 para **20,8 ΔE** sob
+protanopia. Continua acima do piso de 15, com folga — mas é menos folga.
+
+### O que carrega a identidade, sem custar bytes
+
+- **Símbolo em SVG**: quatro retas inclinadas em 13°, `role="img"`. Aos 30px do
+  rail nenhuma letra se lê; o que se reconhece é a inclinação e a sequência de
+  cor.
+- **`h1` de 21px/650 para 27px/700**, com trilha fechada. O tamanho anterior
+  ficava a meio caminho do texto, e a página abria sem dizer onde começa.
+- **Trilha e entrelinha por papel.** `--trilha-etiqueta` substituiu seis
+  valores escolhidos à mão entre 0,06 e 0,09em.
+- **Três degraus de elevação**, com tinta de `--cor-text-primary` em vez de
+  preto fixo — quatro das seis sombras anteriores eram invisíveis no tema
+  escuro.
+- **A inclinação aparece uma vez por tela**, no item ativo da navegação: ela
+  acrescenta *forma* a um sinal que era só cor e peso.
+
+### O defeito que um teste intermitente guardava
+
+`useConsulta` atualizava uma ref **durante a renderização** para decidir se
+mostrava skeleton. React pode renderizar sem efetivar, e a ref ficava
+adiantada para uma renderização descartada: a tabela sumia por um instante, de
+vez em quando. A comparação passou para dentro do efeito.
+
+Dois defeitos de teste vieram junto, e o segundo só apareceu porque o primeiro
+foi corrigido:
+
+1. `abrir()` esperava `aria-busy` zerar — o que passa cedo demais, porque antes
+   do primeiro commit do React não há `aria-busy` nenhum. (A primeira correção
+   esperava por `#principal`, que a tela de entrada não tem: 18 reprovações até
+   perceber.)
+2. `getByLabel('Janela')` casava com o seletor **e** com o gráfico "Saldo
+   projetado — 90 dias · janela a partir de hoje".
+
+É a terceira vez nesta auditoria que um sintoma intermitente escondia um
+defeito real. O padrão vale anotar: **teste que falha uma vez em três não é
+ruído até que se prove que é.**
+
+### Verificação visual
+
+Capturas nos dois temas, em três telas, conferidas — não só os portões.
+"Bold e memorável" tem limite numa tela de operação densa: o que se buscou foi
+hierarquia clara e assinatura discreta, não ornamento.
