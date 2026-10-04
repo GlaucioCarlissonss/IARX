@@ -1,9 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../dados/api'
-import { equipamentosDoCliente, locaisDoEscopo } from '../dados/portal'
 import type { EquipamentoDoCliente } from '../dados/portal'
+import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
-import { Cartao, Chip, EstadoVazio, Selecao } from '../componentes/ui/primitivos'
+import {
+  Carregando,
+  Cartao,
+  Chip,
+  ErroConsulta,
+  EstadoVazio,
+  Selecao,
+  Skeleton,
+} from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -21,17 +29,20 @@ import type { Coluna } from '../componentes/ui/Tabela'
  */
 export function PortalParque() {
   const { escopo } = useSessao()
-  const base = api.baseSincrona()
   const [local, setLocal] = useState('todos')
   const [termo, setTermo] = useState(
     () => new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('q') ?? '',
   )
 
-  const equipamentos = useMemo(
-    () => (escopo ? equipamentosDoCliente(base, escopo) : []),
-    [base, escopo],
+  const { situacao, dado, erro, recarregar } = useConsulta(
+    () =>
+      escopo
+        ? Promise.all([api.portalEquipamentos(escopo), api.portalUnidades(escopo)]).then(
+            ([equipamentos, unidades]) => ({ equipamentos, unidades }),
+          )
+        : Promise.resolve(null),
+    [escopo],
   )
-  const unidades = useMemo(() => (escopo ? locaisDoEscopo(base, escopo) : []), [base, escopo])
 
   if (!escopo) {
     return (
@@ -43,6 +54,18 @@ export function PortalParque() {
     )
   }
 
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta
+        titulo="Não foi possível carregar seus equipamentos"
+        erro={erro}
+        aoTentarNovamente={recarregar}
+      />
+    )
+  }
+
+  const equipamentos = dado?.equipamentos ?? []
+  const unidades = dado?.unidades ?? []
   const t = termo.trim().toLowerCase()
   const filtrados = equipamentos.filter(
     (e) =>
@@ -101,7 +124,9 @@ export function PortalParque() {
         <div>
           <h1>Meus equipamentos</h1>
           <p className="texto-secundario medida-leitura" style={{ marginTop: 'var(--e1)' }}>
-            {equipamentos.length} máquina(s) em {unidades.length} unidade(s) do seu acesso.
+            {situacao === 'carregando'
+              ? 'Carregando o parque do seu acesso…'
+              : `${equipamentos.length} máquina(s) em ${unidades.length} unidade(s) do seu acesso.`}
           </p>
         </div>
       </div>
@@ -125,16 +150,22 @@ export function PortalParque() {
           />
         </Filtros>
 
-        <Tabela
-          legenda="Equipamentos do cliente"
-          itens={filtrados}
-          chaveDe={(e) => e.id}
-          colunas={colunas}
-          vazio={{
-            titulo: 'Nenhum equipamento com esse filtro',
-            texto: 'Limpe a busca ou troque a unidade.',
-          }}
-        />
+        {situacao === 'carregando' ? (
+          <Carregando rotulo="Carregando seus equipamentos">
+            <Skeleton linhas={6} altura="22px" />
+          </Carregando>
+        ) : (
+          <Tabela
+            legenda="Equipamentos do cliente"
+            itens={filtrados}
+            chaveDe={(e) => e.id}
+            colunas={colunas}
+            vazio={{
+              titulo: 'Nenhum equipamento com esse filtro',
+              texto: 'Limpe a busca ou troque a unidade.',
+            }}
+          />
+        )}
       </Cartao>
     </>
   )

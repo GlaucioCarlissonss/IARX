@@ -288,6 +288,38 @@ export function Carregando({ rotulo, children }: { rotulo: string; children: Rea
   )
 }
 
+/* --------------------------------------------------------------- erro de carga */
+
+/**
+ * O estado de erro de uma consulta, igual em toda tela.
+ *
+ * Três coisas que faltavam em algum lugar sempre que este bloco era escrito à
+ * mão: a mensagem **do erro** em vez de uma genérica, as ações que o próprio
+ * erro sugere, e um caminho de volta. Erro sem saída obriga a recarregar a
+ * página inteira e perder o que estava filtrado.
+ *
+ * A mensagem vem de `ErroApi` e é escrita para quem usa — nunca o texto técnico
+ * da falha.
+ */
+export function ErroConsulta({
+  titulo,
+  erro,
+  aoTentarNovamente,
+}: {
+  titulo: string
+  erro: { mensagem: string; acoes: string[] }
+  aoTentarNovamente: () => void
+}) {
+  return (
+    <Aviso tom="critico" titulo={titulo} saidas={erro.acoes.length ? erro.acoes : undefined}>
+      <p>{erro.mensagem}</p>
+      <p style={{ marginTop: 'var(--e3)' }}>
+        <Botao onClick={aoTentarNovamente}>Tentar novamente</Botao>
+      </p>
+    </Aviso>
+  )
+}
+
 /* -------------------------------------------------------------- estado vazio */
 
 interface VazioProps {

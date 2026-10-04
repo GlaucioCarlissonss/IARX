@@ -5,7 +5,7 @@ import { agregadoPorRegiao, linhasChamados, linhasEstoque } from '../dados/consu
 import { useConsulta } from '../lib/useConsulta'
 import { inteiro, moeda, moedaCompacta, percentual, prazoRestante } from '../lib/formato'
 import { HOJE } from '../dados/gerar'
-import { Aviso, BarraMedida, Carregando, Cartao, Chip, Metrica, Skeleton } from '../componentes/ui/primitivos'
+import { BarraMedida, Carregando, Cartao, Chip, ErroConsulta, Metrica, Skeleton } from '../componentes/ui/primitivos'
 import { BarrasHorizontais, Sparkline } from '../componentes/ui/graficos'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { Mapa as MapaGeografico } from '../componentes/ui/Mapa'
@@ -58,14 +58,11 @@ export function Inicio() {
 
   if (situacao === 'erro') {
     return (
-      <Aviso tom="critico" titulo="Não foi possível carregar o painel">
-        <p>{erro.mensagem}</p>
-        <p style={{ marginTop: 'var(--e3)' }}>
-          <button className="btn" onClick={recarregar}>
-            Tentar novamente
-          </button>
-        </p>
-      </Aviso>
+      <ErroConsulta
+        titulo="Não foi possível carregar o painel"
+        erro={erro}
+        aoTentarNovamente={recarregar}
+      />
     )
   }
 

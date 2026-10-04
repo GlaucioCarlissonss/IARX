@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../dados/api'
-import { contratosDoCliente } from '../dados/portal'
 import type { ContratoDoCliente } from '../dados/portal'
+import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { data, inteiro, moeda } from '../lib/formato'
-import { Cartao, Chip, EstadoVazio, Selecao } from '../componentes/ui/primitivos'
+import {
+  Carregando,
+  Cartao,
+  Chip,
+  ErroConsulta,
+  EstadoVazio,
+  Selecao,
+  Skeleton,
+} from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -21,13 +29,12 @@ import type { Coluna } from '../componentes/ui/Tabela'
  */
 export function PortalContratos() {
   const { escopo } = useSessao()
-  const base = api.baseSincrona()
   const [aberto, setAberto] = useState<string | null>(null)
   const [status, setStatus] = useState('todos')
 
-  const contratos = useMemo(
-    () => (escopo ? contratosDoCliente(base, escopo) : []),
-    [base, escopo],
+  const { situacao, dado, erro, recarregar } = useConsulta(
+    () => (escopo ? api.portalContratos(escopo) : Promise.resolve(null)),
+    [escopo],
   )
 
   if (!escopo) {
@@ -40,6 +47,17 @@ export function PortalContratos() {
     )
   }
 
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta
+        titulo="Não foi possível carregar seus contratos"
+        erro={erro}
+        aoTentarNovamente={recarregar}
+      />
+    )
+  }
+
+  const contratos = dado ?? []
   const filtrados = contratos.filter((c) => status === 'todos' || c.status === status)
   const detalhe = contratos.find((c) => c.id === aberto) ?? null
 
@@ -112,17 +130,23 @@ export function PortalContratos() {
           />
         </Filtros>
 
-        <Tabela
-          legenda="Contratos do cliente"
-          itens={filtrados}
-          chaveDe={(c) => c.id}
-          colunas={colunas}
-          aoClicarLinha={(c) => setAberto(c.id === aberto ? null : c.id)}
-          vazio={{
-            titulo: 'Nenhum contrato nesta situação',
-            texto: 'Troque o filtro de situação para ver os demais.',
-          }}
-        />
+        {situacao === 'carregando' ? (
+          <Carregando rotulo="Carregando seus contratos">
+            <Skeleton linhas={5} altura="22px" />
+          </Carregando>
+        ) : (
+          <Tabela
+            legenda="Contratos do cliente"
+            itens={filtrados}
+            chaveDe={(c) => c.id}
+            colunas={colunas}
+            aoClicarLinha={(c) => setAberto(c.id === aberto ? null : c.id)}
+            vazio={{
+              titulo: 'Nenhum contrato nesta situação',
+              texto: 'Troque o filtro de situação para ver os demais.',
+            }}
+          />
+        )}
       </Cartao>
 
       {detalhe && (

@@ -1,4 +1,6 @@
-import { gerarBase, HOJE, recalcularIndicadores } from './gerar'
+import { gerarBase, HOJE, iso, recalcularIndicadores } from './gerar'
+import * as portal from './portal'
+import type { EscopoDoPortal } from './portal'
 import * as cmd from './comandos'
 import type { Resultado } from './comandos'
 import type { BaseDados, EntidadeAnexo } from './tipos'
@@ -305,4 +307,30 @@ export const api = {
   conferirNota: (notaId: string, conferidaPor: string) => executar(() => cmd.conferirNota(BASE, notaId, conferidaPor)),
   integrarNota: (notaId: string, integradaPor: string) => executar(() => cmd.integrarNota(BASE, notaId, integradaPor)),
   cancelarNota: (notaId: string, motivo: string) => executar(() => cmd.cancelarNota(BASE, notaId, motivo)),
+
+  /* ------------------------------------------------------------- portal */
+
+  /*
+   * O portal entra pela mesma porta que o resto.
+   *
+   * As quatro telas do portal liam a base de forma **síncrona**, direto de
+   * `baseSincrona()`: eram as únicas da aplicação sem estado de carregamento,
+   * sem estado de erro e sem o caminho de nova tentativa. Dívida da rodada em
+   * que o segundo shell foi construído.
+   *
+   * O escopo é parâmetro, e não lido da sessão aqui: a camada de dados não
+   * conhece sessão. É o mesmo desenho do servidor, onde o recorte vem do token
+   * e as consultas não o consultam.
+   */
+  portalResumo: (escopo: EscopoDoPortal) =>
+    responder(() => portal.resumoDoPortal(BASE, escopo, iso(HOJE))),
+  portalContratos: (escopo: EscopoDoPortal) => responder(() => portal.contratosDoCliente(BASE, escopo)),
+  portalEquipamentos: (escopo: EscopoDoPortal) =>
+    responder(() => portal.equipamentosDoCliente(BASE, escopo)),
+  portalUnidades: (escopo: EscopoDoPortal) => responder(() => portal.locaisDoEscopo(BASE, escopo)),
+  portalConsumo: (escopo: EscopoDoPortal, competencia?: string) =>
+    responder(() => portal.consumoDoCliente(BASE, escopo, competencia)),
+  portalCustos: (escopo: EscopoDoPortal) => responder(() => portal.custosDoCliente(BASE, escopo)),
+  portalMemoria: (escopo: EscopoDoPortal, competencia: string) =>
+    responder(() => portal.memoriaDaCompetencia(BASE, escopo, competencia)),
 }

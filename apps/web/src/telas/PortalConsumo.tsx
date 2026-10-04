@@ -1,10 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../dados/api'
-import { custosDoCliente, memoriaDaCompetencia } from '../dados/portal'
 import type { ConsumoDoCliente, CustoDaCompetencia } from '../dados/portal'
+import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { competenciaLonga, data, inteiro, moeda } from '../lib/formato'
-import { BarraMedida, Cartao, Chip, EstadoVazio, Metrica, Selecao } from '../componentes/ui/primitivos'
+import {
+  BarraMedida,
+  Carregando,
+  Cartao,
+  Chip,
+  ErroConsulta,
+  EstadoVazio,
+  Metrica,
+  Selecao,
+  Skeleton,
+} from '../componentes/ui/primitivos'
 import { Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
@@ -28,15 +38,31 @@ import type { Coluna } from '../componentes/ui/Tabela'
  */
 export function PortalConsumo() {
   const { escopo } = useSessao()
-  const base = api.baseSincrona()
 
-  const custos = useMemo(() => (escopo ? custosDoCliente(base, escopo) : []), [base, escopo])
-  const [competencia, setCompetencia] = useState<string>(() => custos[0]?.competencia ?? '')
+  /*
+   * A competência escolhida é **derivada**, não inicializada.
+   *
+   * `useState(() => custos[0])` lê a lista uma vez, na primeira renderização —
+   * e com a carga assíncrona a lista ainda está vazia nesse instante. O seletor
+   * nasceria vazio e nunca se corrigiria sozinho. Guardar só a escolha
+   * explícita, e cair na competência mais recente enquanto não houver uma,
+   * funciona nos dois casos.
+   */
+  const [escolhida, setEscolhida] = useState<string | null>(null)
 
-  const memoria = useMemo(
-    () => (escopo && competencia ? memoriaDaCompetencia(base, escopo, competencia) : null),
-    [base, escopo, competencia],
+  const { situacao, dado, erro, recarregar } = useConsulta(
+    () => (escopo ? api.portalCustos(escopo) : Promise.resolve(null)),
+    [escopo],
   )
+
+  const custos = dado ?? []
+  const competencia = escolhida ?? custos[0]?.competencia ?? ''
+
+  const memoriaConsulta = useConsulta(
+    () => (escopo && competencia ? api.portalMemoria(escopo, competencia) : Promise.resolve(null)),
+    [escopo, competencia],
+  )
+  const memoria = memoriaConsulta.dado
 
   if (!escopo) {
     return (
@@ -45,6 +71,24 @@ export function PortalConsumo() {
         titulo="O portal responde a usuário de cliente"
         texto="Esta sessão é da operação da locadora. As telas equivalentes, sem o recorte, são Faturamento e Contas a receber."
       />
+    )
+  }
+
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta
+        titulo="Não foi possível carregar consumo e custos"
+        erro={erro}
+        aoTentarNovamente={recarregar}
+      />
+    )
+  }
+
+  if (situacao === 'carregando') {
+    return (
+      <Carregando rotulo="Carregando consumo e custos">
+        <Skeleton linhas={8} altura="22px" />
+      </Carregando>
     )
   }
 
@@ -195,7 +239,7 @@ export function PortalConsumo() {
           itens={custos}
           chaveDe={(c) => c.competencia}
           colunas={colunasCusto}
-          aoClicarLinha={(c) => setCompetencia(c.competencia)}
+          aoClicarLinha={(c) => setEscolhida(c.competencia)}
           porPagina={12}
         />
       </Cartao>
@@ -205,7 +249,7 @@ export function PortalConsumo() {
           <Selecao
             rotulo="Memória de cálculo da competência"
             value={competencia}
-            onChange={(e) => setCompetencia(e.target.value)}
+            onChange={(e) => setEscolhida(e.target.value)}
             opcoes={custos.map((c) => ({
               valor: c.competencia,
               texto: competenciaLonga(c.competencia) + (c.parcial ? ' (parcial)' : ''),
@@ -213,7 +257,23 @@ export function PortalConsumo() {
           />
         </Filtros>
 
-        {!memoria ? (
+        {/*
+          A memória tem carregamento próprio: trocar de competência não deve
+          apagar a tabela de histórico acima, que não mudou. Recarregar a
+          página inteira a cada troca de seletor é o que faz a pessoa perder o
+          lugar em que estava.
+        */}
+        {memoriaConsulta.situacao === 'carregando' ? (
+          <Carregando rotulo={`Carregando a memória de ${competenciaLonga(competencia)}`}>
+            <Skeleton linhas={5} altura="22px" />
+          </Carregando>
+        ) : memoriaConsulta.situacao === 'erro' ? (
+          <ErroConsulta
+            titulo="Não foi possível carregar a memória de cálculo"
+            erro={memoriaConsulta.erro}
+            aoTentarNovamente={memoriaConsulta.recarregar}
+          />
+        ) : !memoria ? (
           <p className="texto-secundario medida-leitura">
             Não há medição em {competenciaLonga(competencia)} nas unidades do seu acesso.
           </p>

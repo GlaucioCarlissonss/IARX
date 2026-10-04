@@ -1,11 +1,19 @@
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../dados/api'
 import { HOJE, iso } from '../dados/gerar'
-import { resumoDoPortal, contratosDoCliente } from '../dados/portal'
+import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { competenciaLonga, data, inteiro, moeda } from '../lib/formato'
-import { Aviso, Cartao, Chip, EstadoVazio, Metrica } from '../componentes/ui/primitivos'
+import {
+  Aviso,
+  Carregando,
+  Cartao,
+  Chip,
+  ErroConsulta,
+  EstadoVazio,
+  Metrica,
+  Skeleton,
+} from '../componentes/ui/primitivos'
 
 /**
  * O painel de quem aluga.
@@ -21,15 +29,21 @@ import { Aviso, Cartao, Chip, EstadoVazio, Metrica } from '../componentes/ui/pri
  */
 export function PortalInicio() {
   const { escopo, usuario } = useSessao()
-  const base = api.baseSincrona()
   const hoje = iso(HOJE)
 
-  const dados = useMemo(
-    () => (escopo ? { resumo: resumoDoPortal(base, escopo, hoje), contratos: contratosDoCliente(base, escopo) } : null),
-    [base, escopo, hoje],
+  const { situacao, dado, erro, recarregar } = useConsulta(
+    () =>
+      escopo
+        ? Promise.all([
+            api.portalResumo(escopo),
+            api.portalContratos(escopo),
+            api.portalUnidades(escopo),
+          ]).then(([resumo, contratos, unidades]) => ({ resumo, contratos, unidades }))
+        : Promise.resolve(null),
+    [escopo],
   )
 
-  if (!escopo || !dados) {
+  if (!escopo) {
     return (
       <EstadoVazio
         glifo="⛔"
@@ -39,7 +53,27 @@ export function PortalInicio() {
     )
   }
 
-  const { resumo, contratos } = dados
+  if (situacao === 'erro') {
+    return (
+      <ErroConsulta
+        titulo="Não foi possível carregar o seu painel"
+        erro={erro}
+        aoTentarNovamente={recarregar}
+      />
+    )
+  }
+
+  if (situacao === 'carregando' || !dado) {
+    return (
+      <Carregando rotulo="Carregando o seu painel">
+        <div className="grade grade--metricas">
+          <Skeleton linhas={4} altura="48px" />
+        </div>
+      </Carregando>
+    )
+  }
+
+  const { resumo, contratos } = dado
   const diasAte = (iso: string) =>
     Math.round((new Date(iso).getTime() - HOJE.getTime()) / 86400000)
   const vencendo = contratos.filter(
@@ -53,10 +87,17 @@ export function PortalInicio() {
         <div>
           <h1>{resumo.cliente.nomeFantasia}</h1>
           <p className="texto-secundario medida-leitura" style={{ marginTop: 'var(--e1)' }}>
-            {usuario.nome} ·{' '}
-            {escopo.locaisIds === null
-              ? `${resumo.unidadesNoEscopo} unidades no seu acesso`
-              : `${resumo.unidadesNoEscopo} de ${base.locais.filter((l) => l.clienteId === escopo.clienteId).length} unidades no seu acesso`}
+            {/*
+              Quem está na sessão. O **escopo** fica na barra, que o mostra em
+              toda tela do portal — repeti-lo aqui diria duas vezes a mesma
+              coisa na mesma dobra.
+
+              E não diz quantas unidades o grupo tem: a versão anterior
+              mostrava "1 de 4" para o gestor de unidade, e aquele 4 vinha de
+              uma contagem que o recorte existe justamente para não entregar.
+              Saber que há três unidades além da sua é informação do grupo.
+            */}
+            {usuario.nome}
           </p>
         </div>
       </div>

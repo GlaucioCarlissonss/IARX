@@ -196,7 +196,10 @@ test('o gestor de unidade vê menos que o administrador do cliente, e a tela diz
   const doGrupo = await page.locator('tbody tr').count()
 
   await entrarComoCliente(page, 'unidade@cliente.demo')
-  await expect(page.getByText(/unidade\(s\) no seu acesso/)).toBeVisible()
+  // O escopo fica na barra, e aparece em toda tela do portal — não só no painel.
+  await expect(
+    page.getByRole('banner').getByText(/unidade\(s\) no seu acesso/),
+  ).toBeVisible()
   await expect(
     page.getByRole('region', { name: 'Você vê as unidades a que foi vinculado' }),
   ).toBeVisible()
