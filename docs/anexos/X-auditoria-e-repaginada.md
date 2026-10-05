@@ -209,11 +209,13 @@ memoização      116 useMemo · 14 useCallback · 0 React.memo
    `comandos.ts` (4.951) + `catalogo.ts` são ~8.800 linhas de dados e regras de
    demonstração embutidas no artefato publicado. É a maior fatia isolada do
    JS, e sai inteira quando o front falar com a API.
-2. **59 leituras de `baseSincrona()` no corpo de componentes**, fora de
-   `useMemo`. Cada uma devolve coleções novas a cada render (de propósito — é o
-   que faz a recarga funcionar), então todo `useMemo` que dependa delas
-   recalcula sempre. O efeito hoje é pequeno porque tudo é memória; passa a ser
-   grande quando virar `fetch`.
+2. ~~**59 leituras de `baseSincrona()` no corpo de componentes** devolvem
+   coleções novas a cada render, então todo `useMemo` recalcula sempre.~~
+   **Errado, corrigido na Entrega 6.** `baseSincrona: () => BASE` devolve a
+   **mesma referência**; quem copia são `clientes()`, `contratos()` e as demais
+   leituras assíncronas. Os memos são estáveis e não havia recálculo a
+   corrigir. O erro veio de ler o comentário sobre as cópias e atribuí-lo à
+   função ao lado.
 3. **Dois N+1 reais na API**, ambos em escrita:
    `contas-receber.service.ts:340` faz um `porId` por parcela antes de cancelar
    em cascata; `notas-fiscais.service.ts:338` cria equipamento linha a linha.
@@ -584,3 +586,56 @@ costuma medir a coisa errada**.
 | Ligar a saída de filtro nas outras oito telas | São faixas de um controle só, ou de competência — zerar um seletor único não precisa de botão para zerar um seletor único |
 | Revisar fluxos de "projetos / SLA / suporte" | Não existem nesta base (X.0) |
 | Mexer em contraste, teclado ou foco | Já cobertos: 227 testes de a11y e 208 verificações de token. Não havia lacuna a fechar |
+
+---
+
+## X.14 Resultado da Entrega 6 — executada
+
+Commit: `d57945f`. A medição desmentiu metade do diagnóstico, e isso é o
+resultado mais útil da entrega.
+
+### O aplicativo não está lento
+
+Mediana de cinco amostras, arquivo único de 862 kB aberto do disco:
+
+```
+painel do dia        domInteractive  61 ms · primeira pintura 200 ms
+contas a receber     domInteractive  68 ms · primeira pintura 240 ms
+```
+
+A marca de 1000 ms que eu havia anotado numa primeira sondagem era **uma
+amostra fria**, com o navegador recém-aberto. Número de uma execução só não é
+medida — e eu quase construí uma entrega inteira em cima dele.
+
+### O que custava era digitar
+
+| | Antes | Depois |
+| --- | --- | --- |
+| Digitar "KYOCERA" na busca do parque | **193 ms** | **75 ms** |
+| Refiltragens por palavra de 7 letras | 7 | **1** |
+
+Seis das sete eram jogadas fora: ninguém lê o resultado de "KYO". A alteração
+foi em **um lugar** porque a Entrega 2 consolidou a busca num componente — era
+exatamente o caso que justificou aquela consolidação.
+
+### Três gargalos do diagnóstico que não existem
+
+1. **Recálculo por referência instável** — ver a correção em X.5: `baseSincrona`
+   devolve a mesma referência.
+2. **Massa no bundle** — verdadeiro, mas não é tarefa desta entrega: a
+   aplicação **é** a massa enquanto o front não consome a API. E gerar a base
+   custa 27–30 ms depois do aquecimento, de modo que adiá-la não compraria
+   pintura perceptível.
+3. **Code splitting** — continua estruturalmente impossível com
+   `inlineDynamicImports` (X.6.2), e nenhuma das decisões pendentes foi tomada.
+
+### Mais dois testes que dependiam de tempo
+
+Digitavam o número da nota e clicavam em "a primeira" da lista. Com a espera,
+"a primeira" podia ainda ser a da lista anterior. Agora endereçam a nota pelo
+número — e de quebra o teste passa a dizer qual nota ele quer.
+
+É a sexta verificação desta auditoria corrigida por medir a coisa errada ou
+por depender de tempo. O padrão já é conclusão, não coincidência: **teste que
+se apoia em "o primeiro" ou em "logo depois" está medindo a implementação, não
+o comportamento.**
