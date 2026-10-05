@@ -1361,7 +1361,19 @@ test('RN-L03/RN-L07: integrar cria os ativos disponíveis e sela a nota', async 
   // RN-L01: a nota está selada — nem editar séries, nem cancelar.
   await abrir(page, { hash: '#/notas-fiscais' })
   await page.getByLabel('Número, chave ou fornecedor').fill(numero.split('/')[1])
-  await page.getByRole('button', { name: /^Abrir nota/ }).first().click()
+  /*
+   * A nota é endereçada pelo **número**, e não por "a primeira da lista".
+   *
+   * A busca espera o fim da digitação antes de refiltrar, então "a primeira"
+   * logo depois de digitar ainda pode ser a primeira da lista anterior. O
+   * filtro de linha por texto espera a lista chegar no estado certo — e, de
+   * quebra, o teste passa a dizer qual nota ele quer.
+   */
+  await page
+    .getByRole('row')
+    .filter({ hasText: numero })
+    .getByRole('button', { name: /^Abrir nota/ })
+    .click()
   const detalhe = page.getByRole('dialog')
   await expect(detalhe.getByText(/A nota está selada/)).toBeVisible()
   await expect(detalhe.getByRole('button', { name: /séries do item/ })).toHaveCount(0)
@@ -1393,7 +1405,11 @@ test('RN-027: quem lança a nota não pode conferi-la', async ({ page }) => {
   // Identifica as unidades, para que a recusa seguinte seja pela segregação de
   // funções e não pela conferência incompleta.
   await page.getByLabel('Número, chave ou fornecedor').fill('77001')
-  await page.getByRole('button', { name: /^Abrir nota/ }).first().click()
+  await page
+    .getByRole('row')
+    .filter({ hasText: '77001' })
+    .getByRole('button', { name: /^Abrir nota/ })
+    .click()
   await page.getByRole('dialog').getByRole('button', { name: /séries do item/ }).click()
   const series = page.getByRole('dialog')
   for (let i = 1; i <= 3; i++) {
