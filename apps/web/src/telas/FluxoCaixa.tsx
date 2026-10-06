@@ -49,6 +49,20 @@ export function FluxoCaixa() {
   const [contaId, setContaId] = useState<string>('')
   const [filialId, setFilialId] = useState<string>('')
 
+  /*
+   * A janela não entra na conta: ela **sempre** vale, e noventa dias é a
+   * escolha padrão, não um recorte aplicado. Contá-la faria a tela abrir
+   * dizendo "1 filtro" sem que ninguém tenha filtrado nada — e um contador que
+   * mente na abertura é pior que contador nenhum.
+   */
+  const filtrosAtivos = (cenarioId ? 1 : 0) + (contaId ? 1 : 0) + (filialId ? 1 : 0)
+
+  function limparFiltros() {
+    setCenarioId('')
+    setContaId('')
+    setFilialId('')
+  }
+
   const base = api.baseSincrona()
   const cenarios = dado ?? []
   const padrao = cenarioPadrao(base)
@@ -129,7 +143,7 @@ export function FluxoCaixa() {
         </div>
       </div>
 
-      <Filtros>
+      <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
         <Selecao
           rotulo="Janela"
           value={String(dias)}

@@ -71,6 +71,18 @@ export function Faturamento() {
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.medicoes(), [])
   const [texto, setTexto] = useState('')
   const [recorte, setRecorte] = useState('')
+
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez — o mesmo
+   * padrão das demais listas, para a mesma ação não mudar de forma conforme a
+   * tela.
+   */
+  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
+
+  function limparFiltros() {
+    setTexto('')
+    setRecorte('')
+  }
   const [detalhe, setDetalhe] = useState<LinhaCobranca | null>(null)
   const [medicao, setMedicao] = useState<{ equipamento: Equipamento; competencia: string } | null>(null)
 
@@ -416,7 +428,7 @@ export function Faturamento() {
       )}
 
       <Cartao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
               rotulo="Fatura, cliente ou contrato"

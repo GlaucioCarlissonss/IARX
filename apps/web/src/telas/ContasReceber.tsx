@@ -112,6 +112,24 @@ export function ContasReceber() {
   const [somenteAtraso, setSomenteAtraso] = useState(false)
   const [busca, setBusca] = useState('')
 
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Esta faixa tem cinco controles: desfazê-los um a um exige lembrar de cada
+   * um, e é a tela em que mais se perde a conta do que ainda está restringindo.
+   */
+  const filtrosAtivos =
+    (busca.trim() ? 1 : 0) + (filtroStatus !== 'todos' ? 1 : 0) + (filtroOrigem !== 'todas' ? 1 : 0) +
+    (somenteFila ? 1 : 0) + (somenteAtraso ? 1 : 0)
+
+  function limparFiltros() {
+    setBusca('')
+    setFiltroStatus('todos')
+    setFiltroOrigem('todas')
+    setSomenteFila(false)
+    setSomenteAtraso(false)
+  }
+
   const base = api.baseSincrona()
   const titulos = dado ?? []
 
@@ -404,7 +422,7 @@ export function ContasReceber() {
           ) : null
         }
       >
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <Entrada
             rotulo="Buscar por número, cliente ou descrição"
             rotuloOculto

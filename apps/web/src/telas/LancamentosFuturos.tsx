@@ -73,6 +73,24 @@ export function LancamentosFuturos() {
   const [somenteElegivel, setSomenteElegivel] = useState(false)
   const [busca, setBusca] = useState('')
 
+  /*
+   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   *
+   * Esta faixa tem cinco controles: desfazê-los um a um exige lembrar de cada
+   * um, e é a tela em que mais se perde a conta do que ainda está restringindo.
+   */
+  const filtrosAtivos =
+    (busca.trim() ? 1 : 0) + (filtroStatus !== 'todos' ? 1 : 0) + (filtroLado !== 'todos' ? 1 : 0) +
+    (somenteExcecao ? 1 : 0) + (somenteElegivel ? 1 : 0)
+
+  function limparFiltros() {
+    setBusca('')
+    setFiltroStatus('todos')
+    setFiltroLado('todos')
+    setSomenteExcecao(false)
+    setSomenteElegivel(false)
+  }
+
   const base = api.baseSincrona()
   const lancamentos = dado ?? []
 
@@ -349,7 +367,7 @@ export function LancamentosFuturos() {
       </Cartao>
 
       <Cartao titulo="Compromissos programados" comoRegiao>
-        <Filtros>
+        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <Entrada
             rotulo="Buscar por descrição, cliente ou fornecedor"
             rotuloOculto
