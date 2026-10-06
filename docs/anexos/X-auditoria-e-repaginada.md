@@ -83,11 +83,16 @@ remoção limpa.
 de defeito que esta base já corrigiu três vezes — peça construída, nunca ligada.
 Remover é uma decisão; ligar é outra. Não é limpeza.
 
-### Exports desnecessários: **~60**
+### Exports desnecessários: **112** — corrigido na Entrega 7
 
 Símbolos exportados e usados **só dentro do próprio arquivo**. Não são código
-morto: são superfície pública maior que o necessário. Reduzi-la é barato e
-melhora o que a auditoria seguinte consegue enxergar.
+morto: são superfície pública maior que o necessário.
+
+~~Cerca de 60.~~ **Errado, e o erro foi de leitura:** a listagem original foi
+truncada em oitenta linhas e eu contei o que a tela mostrava. O total distinto
+é **112**, dos quais **68 fora de `packages/contracts`**. A distinção importa:
+um pacote de contratos compartilhado exporta amplamente **por desenho**, e
+nem toda exportação dele é excesso.
 
 ### Dependências não usadas: **zero**
 
@@ -639,3 +644,92 @@ número — e de quebra o teste passa a dizer qual nota ele quer.
 por depender de tempo. O padrão já é conclusão, não coincidência: **teste que
 se apoia em "o primeiro" ou em "logo depois" está medindo a implementação, não
 o comportamento.**
+
+---
+
+## X.15 Entrega 7 — revisão final, com o comparativo medido
+
+Commits `0c38018` e este. Todas as medições repetidas com o **mesmo
+instrumento** da Entrega 1.
+
+### Antes × depois
+
+| Medida | Entrega 1 | Agora |
+| --- | --- | --- |
+| `var(--x)` sem declaração nem alternativa | **8** | **0**, com portão |
+| Símbolos de fato mortos | 14 | **8**, todos mantidos com a lacuna nomeada |
+| Arquivos órfãos | 0 | 0 |
+| Dependências não usadas | 0 | 0 |
+| Estilos inline sem token | **43** | **13** (geometria calculada e medida de uso único) |
+| Estilos inline, total | 108 | 80 |
+| Tabelas cruas · pelo componente | 22 · 22 | **18 · 26** |
+| Buscas escritas à mão | 10 | **0** |
+| Faixas de filtro repetidas | 16 | **0** |
+| Faixas com saída de "limpar" | 0 de 16 | **13 de 16** |
+| Telas que tratam erro de carga | 5 de 24 | **24 de 24** |
+| Telas presas no esqueleto ao falhar | 1 | **0** |
+| Token declarado na folha global | 2 blocos + 1 oculto | **0**, com portão |
+| `a11y:tokens` | 202/202 | **208/208** |
+| `web:test` | 211 | **227** |
+| `a11y:dom` | 212 | **227** |
+| `api:test` · `db:test` · rotas | 277 · 198 · 126/126 | **idênticos** |
+| Bundle | 854,4 kB | **862,9 kB** |
+| Primeira pintura (mediana de 5) | não medida | **216 ms** |
+| Digitar "KYOCERA" na busca | 193 ms | **75 ms** |
+
+**O bundle cresceu 8,5 kB**, e é honesto dizer por quê: entraram quatro
+componentes novos, o símbolo da marca, as escalas, os estados de erro das 24
+telas e a saída de treze faixas de filtro. Nenhuma das alavancas que
+reduziriam o pacote de verdade — tirar a massa de demonstração, dividir o
+código — está disponível sem as decisões de X.9.
+
+### Regressão zero
+
+Sete portões, verdes, com os números acima. Nenhum caiu; dois subiram porque
+ganharam casos, e as contagens de API e banco não se moveram porque nada do
+que foi feito tocou regra de negócio.
+
+### O que a revisão encontrou — e não era a lacuna
+
+A Entrega 5 deixou oito de dezesseis faixas de filtro sem a saída de limpar, e
+eu escrevi que as outras eram "faixas de um controle só". **Contei: cinco
+delas tinham de dois a sete controles**, incluindo as três que mais filtram do
+sistema. Parei por esforço e escrevi uma razão que soava melhor.
+
+Corrigido: são treze, e as três que ficam de fora têm de fato um controle só.
+O achado que interessa não é a lacuna — é que **uma justificativa escrita sem
+medir resiste à leitura e não resiste à contagem**.
+
+### O padrão que atravessou as sete entregas
+
+Sete verificações precisaram de segunda versão por medirem a coisa errada ou
+por dependerem de tempo:
+
+| | O que media | O que deveria medir |
+| --- | --- | --- |
+| 1 | Linhas visíveis de uma listagem truncada | O total distinto |
+| 2 | `if (!dado) return []` dentro de `useMemo` | Guarda que interrompe a renderização |
+| 3 | `tbody tr` com a tabela paginada em 25 | A contagem que a tela declara |
+| 4 | `aria-busy` antes do primeiro commit do React | A raiz montada **e** sem carga |
+| 5 | `getByLabel('Janela')` | O seletor, e não o gráfico de mesmo nome |
+| 6 | "a primeira linha" logo após digitar | A linha que contém o número procurado |
+| 7 | Uma amostra fria de carga | A mediana de cinco |
+
+Três delas escondiam defeito real do produto: a ref atualizada durante a
+renderização em `useConsulta`, as oito declarações CSS inválidas, e as
+dezenove telas que diziam "nenhum registro" ao falhar.
+
+**Teste que falha uma vez em três não é ruído até que se prove que é** — e
+nesta auditoria, três vezes, não era.
+
+### O que continua aberto
+
+| Item | Natureza |
+| --- | --- |
+| Arquivo único × divisão de código (X.6.2) | Decisão do operador |
+| Ligar o front à API (X.6.3) | Rodada própria; destrava otimização de banco e tira ~300 kB do pacote |
+| Família tipográfica embutida (X.6.1) | Decidido por ora: identidade por sistema, sem arquivo de fonte |
+| 112 exports desnecessários | Baixo retorno; pede verificação automática que distinga pacote compartilhado de módulo interno |
+| Paleta por unidade, Faróis, Projetos, SLA (X.0) | Não existem nesta base; dependem de orientação |
+| `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza |
+| Ordens de Serviço e Estoque | Pendência de **especificação**, antes de ser de construção |
