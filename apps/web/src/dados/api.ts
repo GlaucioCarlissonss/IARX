@@ -4,6 +4,14 @@ import type { EscopoDoPortal } from './portal'
 import * as cmd from './comandos'
 import type { Resultado } from './comandos'
 import type { BaseDados, EntidadeAnexo } from './tipos'
+import { ErroApi } from './http'
+
+/*
+ * `ErroApi` mudou de casa — foi para `http.ts`, que é onde o erro da API
+ * nasce. Reexportado aqui porque dezenas de telas o importam da fachada, e
+ * mover o import de todas elas seria barulho sem ganho.
+ */
+export { ErroApi }
 
 /**
  * Fachada de acesso aos dados.
@@ -26,27 +34,6 @@ function esperar() {
   if (!simulacao.latencia) return Promise.resolve()
   const ms = LATENCIA_MS.min + Math.random() * (LATENCIA_MS.max - LATENCIA_MS.min)
   return new Promise<void>((r) => setTimeout(r, ms))
-}
-
-export class ErroApi extends Error {
-  readonly codigo: string
-  readonly acoes: string[]
-
-  /*
-   * Campos declarados e atribuídos, em vez de propriedades de parâmetro.
-   *
-   * `constructor(readonly codigo: string)` é açúcar do TypeScript que **emite
-   * código** — e o modo de remoção de tipos do Node, que é como esta suíte roda
-   * `.ts` sem compilar, recusa qualquer sintaxe assim. O efeito era que nenhum
-   * teste conseguia importar este arquivo, e com ele toda a camada de consultas
-   * derivadas ficava sem cobertura por causa de um detalhe de sintaxe.
-   */
-  constructor(codigo: string, mensagem: string, acoes: string[] = []) {
-    super(mensagem)
-    this.name = 'ErroApi'
-    this.codigo = codigo
-    this.acoes = acoes
-  }
 }
 
 async function responder<T>(fn: () => T): Promise<T> {

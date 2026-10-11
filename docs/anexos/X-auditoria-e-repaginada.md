@@ -787,7 +787,7 @@ nesta auditoria, três vezes, não era.
 | Item | Natureza |
 | --- | --- |
 | Arquivo único × divisão de código (X.6.2) | Decisão do operador |
-| Ligar o front à API (X.6.3) | Rodada própria; destrava otimização de banco e tira ~300 kB do pacote |
+| Ligar o front à API (X.17) | **Bloqueado em dois pontos medidos**, não em esforço — ver X.17 |
 | Família tipográfica embutida (X.6.1) | Decidido por ora: identidade por sistema, sem arquivo de fonte |
 | Paleta por unidade, Faróis, Projetos, SLA (X.0) | Não existem nesta base; dependem de orientação |
 | `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza. Agora **com portão**: está na lista de justificados de `superficie-de-modulo`, com a razão escrita, e sai de lá no dia em que uma tela o chamar |
@@ -929,3 +929,96 @@ Uma anotação de honestidade sobre o caminho: a primeira versão do teste abria
 rodapé caber numa linha. O defeito mora onde o mapa é baixo, que é o cartão
 embutido do painel. Ou seja — a décima vez, nesta mesma auditoria, que uma
 verificação mediu perto do lugar certo e não nele.
+
+
+---
+
+## X.17 Ligar o front à API — a costura feita, e os dois bloqueios medidos
+
+A pendência dizia "rodada própria; destrava otimização de banco e tira ~300 kB
+do pacote". Medida de perto, ela não é uma rodada de trabalho: é uma rodada de
+trabalho **depois** de duas decisões que não são minhas.
+
+### O que foi feito: a costura
+
+`apps/web/src/dados/http.ts` — transporte HTTP, com `ErroApi` mudando de casa
+para lá, já que é onde o erro da API nasce. A fachada reexporta, então nenhuma
+tela precisou mudar.
+
+A decisão que organiza o módulo: **a ausência de configuração significa
+memória.** O artefato publicado é um arquivo HTML único que abre por duplo
+clique, e essa propriedade não é conveniência de demonstração — é o que permite
+entregar o sistema a quem não tem servidor, avaliar telas sem provisionar nada,
+e rodar a suíte do Playwright contra exatamente o artefato que vai ao ar.
+Trocar a base por `fetch` incondicionalmente destruiria isso: o arquivo
+continuaria abrindo, e mostraria erro em todas as telas.
+
+Aponta-se por `VITE_API_URL` no build ou `window.__IARX_API_URL__` antes do
+bundle — a segunda para quem recebe o arquivo pronto. **Não** há parâmetro de
+URL, e a ausência é deliberada: um `?api=` transformaria qualquer link numa
+instrução de para onde mandar as credenciais de quem clicasse.
+
+Treze testes, sem rede. O que eles afirmam é o que só se afirma com `fetch`
+substituído: que a requisição sai com `credentials: 'omit'`; que rota protegida
+sem token recusa **antes** de ir à rede; e que um 502 de proxy não chega à tela.
+Esse último não é zelo — corpo de erro de proxy traz caminho de arquivo, versão
+de servidor e, em alguns, a requisição de volta inteira, com o cabeçalho
+`Authorization` dentro.
+
+### Bloqueio 1: dez necessidades do front sem rota nenhuma
+
+A API tem 26 controllers e 126 rotas; a fachada, 100 métodos. A interseção é
+grande, e o que falta não é periférico:
+
+| Módulo do front | Rota correspondente |
+| --- | --- |
+| Chamados / ordens de serviço | ausente |
+| Estoque / peças | ausente |
+| Técnicos | ausente |
+| Medições e leituras | ausente |
+| Política comercial | ausente |
+| Anexos | ausente |
+| Catálogo (modelos, fabricantes, categorias) | ausente |
+| Mapa / geolocalização dos clientes | ausente |
+
+Ordens de Serviço e Estoque já constavam como **pendência de especificação**
+nesta mesma lista. O que a medição acrescenta é que a dependência é mútua: não
+dá para ligar o front sem elas, e não dá para construí-las sem a especificação.
+
+### Bloqueio 2: a sessão não fecha
+
+`POST /api/v1/auth/login` devolve `token`, `deve_trocar_senha`, `permissoes` e
+um usuário com `id`, `nome`, `email` e `tipo`.
+
+O modelo de sessão do front precisa, além disso, de `escopoCliente`, `status`,
+`perfilIds`, `filiaisIds`, `ultimoAcesso`, `criadoEm` e `conviteAceito` —
+`escopoCliente` em particular, porque é ele que decide o recorte por unidade
+(D-27) e, portanto, o que o portal mostra.
+
+O caminho óbvio seria buscar o usuário depois do login. Ele não existe:
+`GET /api/v1/usuarios/:id` exige `usuario:gerenciar`, e **um usuário comum não
+tem permissão para ler o próprio registro**. Não há `/auth/sessao` nem
+`/usuarios/eu`.
+
+São duas saídas, e as duas são decisão de contrato da API:
+
+1. **Acrescentar os campos à resposta de login.** Mais simples, uma viagem só;
+   aumenta o que trafega na rota pública.
+2. **Criar `GET /api/v1/auth/sessao`**, autenticada e sem permissão adicional —
+   quem tem token lê a própria sessão.
+
+A segunda me parece melhor: separa "quem sou eu" de "me autentique", e é o que
+permite a tela se recuperar de um recarregamento sem refazer login. Mas é
+decisão de contrato, e esta auditoria não inventa endpoint nem documenta
+permissão que ninguém pediu.
+
+### O que isso faz com o ganho prometido
+
+Os "~300 kB" só aparecem quando `comandos.ts` (4.951 linhas) e `gerar.ts`
+(2.807) puderem **sair**, e sair exige cobertura completa — enquanto houver uma
+tela sem rota, as duas continuam no pacote. Com cobertura parcial, ligar o front
+**aumenta** o tamanho: entra o cliente HTTP e não sai nada.
+
+Vale escrito porque é contraintuitivo e porque a pendência prometia o contrário:
+**ligar metade do front à API custa bytes em vez de economizar.** A economia é
+tudo ou nada, e hoje não é nenhum dos dois.
