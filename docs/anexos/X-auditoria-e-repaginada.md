@@ -733,3 +733,95 @@ nesta auditoria, três vezes, não era.
 | Paleta por unidade, Faróis, Projetos, SLA (X.0) | Não existem nesta base; dependem de orientação |
 | `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza |
 | Ordens de Serviço e Estoque | Pendência de **especificação**, antes de ser de construção |
+
+---
+
+## X.16 Publicação — e o oitavo caso do mesmo padrão
+
+O workflow `publicar.yml` constrói e publica a aplicação a cada push na branch
+de trabalho. Publicar aqui é quase nada: o build já é um **arquivo HTML único**,
+então não há servidor, rota de servidor nem `404.html` de SPA a configurar — a
+navegação é por hash, e `base: './'` no Vite já servia tanto ao subdiretório do
+Pages quanto ao duplo clique local, antes de existir publicação alguma.
+
+### A chave que falta, e por que não dá para virá-la daqui
+
+O workflow constrói (862,85 kB em 2,15 s, medido na execução) e falha no passo
+seguinte, com `Resource not accessible by integration`.
+
+O motivo é de desenho do GitHub e não se contorna com configuração do workflow:
+`permissions: pages: write` autoriza **publicar** num site de Pages, não
+**criar** o site. A criação é operação de administração do repositório, e o
+`GITHUB_TOKEN` de uma execução não a tem por mais permissões que se declare —
+`enablement: true` no `configure-pages` tenta exatamente isso e recebe a mesma
+recusa.
+
+Fica registrado como pendência de **uma ação do operador**, não de código:
+
+> Settings → Pages → *Build and deployment* → Source: **GitHub Actions**
+
+Feito isso, a publicação passa a ser automática a cada push, e o endereço é
+`https://glauciocarlissonss.github.io/IARX/`. Nenhuma alteração no repositório é
+necessária — o workflow já está no lugar e já provou que constrói.
+
+### O que a tentativa de publicar trouxe
+
+Não foi o endereço. Foi a **primeira execução do CI numa máquina limpa** — e
+dois portões que reprovavam código correto.
+
+### Tipos: um atalho que só funciona em máquina usada
+
+O job do axe rodava `npx tsc -p apps/web/tsconfig.json` direto. A aplicação
+importa `@iarx/contracts/*`, que só existe depois de compilado; `npm run tipos`
+compila os contratos no primeiro dos seus três comandos, e o atalho pulava
+exatamente esse. Em qualquer máquina de desenvolvimento o `dist/` sobrou de um
+build anterior e o atalho passa. No checkout limpo, dezoito erros de "módulo não
+encontrado" apresentados como erro de tipo da aplicação.
+
+O conserto não é acrescentar um passo de build antes: é rodar **o mesmo comando
+que se roda localmente**. Dois comandos que deveriam concordar e são escritos
+separado divergem; um comando só não tem como.
+
+### RLS: um portão que não tinha como aprovar ninguém
+
+A verificação procurava `habilitar_rls_tenant('<tabela>')` no texto das
+migrações. Dezenove tabelas habilitam RLS dentro de um `foreach t in array
+array[...]`, passando o nome por variável — o texto procurado nunca aparece.
+
+O detalhe que importa: **nenhuma correção no código faria essas dezenove
+passarem.** Não era um portão rigoroso demais, era um portão medindo a forma da
+escrita em vez do efeito dela. Entre reprovar certo e reprovar errado há uma
+diferença de grau; entre medir o efeito e medir a sintaxe há uma de natureza.
+
+No lugar, `packages/db/tests/18_rls_universal.sql`, no job do banco — onde as
+migrações já foram aplicadas e o catálogo pode ser consultado. Vale para tabela
+criada de qualquer jeito, laço e SQL dinâmico inclusive, porque pergunta a
+`pg_class` e não ao arquivo.
+
+O recorte é derivado, não mantido: **tabela alcançável** é aquela sobre a qual
+algum papel de aplicação tem privilégio. As quinze partições ficam de fora
+porque nenhum papel as alcança — a consulta entra pelo pai, e a política do pai
+vale — e voltam a entrar sozinhas no dia em que alguém conceder acesso direto.
+Uma lista de exceções escrita à mão envelheceria calada; esta não tem como.
+Única dispensa escrita é `spatial_ref_sys`, catálogo de coordenadas do PostGIS,
+que não tem coluna de locatário porque não tem dono.
+
+Medido: 60 tabelas alcançáveis, todas com RLS habilitada, forçada e com
+política; 15 partições, nenhuma alcançável fora do pai. Verificado também pelo
+avesso — desligar a RLS de uma tabela e conceder privilégio direto a uma
+partição reprovam, cada um com a sua mensagem.
+
+### O que isto acrescenta à tabela de X.15
+
+| | O que media | O que deveria medir |
+| --- | --- | --- |
+| 8 | A chamada `habilitar_rls_tenant('x')` no texto da migração | `pg_class.relrowsecurity` depois de aplicada |
+
+A coluna da esquerda, nos oito casos, é sempre a mesma coisa: **um indício
+cômodo de observar**. A da direita é sempre a mesma outra: o fato que o indício
+pretendia representar. Sete vezes dentro da auditoria, e a oitava a primeira vez
+que o código rodou onde ninguém tinha rodado antes.
+
+O corolário prático é desconfortável e vale escrito: **um portão verde numa
+máquina onde o projeto já foi construído não prova nada sobre o projeto** —
+prova sobre a máquina.
