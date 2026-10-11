@@ -150,7 +150,7 @@ function dispersar(
 }
 
 /** Gera CNPJ fictício com dígitos verificadores válidos. */
-export function gerarCnpj(s: Sorteio): string {
+function gerarCnpj(s: Sorteio): string {
   const base = Array.from({ length: 8 }, () => s.int(0, 9))
   const filial = [0, 0, 0, 1]
   const n = [...base, ...filial]

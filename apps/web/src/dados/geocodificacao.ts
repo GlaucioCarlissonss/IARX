@@ -18,7 +18,7 @@
  * de uma função.
  */
 
-export const ENDERECO_SERVICO = 'https://nominatim.openstreetmap.org/search'
+const ENDERECO_SERVICO = 'https://nominatim.openstreetmap.org/search'
 
 /** Abaixo disto a busca devolve o país inteiro e gasta a cota à toa. */
 export const MIN_CARACTERES = 4

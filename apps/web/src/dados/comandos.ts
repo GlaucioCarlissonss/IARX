@@ -1945,8 +1945,8 @@ export const CATEGORIAS_ANEXO: Record<EntidadeAnexo, { valor: CategoriaAnexo; te
  * documento fiscal do imobilizado, e prendê-lo por cinco anos seria estender a
  * regra sem base legal.
  */
-export const CATEGORIAS_FISCAIS = new Set<CategoriaAnexo>(['XML_NFE', 'DANFE'])
-export const ANOS_RETENCAO_FISCAL = 5
+const CATEGORIAS_FISCAIS = new Set<CategoriaAnexo>(['XML_NFE', 'DANFE'])
+const ANOS_RETENCAO_FISCAL = 5
 
 export const ROTULO_CATEGORIA: Record<CategoriaAnexo, string> = {
   CONTRATO_ASSINADO: 'Contrato assinado',
@@ -1994,7 +1994,7 @@ export function custoAquisicao(n: NotaFiscal): number {
   )
 }
 
-export function notaPorId(base: BaseDados, id: string): NotaFiscal | undefined {
+function notaPorId(base: BaseDados, id: string): NotaFiscal | undefined {
   return base.notasFiscais.find((n) => n.id === id)
 }
 
@@ -2682,7 +2682,7 @@ export function postoAlcada(
 }
 
 /** Delegações vigentes recebidas por alguém, na data de referência. */
-export function delegacoesVigentes(
+function delegacoesVigentes(
   base: BaseDados,
   delegadoId: string,
   emIso = iso(HOJE),
@@ -2802,7 +2802,7 @@ export interface DadosTituloPagar {
  * uma renomeação. O título passaria a nascer sem categoria e o total do painel
  * divergiria, sem erro nenhum.
  */
-export const categoriaResidual = (base: BaseDados): string =>
+const categoriaResidual = (base: BaseDados): string =>
   base.categoriasDespesa.find((c) => c.residual)?.id ?? 'cat-residual'
 
 let seqTitulo = 0
@@ -3384,7 +3384,7 @@ export function niveisEmissao(base: BaseDados, valor: number): number {
  * cálculo que ninguém leu. Sem o piso, um locatário cuja menor faixa está acima
  * do ticket médio veria toda a cobrança recorrente ser emitida sozinha.
  */
-export function niveisDoTitulo(base: BaseDados, titulo: {
+function niveisDoTitulo(base: BaseDados, titulo: {
   origem: OrigemReceber
   valorOriginal: number
   desconto: number
@@ -3407,7 +3407,7 @@ export function limiteDesconto(base: BaseDados, usuarioId: string): number {
   return tetos.length === 0 ? 0 : Math.max(...tetos)
 }
 
-export function podeDecidirEmissao(
+function podeDecidirEmissao(
   base: BaseDados,
   usuarioId: string,
   nivel: number,

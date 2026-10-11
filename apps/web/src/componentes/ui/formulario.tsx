@@ -213,7 +213,7 @@ export function CampoNumero({ rotulo, dica, erro, nome, valor, aoMudar, onBlur, 
 
 /* ------------------------------------------------------------------ combobox */
 
-export interface OpcaoCombo {
+interface OpcaoCombo {
   valor: string
   texto: string
   detalhe?: string

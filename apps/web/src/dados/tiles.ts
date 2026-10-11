@@ -278,7 +278,7 @@ export interface PreferenciaMapa {
 
 const CHAVE_ARMAZEM = 'iarx.mapa.tiles'
 
-export const PREFERENCIA_PADRAO: PreferenciaMapa = {
+const PREFERENCIA_PADRAO: PreferenciaMapa = {
   provedor: PROVEDOR_PADRAO,
   modeloProprio: '',
   chavePropria: '',

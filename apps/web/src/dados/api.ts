@@ -20,7 +20,7 @@ const BASE: BaseDados = gerarBase()
 const LATENCIA_MS = { min: 120, max: 340 }
 
 /** Ativar para exercitar os estados de erro da interface. */
-export const simulacao = { taxaErro: 0, latencia: true }
+const simulacao = { taxaErro: 0, latencia: true }
 
 function esperar() {
   if (!simulacao.latencia) return Promise.resolve()

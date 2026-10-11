@@ -61,7 +61,7 @@ export class RemetenteRegistro implements Remetente {
  * mensagem custaria um handshake TLS completo, e a maioria dos provedores
  * limita conexões por minuto muito antes de limitar mensagens.
  */
-export class RemetenteSmtp implements Remetente {
+class RemetenteSmtp implements Remetente {
   readonly nome = 'smtp'
   private readonly transporte: Transporter
 

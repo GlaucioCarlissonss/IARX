@@ -68,7 +68,7 @@ const CANAL: Record<string, string> = {
  * com dígitos aleatórios seria recusada pela própria validação da plataforma,
  * e a massa de demonstração ficaria com todas as notas em erro.
  */
-export function montarChave(opcoes: {
+function montarChave(opcoes: {
   uf: string
   dataEmissao: string
   cnpjEmitente: string

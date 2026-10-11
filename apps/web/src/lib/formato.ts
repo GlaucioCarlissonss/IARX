@@ -29,9 +29,6 @@ export const decimal = (v: number) => decimalFmt.format(v)
 export const percentual = (v: number, casas = 1) =>
   `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`
 
-export const variacao = (atual: number, anterior: number) =>
-  anterior === 0 ? 0 : (atual - anterior) / Math.abs(anterior)
-
 export const data = (iso: string | Date) => {
   const d = typeof iso === 'string' ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso) : iso
   return d.toLocaleDateString('pt-BR')

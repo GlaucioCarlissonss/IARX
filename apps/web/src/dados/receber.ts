@@ -29,7 +29,7 @@ const cent = (n: number) => Math.round(n * 100) / 100
 export const valorLiquidoReceber = (t: TituloReceber): number => cent(t.valorOriginal - t.desconto)
 
 /** Recebido de fato — estorno não conta, que é a razão de o campo existir. */
-export const totalRecebidoDe = (t: TituloReceber): number =>
+const totalRecebidoDe = (t: TituloReceber): number =>
   cent(t.recebimentos.filter((r) => r.estornadoEm === null).reduce((a, r) => a + r.valorRecebido, 0))
 
 /** Saldo em aberto. Derivado, nunca gravado — se não há escrita, não há divergência. */

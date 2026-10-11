@@ -30,7 +30,7 @@ import type {
 
 /* ---------------------------------------------------------------- franquia */
 
-export interface FranquiaResolvida {
+interface FranquiaResolvida {
   tabela: TabelaFranquia
   item: FranquiaItem
   /** MODELO vence CATEGORIA — é a exceção comercial vencendo a regra geral. */
@@ -44,7 +44,7 @@ export interface FranquiaResolvida {
  * assumir franquia zero cobraria **todo o volume** como excedente, em silêncio.
  * Quem chama precisa exigir preenchimento manual (RN-L15).
  */
-export function resolverFranquia(
+function resolverFranquia(
   tabelas: TabelaFranquia[],
   equipamento: Equipamento,
   data: string,
@@ -76,7 +76,7 @@ export function resolverFranquia(
 
 /* ------------------------------------------------------------------ preço */
 
-export interface PrecoResolvido {
+interface PrecoResolvido {
   tabela: TabelaPreco
   item: PrecoItem
   origem: 'MODELO' | 'CATEGORIA'
@@ -89,7 +89,7 @@ export interface PrecoResolvido {
  * de onde veio o preço: "R$ 289,00" sem procedência vira discussão comercial
  * sem árbitro.
  */
-export function resolverPreco(
+function resolverPreco(
   tabelas: TabelaPreco[],
   equipamento: Equipamento,
   data: string,
@@ -271,7 +271,7 @@ function vigenteEm(t: { status: string; vigenciaInicio: string; vigenciaFim: str
   return t.vigenciaInicio <= data && (t.vigenciaFim === null || t.vigenciaFim > data)
 }
 
-export const arredondar = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
+const arredondar = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
 
 /** Rótulo do alvo de uma linha de tabela, para exibição. */
 export function rotuloAlvo(alvo: { categoria: string | null; modeloId: string | null }): string {

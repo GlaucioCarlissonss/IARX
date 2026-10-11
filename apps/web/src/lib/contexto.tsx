@@ -157,7 +157,7 @@ export function useSessao() {
 
 /* ---------------------------------------------------------------- avisos */
 
-export interface Toast {
+interface Toast {
   id: number
   tom: 'ok' | 'erro' | 'atencao'
   titulo: string

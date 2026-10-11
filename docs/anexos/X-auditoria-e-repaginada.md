@@ -83,7 +83,7 @@ remoção limpa.
 de defeito que esta base já corrigiu três vezes — peça construída, nunca ligada.
 Remover é uma decisão; ligar é outra. Não é limpeza.
 
-### Exports desnecessários: **69 em módulos internos** — corrigido três vezes
+### Exports desnecessários: **fechado, com portão** — e cinco contagens erradas antes
 
 Símbolos exportados e usados **só dentro do próprio arquivo**. Não são código
 morto: são superfície pública maior que o necessário.
@@ -103,15 +103,56 @@ um motivo diferente:
 | 80 | Os testes não entraram como consumidores — e é deles que vêm os usos de `resolverFranquia`, `lerRespostaNominatim`, `montarChave` |
 | **69** | Declarantes em `src/`, consumidores em `src/` **e** `test/`, `packages/contracts` fora |
 
-Mesmo 69 é teto e não número final: a contagem ainda duplica símbolo declarado
-duas vezes no mesmo arquivo, e não distingue tipo que uma assinatura pública
-precisa nomear de tipo que só serve ali dentro.
+E **69 também estava errado**, para baixo. A contagem por busca textual dá por
+usado todo nome que apareça como palavra em outro arquivo, e nome se repete:
+`montarChave` existe em `gerar-notas.ts` **e** como função local do spec do
+Playwright; `montarChaveAcesso`, no teste da API, é outro símbolo ainda. Três
+coincidências de nome contadas como uso. É a mesma armadilha do `aplicarDesconto`
+que esta auditoria já havia registrado — e eu caí nela de novo, no mesmo
+documento.
 
-O achado que sobrevive às cinco contagens não é a cifra — é que **este item
-resiste a ser medido de passagem**. Quatro tentativas, quatro respostas, e cada
-erro parecia certo até a verificação seguinte. É a razão pela qual ele continua
-em aberto: não por ser grande, mas por exigir uma verificação que ninguém
-escreveu ainda.
+| Contagem | Por que estava errada |
+| --- | --- |
+| ~60 | Listagem truncada em oitenta linhas; contei o que a tela mostrava |
+| 112 | Misturava `packages/contracts`, que exporta amplamente **por desenho** |
+| 129 | `src/**/*.ts` não casa com arquivo direto em `src/`: `app.module.ts` ficou de fora, e todo controller do Nest apareceu como órfão |
+| 80 | Os testes não entravam como consumidores |
+| 69 | Busca textual: colisão de nome contada como uso |
+| **85** | Grafo de importação resolvido em disco — a pergunta que o empacotador faz |
+| **29** | Dos 85, cinquenta e seis são tipos que a assinatura de outro export precisa nomear. Tirar o `export` deles deixaria quem consome sem como escrever o que recebe de volta |
+
+### O portão: `apps/web/test/superficie-de-modulo.test.ts`
+
+Seis tentativas de medir à mão, seis respostas. A sétima não é à mão.
+
+Duas decisões saem direto dos erros acima. **Importação resolvida, não busca
+textual** — porque nome se repete, e o empacotador não se confunde com isso.
+**Dispensa derivada da árvore sintática, não lista escrita** — tipo que aparece
+em *posição de tipo* de algo exportado fica exportado, e isso é a regra, não a
+exceção; exigir justificativa escrita para cinquenta e seis casos normais
+encheria a lista de ruído até ninguém mais ler.
+
+A precisão da segunda parte não é preciosismo. A primeira versão olhava as doze
+primeiras linhas de cada bloco exportado e dava por "superfície" toda constante
+usada no **corpo** de uma função exportada — `SQLSTATE_EXCLUSAO` entre elas.
+Dispensava justamente o que o portão existe para encontrar.
+
+**Resultado:** 21 `export` removidos, 1 função morta apagada (`variacao`, nunca
+chamada em lugar nenhum), 9 mantidos com razão escrita.
+
+Os 9 são dois vocabulários e um vestígio. Os sete `SQLSTATE_*` ficam porque
+`sqlstate.ts` se declara "a única ponte" e "curto e exaustivo": exportar só os
+dois com consumidor faria a tabela parecer escolha, quando é o conjunto fechado
+que esta base reconhece. `decimal` fica pelo mesmo motivo, um nível abaixo — um
+módulo de formatação pt-BR que não formata uma casa decimal é armadilha para
+quem chega depois e reescreve o `Intl.NumberFormat` com outra configuração.
+E `mascararCnpj` fica porque apagá-lo não removeria código morto: removeria a
+única evidência de um requisito do Anexo C que a interface deve e não cumpre.
+
+A limpeza teve cascata, e a cascata é o portão funcionando: ao perder o
+`export`, `resolverFranquia` e `resolverPreco` deixaram de ser assinatura
+pública, e com isso `FranquiaResolvida` e `PrecoResolvido` viraram candidatos na
+rodada seguinte. Duas iterações até convergir em zero.
 
 ### Dependências não usadas: **zero**
 
@@ -748,9 +789,8 @@ nesta auditoria, três vezes, não era.
 | Arquivo único × divisão de código (X.6.2) | Decisão do operador |
 | Ligar o front à API (X.6.3) | Rodada própria; destrava otimização de banco e tira ~300 kB do pacote |
 | Família tipográfica embutida (X.6.1) | Decidido por ora: identidade por sistema, sem arquivo de fonte |
-| 69 exports desnecessários (X.3) | Baixo retorno; pede verificação automática que distinga pacote compartilhado de módulo interno, declarante de consumidor, e tipo de assinatura pública de tipo interno — quatro contagens de passagem deram quatro números |
 | Paleta por unidade, Faróis, Projetos, SLA (X.0) | Não existem nesta base; dependem de orientação |
-| `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza |
+| `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza. Agora **com portão**: está na lista de justificados de `superficie-de-modulo`, com a razão escrita, e sai de lá no dia em que uma tela o chamar |
 | Ordens de Serviço e Estoque | Pendência de **especificação**, antes de ser de construção |
 
 ---
