@@ -2143,15 +2143,42 @@ textarea {
 
 /* -------------------------------------------------------------- controles */
 
-.mapa__sobreposicao {
+/*
+ * Cromo do mapa: busca, controles e rodapé numa grade só.
+ *
+ * Os três já foram três blocos posicionados de forma independente, cada um
+ * ancorado na sua borda. Em moldura baixa — 200% de zoom, cartão do painel —
+ * o rodapé quebrava em duas linhas, crescia para cima e cobria metade do botão
+ * de enquadrar. Alvo parcialmente obscurecido reprova WCAG 2.5.8, e o axe
+ * acusou exatamente isso.
+ *
+ * É a mesma lição que o seletor de camada e o zoom já tinham dado um nível
+ * abaixo, e a mesma saída: enquanto cada um se posiciona sozinho, a
+ * sobreposição é questão de sorte com a altura da moldura; num fluxo só, ela
+ * deixa de ser possível em qualquer altura.
+ *
+ * `1fr` no meio empurra o rodapé para baixo e a busca para cima sem ninguém
+ * precisar saber a altura do outro.
+ */
+.mapa__cromo {
   position: absolute;
-  inset-block-start: var(--e3);
-  inset-inline: var(--e3);
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--e2);
+  padding: var(--e3);
+  /* A grade cobre o mapa inteiro; sem isto, arrastar pelo meio da tela
+     arrastaria a grade e não o mapa. Cada faixa reativa o que precisa. */
+  pointer-events: none;
+}
+
+.mapa__sobreposicao {
   display: flex;
   gap: var(--e2);
   flex-wrap: wrap;
   align-items: center;
-  z-index: 5;
+  pointer-events: auto;
 }
 .mapa__sobreposicao:empty {
   display: none;
@@ -2162,14 +2189,17 @@ textarea {
    parte do outro em mapa de 300 px — alvo obscurecido reprova WCAG 2.5.8.
    Empilhados no mesmo fluxo, a sobreposição deixa de ser possível. */
 .mapa__controles {
-  position: absolute;
-  inset-block-start: 50%;
-  inset-inline-end: var(--e3);
-  transform: translateY(-50%);
   display: grid;
   gap: var(--e2);
   justify-items: end;
-  z-index: 5;
+  /* `*-self`, e não `*-content`: o que precisa encolher é **o bloco dentro da
+     grade do cromo**, não o conteúdo dentro dele. Com `stretch` — o padrão — o
+     bloco ocupa a faixa do meio inteira, e como ele é área reservada, a lógica
+     de reserva conclui que o mapa inteiro está coberto e não desenha marcador
+     nenhum. */
+  align-self: center;
+  justify-self: end;
+  pointer-events: auto;
 }
 
 .mapa__zoom {
@@ -2193,15 +2223,12 @@ textarea {
 }
 
 .mapa__rodape {
-  position: absolute;
-  inset-block-end: var(--e3);
-  inset-inline: var(--e3);
   display: flex;
   gap: var(--e3);
   align-items: center;
+  align-self: end;
   justify-content: space-between;
   flex-wrap: wrap;
-  z-index: 5;
   pointer-events: none;
 }
 .mapa__rodape > * {
@@ -2254,17 +2281,30 @@ textarea {
  * em metade dos enquadramentos.
  */
 .mapa__credito {
+  display: flex;
+  align-items: center;
   font-size: var(--t-11);
   color: var(--cor-text-secondary);
   background: var(--cor-surface);
-  padding: 2px var(--e2);
+  padding-inline: var(--e2);
   border-radius: var(--raio-1);
   max-width: 42ch;
+  /* O crédito é texto de 11 px, e sendo link é alvo de toque. Sem altura
+     mínima ele media 13 px: a WCAG 2.5.8 então só o aprova com 24 px de folga
+     em volta, e folga depende do layout — passava em tela larga e reprovava em
+     moldura apertada, que é onde o dedo erra de verdade. Com o piso, o alvo
+     está certo em qualquer largura e não depende de quem está ao lado. */
+  min-block-size: var(--alvo-minimo);
 }
 .mapa__credito:empty {
   display: none;
 }
 .mapa__credito a {
+  display: flex;
+  align-items: center;
+  /* O link ocupa a faixa inteira: a altura mínima acima só vira alvo se o que
+     recebe o clique for do mesmo tamanho. */
+  align-self: stretch;
   color: inherit;
 }
 

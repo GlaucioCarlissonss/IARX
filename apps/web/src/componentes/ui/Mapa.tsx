@@ -213,7 +213,16 @@ export function Mapa({
     medir()
     const obs = new ResizeObserver(medir)
     obs.observe(el)
-    if (cromoRef.current) obs.observe(cromoRef.current)
+
+    /*
+     * Observa cada área reservada, e não o cromo que as contém.
+     *
+     * O cromo passou a ser uma grade que cobre o mapa inteiro — o tamanho dele
+     * é o do mapa, e muda só quando o mapa muda, que `el` já informa. Quem muda
+     * de tamanho sozinho é o rodapé, ao quebrar em duas linhas numa largura
+     * apertada, e é essa mudança que precisa refazer a medida.
+     */
+    for (const alvo of cromoRef.current?.querySelectorAll('[data-reserva]') ?? []) obs.observe(alvo)
     return () => obs.disconnect()
   }, [sobreposicao, rodape])
 
@@ -624,7 +633,7 @@ export function Mapa({
           </div>
         )}
 
-        <div ref={cromoRef}>
+        <div ref={cromoRef} className="mapa__cromo">
         <div className="mapa__sobreposicao" data-reserva>
           {sobreposicao}
         </div>

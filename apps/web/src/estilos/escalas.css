@@ -95,6 +95,12 @@
   --largura-rail: 244px;
   --altura-barra: 60px;
   --alvo-toque: 44px;
+  /* Piso da WCAG 2.5.8 (AA). `--alvo-toque` é a medida confortável, usada em
+     botão de verdade; este é o mínimo que a norma aceita, para alvo que é
+     texto por natureza — crédito de licença, rodapé — e que ficaria
+     desproporcional com 44 px. Abaixo disto o alvo só passa se tiver 24 px de
+     folga em volta, e folga depende do layout, que muda com a largura. */
+  --alvo-minimo: 24px;
   /* Medida máxima da coluna de conteúdo. Acima disto a leitura piora em vez de
      melhorar: a linha fica longa demais para o olho voltar ao início certo, e
      um cartão de KPI no canto direito de uma tela de 27" exige mover a cabeça

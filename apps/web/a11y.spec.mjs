@@ -70,9 +70,60 @@ async function assentar(page) {
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
 }
 
-async function abrir(page, { hash = '', tema = 'light', largura = 1360, altura = 900 } = {}) {
+/**
+ * PNG 1×1 transparente — o conteúdo não importa, só que o `onload` dispare.
+ *
+ * Mora aqui, e não junto dos testes de tile, porque `abrir` passou a decidir a
+ * rede de **toda** a suíte. Ver o comentário de `abrir`.
+ */
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+const HOSTS_TILE = ['**server.arcgisonline.com/**', '**basemaps.cartocdn.com/**', '**tile.openstreetmap.org/**']
+
+/** Serve todo tile localmente. Precisa vir antes do `goto`. */
+async function servirTiles(page, coletor) {
+  for (const padrao of HOSTS_TILE) {
+    await page.route(padrao, (rota) => {
+      coletor?.push(rota.request().url())
+      return rota.fulfill({ status: 200, contentType: 'image/png', body: PIXEL })
+    })
+  }
+}
+
+/** Recusa todo tile. Torna a queda determinística mesmo onde houver rede. */
+async function recusarTiles(page) {
+  for (const padrao of HOSTS_TILE) await page.route(padrao, (rota) => rota.abort())
+}
+
+/**
+ * Abre a aplicação — e decide a rede, em vez de herdar a da máquina.
+ *
+ * `tiles` não é preparo acessório: é o estado do produto sob teste. O provedor
+ * padrão é o satélite, e o que a tela mostra depende inteiramente de o servidor
+ * de imagens responder ou não.
+ *
+ * Antes, só os testes da seção de tiles interceptavam; todo o resto herdava a
+ * rede da máquina. Como nenhuma máquina que rodou esta suíte tinha saída para
+ * a internet, o caminho raster — o que a maioria dos usuários vê — nunca foi
+ * exercido pela varredura do axe. Na primeira máquina com rede, quatro
+ * verificações reprovaram de uma vez, e os defeitos eram reais: um crédito de
+ * licença de 13 px de altura e um botão de zoom coberto por ele.
+ *
+ * `servidos` é o padrão porque é o estado padrão do produto. `recusados` prova
+ * o piso — o vetor embutido que aparece quando o servidor não responde, que é
+ * o que acontece em máquina sem internet e sob política de conteúdo restritiva.
+ */
+async function abrir(
+  page,
+  { hash = '', tema = 'light', largura = 1360, altura = 900, tiles = 'servidos', pedidos } = {},
+) {
   await page.setViewportSize({ width: largura, height: altura })
   await page.emulateMedia({ colorScheme: tema })
+  if (tiles === 'servidos') await servirTiles(page, pedidos)
+  else await recusarTiles(page)
   await page.goto(APP + hash)
   await assentar(page)
 }
@@ -1529,8 +1580,19 @@ test('diálogo só de leitura que rola é alcançável pelo teclado', async ({ p
  * despachar um técnico perdeu o contexto no caminho.
  */
 
-test('o mapa é desenhado na própria tela, não é um link para fora', async ({ page }) => {
-  await abrir(page, { hash: '#/mapa' })
+test('sem servidor de imagens, o mapa cai no vetor embutido e desenha mesmo assim', async ({ page }) => {
+  /*
+   * `tiles: 'recusados'` é o ponto do teste, não um detalhe de preparo.
+   *
+   * O arquivo é único e abre por duplo clique — em muitas máquinas sem saída
+   * para a internet. O que esta verificação garante é o **piso**: nessa
+   * situação a tela desenha o país inteiro com geometria própria, em vez do
+   * retângulo cinza que uma dependência de rede deixaria.
+   *
+   * Antes a recusa vinha da máquina, não do teste, e por isso o caminho raster
+   * — o que a maioria vê — nunca era exercido. Ver o teste seguinte.
+   */
+  await abrir(page, { hash: '#/mapa', tiles: 'recusados' })
 
   // Geometria de verdade: um caminho SVG por unidade da federação.
   const contornos = page.locator('.mapa__uf')
@@ -1544,12 +1606,18 @@ test('o mapa é desenhado na própria tela, não é um link para fora', async ({
   expect(d.trim().endsWith('Z')).toBe(true)
   expect(d.split('L').length).toBeGreaterThan(10)
 
-  // Nada de iframe, nada de link para provedor externo, nada de imagem remota:
-  // o arquivo é único e abre por duplo clique — uma dependência de rede aqui
-  // apareceria como um retângulo cinza.
+  // Sem iframe e sem link para provedor de mapa: o desenho é desta tela, não
+  // uma moldura em volta do mapa de outra pessoa.
   await expect(page.locator('iframe')).toHaveCount(0)
   await expect(page.locator('a[href*="google"], a[href*="openstreetmap"], a[href*="maps"]')).toHaveCount(0)
-  await expect(page.locator('img[src^="http"], image[href^="http"]')).toHaveCount(0)
+
+  // Nenhuma imagem remota **resolvida**: com o servidor fora, a camada raster
+  // some inteira em vez de deixar molduras quebradas espalhadas pelo mapa.
+  await expect(page.locator('.mapa__camada img')).toHaveCount(0)
+
+  // E a troca é anunciada: quem não vê a imagem precisa saber que está olhando
+  // outra coisa, e não que o mapa simplesmente ficou feio.
+  await expect(page.getByRole('status')).toContainText(/vetorial embutido/)
 })
 
 test('marcadores são botões reais, com nome que diz o que agrupam', async ({ page }) => {
@@ -1845,33 +1913,9 @@ test('axe no mapa com marcadores, calor e análises', async ({ page }) => {
  * servidor público está no ar, que nenhum teste deveria afirmar.
  */
 
-/** PNG 1×1 transparente — o conteúdo não importa, só que o `onload` dispare. */
-const PIXEL = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
-  'base64',
-)
-
-const HOSTS_TILE = ['**server.arcgisonline.com/**', '**basemaps.cartocdn.com/**', '**tile.openstreetmap.org/**']
-
-/** Serve todo tile localmente. Precisa vir antes do `goto`. */
-async function servirTiles(page, coletor) {
-  for (const padrao of HOSTS_TILE) {
-    await page.route(padrao, (rota) => {
-      coletor?.push(rota.request().url())
-      return rota.fulfill({ status: 200, contentType: 'image/png', body: PIXEL })
-    })
-  }
-}
-
-/** Recusa todo tile. Torna a queda determinística mesmo onde houver rede. */
-async function recusarTiles(page) {
-  for (const padrao of HOSTS_TILE) await page.route(padrao, (rota) => rota.abort())
-}
-
 test('com o servidor de imagens no ar, o mapa pinta tiles de verdade', async ({ page }) => {
   const pedidos = []
-  await servirTiles(page, pedidos)
-  await abrir(page, { hash: '#/mapa' })
+  await abrir(page, { hash: '#/mapa', pedidos })
 
   const tiles = page.locator('.mapa__camada img')
   await expect(tiles.first()).toBeVisible()
@@ -1890,8 +1934,7 @@ test('com o servidor de imagens no ar, o mapa pinta tiles de verdade', async ({ 
 
 test('o padrão é satélite, e a URL do Esri leva os eixos na ordem dele', async ({ page }) => {
   const pedidos = []
-  await servirTiles(page, pedidos)
-  await abrir(page, { hash: '#/mapa' })
+  await abrir(page, { hash: '#/mapa', pedidos })
   await expect(page.locator('.mapa__camada img').first()).toBeVisible()
 
   expect(pedidos.length).toBeGreaterThan(0)
@@ -1912,7 +1955,6 @@ test('o padrão é satélite, e a URL do Esri leva os eixos na ordem dele', asyn
 })
 
 test('a licença dos tiles é creditada na tela', async ({ page }) => {
-  await servirTiles(page)
   await abrir(page, { hash: '#/mapa' })
   await expect(page.locator('.mapa__camada img').first()).toBeVisible()
 
@@ -1922,8 +1964,7 @@ test('a licença dos tiles é creditada na tela', async ({ page }) => {
 })
 
 test('sem acesso ao servidor de imagens, o mapa cai no vetor e avisa', async ({ page }) => {
-  await recusarTiles(page)
-  await abrir(page, { hash: '#/mapa' })
+  await abrir(page, { hash: '#/mapa', tiles: 'recusados' })
 
   // É o caminho que o artefato publicado percorre sempre: a política de
   // conteúdo bloqueia host externo. O resultado não pode ser retângulo cinza.
@@ -1937,8 +1978,7 @@ test('sem acesso ao servidor de imagens, o mapa cai no vetor e avisa', async ({ 
 
 test('a camada escolhida é lembrada e o seletor funciona só pelo teclado', async ({ page }) => {
   const pedidos = []
-  await servirTiles(page, pedidos)
-  await abrir(page, { hash: '#/mapa' })
+  await abrir(page, { hash: '#/mapa', pedidos })
   await expect(page.locator('.mapa__camada img').first()).toBeVisible()
 
   const seletor = page.locator('.mapa__camadas select').first()
@@ -1956,12 +1996,44 @@ test('a camada escolhida é lembrada e o seletor funciona só pelo teclado', asy
 })
 
 test('axe no mapa com a camada de satélite carregada', async ({ page }) => {
-  await servirTiles(page)
   await abrir(page, { hash: '#/mapa' })
   await expect(page.locator('.mapa__camada img').first()).toBeVisible()
 
   const v = await violacoes(page)
   expect(v, `mapa sobre imagem:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('o crédito de licença é alvo de toque e não cobre os controles', async ({ page }) => {
+  /*
+   * O cartão do painel, a 680×512, e não a tela cheia do mapa — a moldura
+   * apertada é o ponto do teste, não o enquadramento.
+   *
+   * Foi o que me custou uma iteração: verifiquei primeiro `#/mapa` nessa mesma
+   * janela, e lá a moldura é alta o bastante para o rodapé caber numa linha. O
+   * defeito mora onde o mapa é baixo, que é o cartão embutido, e é por isso que
+   * a varredura do axe o encontrava no "painel do dia" e não na tela do mapa.
+   */
+  await abrir(page, { largura: 680, altura: 512 })
+  const cartao = page.getByRole('region', { name: 'Distribuição geográfica' })
+  await expect(cartao.locator('.mapa__camada img').first()).toBeVisible()
+
+  // ODbL e os termos da Esri exigem o crédito; sendo link, a WCAG 2.5.8 exige
+  // que ele seja clicável de fato. Media 13 px de altura.
+  const credito = await cartao.locator('.mapa__credito a').boundingBox()
+  expect(credito.height, 'crédito de licença abaixo do piso de 24 px').toBeGreaterThanOrEqual(24)
+
+  // E nenhum controle fica debaixo dele. Antes o rodapé crescia para cima ao
+  // quebrar em duas linhas e cobria metade do botão de enquadrar — alvo
+  // parcialmente obscurecido, que a norma trata como alvo menor do que é.
+  for (const nome of ['Aproximar o mapa', 'Afastar o mapa', 'Enquadrar o Brasil inteiro']) {
+    const botao = await cartao.getByRole('button', { name: nome }).boundingBox()
+    const sobrepoe =
+      credito.x < botao.x + botao.width &&
+      botao.x < credito.x + credito.width &&
+      credito.y < botao.y + botao.height &&
+      botao.y < credito.y + credito.height
+    expect(sobrepoe, `crédito de licença sobre "${nome}"`).toBe(false)
+  }
 })
 
 /* -------------------------------------------------------------------- */
