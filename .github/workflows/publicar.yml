@@ -1,0 +1,68 @@
+name: Publicar
+
+# -----------------------------------------------------------------------------
+# Publica a aplicação em GitHub Pages.
+#
+# O build já é um **arquivo HTML único** com CSS, JS e o mapa vetorial
+# embutidos (`vite-plugin-singlefile`), então não há o que servir além dele: o
+# job gera o arquivo e o envia como artefato de Pages. É também por isso que
+# `base: './'` no Vite basta — caminho relativo funciona tanto no subdiretório
+# do Pages quanto no duplo clique local.
+#
+# Separado do `ci.yml` de propósito. Aquele é portão: reprova e bloqueia. Este
+# é entrega, e roda depois que o código já está no branch. Misturar os dois
+# faria uma falha de publicação parecer reprovação de qualidade.
+# -----------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [claude/equipment-rental-management-platform-afdw0n]
+  # Permite republicar sem um commit novo — útil quando a falha foi de
+  # infraestrutura e não de código.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  # O deploy do Pages usa OIDC em vez de token de longa duração.
+  id-token: write
+
+# Uma publicação por vez, e a mais recente vence. Sem isto, dois pushes
+# próximos disputam o mesmo endereço e o que termina por último pode ser o
+# mais antigo.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    name: Build e publicação
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+
+      # Verificação de tipos antes de publicar: `vite build` não checa tipos, e
+      # sem isto um erro de tipo chegaria ao ar como tela quebrada em vez de
+      # falha de build.
+      - name: Tipos
+        run: npm run tipos
+
+      - name: Build
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+      - id: publicacao
+        uses: actions/deploy-pages@v4
