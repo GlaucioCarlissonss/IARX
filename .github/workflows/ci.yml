@@ -62,8 +62,13 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
 
+      # `npm run tipos`, e não `tsc -p apps/web` direto: a aplicação importa
+      # `@iarx/contracts/*`, que só existe depois de compilado. Numa máquina de
+      # desenvolvimento o `dist/` sobrou de um build anterior e o atalho passa;
+      # num checkout limpo ele reprovava a aplicação inteira por ausência dos
+      # contratos — erro de tipo que não era erro de tipo.
       - name: Tipos da aplicação
-        run: npx tsc -p apps/web/tsconfig.json
+        run: npm run tipos
 
       # Aritmética de tiles e parser de geocodificação: puro, sem navegador e
       # sem rede. Roda antes do build porque falha em segundos e aponta a linha,
@@ -262,25 +267,19 @@ jobs:
           fi
           echo "nenhuma política de escrita para papéis de cliente"
 
-      - name: Toda tabela de negócio tem RLS habilitada
-        run: |
-          # Detecta tabela criada sem a chamada correspondente de
-          # app.habilitar_rls_tenant() — o risco é uma tabela nova ficar
-          # acessível por esquecimento.
-          cd packages/db/supabase/migrations
-          faltando=0
-          for tabela in $(grep -hoE 'create table if not exists public\.[a-z_]+' *.sql \
-                          | sed 's/.*public\.//' | sort -u); do
-            case "$tabela" in
-              tenant|audit_log) continue ;;  # políticas próprias, definidas em 0006
-            esac
-            if ! grep -qE "'$tabela'" 0006_rls.sql && ! grep -qE "habilitar_rls_tenant\('$tabela'" *.sql; then
-              echo "::error::tabela public.$tabela criada sem habilitar RLS (ver RN-028)"
-              faltando=$((faltando + 1))
-            fi
-          done
-          [ "$faltando" -eq 0 ] && echo "todas as tabelas de negócio têm RLS habilitada"
-          exit $faltando
+      # A cobertura da RLS — toda tabela alcançável com política — é verificada
+      # no job do banco, por `packages/db/tests/18_rls_universal.sql`.
+      #
+      # Havia aqui uma verificação textual que procurava a chamada
+      # `habilitar_rls_tenant('<tabela>')` no fonte das migrações. Ela media a
+      # forma da escrita: dezenove tabelas habilitam RLS dentro de um `foreach`,
+      # passando o nome por variável, e o texto que a verificação procurava
+      # nunca aparecia. Reprovava dezenove tabelas protegidas e não tinha como
+      # aprovar nenhuma delas por mais correto que o código ficasse.
+      #
+      # Perguntar ao catálogo depois de aplicar as migrações responde pelo
+      # efeito em vez de pela sintaxe, e por isso vale para tabela criada de
+      # qualquer jeito — inclusive por SQL dinâmico, que nenhum grep alcança.
 
       - name: Política do locatário é restritiva, nunca permissiva
         run: |

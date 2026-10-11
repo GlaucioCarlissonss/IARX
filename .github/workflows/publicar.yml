@@ -58,7 +58,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # `enablement` liga o GitHub Pages do repositório na primeira execução.
+      # Sem isto a publicação depende de alguém ter clicado antes na
+      # configuração do repositório — e a primeira tentativa falha justamente
+      # onde ninguém está olhando.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
