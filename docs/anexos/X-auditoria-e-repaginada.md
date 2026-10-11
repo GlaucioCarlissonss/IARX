@@ -825,3 +825,48 @@ que o código rodou onde ninguém tinha rodado antes.
 O corolário prático é desconfortável e vale escrito: **um portão verde numa
 máquina onde o projeto já foi construído não prova nada sobre o projeto** —
 prova sobre a máquina.
+
+### O nono caso, e o defeito de acessibilidade que ele escondia
+
+Consertado o passo de tipos, a suíte do Playwright rodou em integração contínua
+pela primeira vez. Quatro verificações reprovaram de uma vez, e a causa era uma
+só.
+
+O provedor padrão do mapa é o satélite. Com rede, entram os tiles e com eles o
+crédito que a licença da Esri exige. Esse crédito é um link de 11 px, e media
+**13 px de altura**. A WCAG 2.5.8 só aprova alvo menor que 24 px quando há 24 px
+de folga em volta — e folga depende do layout. Em tela de 1360 px sobrava
+espaço e a regra passava; no cartão do painel, o rodapé quebrava em duas linhas,
+crescia para cima e **cobria metade do botão "Enquadrar o Brasil inteiro"**.
+
+Nada disso tinha aparecido antes porque só os testes da seção de tiles
+interceptavam a rede. Todo o resto herdava a rede da máquina, e nenhuma máquina
+que rodou a suíte tinha saída para a internet: a sonda de tiles falhava calada,
+o mapa caía no vetor embutido, e o caminho raster — **o que a maioria dos
+usuários vê** — nunca foi exercido pela varredura do axe.
+
+| | O que media | O que deveria medir |
+| --- | --- | --- |
+| 9 | Se a máquina tem internet | O estado do produto, escolhido pelo teste |
+
+O conserto do teste é `abrir` passar a decidir a rede, com `servidos` como
+padrão porque é o estado padrão do produto. O conserto do defeito foram duas
+coisas, porque eram dois problemas: um piso de 24 px para o crédito — token
+`--alvo-minimo`, separado de `--alvo-toque` (44 px), que continua valendo para
+botão de verdade — e o cromo do mapa numa grade só, em vez de três blocos
+ancorados cada um na sua borda.
+
+A segunda parte repete, um nível acima, uma lição que esta base já tinha
+aprendido: o seletor de camada e o zoom foram unificados numa coluna pelo mesmo
+motivo, e o comentário que registrou aquilo está a quatro linhas do bloco que
+voltou a errar. **Saber a regra não é aplicá-la na próxima fronteira.**
+
+Medido que o piso sozinho não bastava — com ele e sem a grade, o axe continua
+acusando o botão como obscurecido —, e o teste novo tem controle negativo nos
+dois sentidos.
+
+Uma anotação de honestidade sobre o caminho: a primeira versão do teste abria
+`#/mapa` em 680×512 e **passava**, porque ali a moldura é alta o bastante para o
+rodapé caber numa linha. O defeito mora onde o mapa é baixo, que é o cartão
+embutido do painel. Ou seja — a décima vez, nesta mesma auditoria, que uma
+verificação mediu perto do lugar certo e não nele.
