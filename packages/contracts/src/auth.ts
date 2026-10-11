@@ -29,6 +29,19 @@ export type Login = z.infer<typeof Login>
  * qualquer tela — uma segunda requisição abriria a janela em que ele já está
  * dentro com uma senha que deveria ter expirado.
  */
+/**
+ * Entrada com Google: o ID token que o navegador recebeu do provedor.
+ *
+ * Um campo só, e é o suficiente — o token já carrega, assinado, o e-mail e o
+ * identificador da conta. Receber e-mail separado do cliente seria pior que
+ * redundante: abriria a porta a mandar um token válido com o e-mail de outra
+ * pessoa, que é o ataque que a verificação de assinatura existe para fechar.
+ */
+export const LoginGoogle = z.object({
+  credential: z.string().min(1, 'informe o token do Google'),
+})
+export type LoginGoogle = z.infer<typeof LoginGoogle>
+
 export const RespostaLogin = z.object({
   token: z.string(),
   expira_em: DataHora,

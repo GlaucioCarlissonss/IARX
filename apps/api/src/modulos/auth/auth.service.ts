@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { SignJWT } from 'jose'
 import type {
   Login,
+  LoginGoogle,
   RedefinirSenha,
   RespostaLogin,
   SolicitarRecuperacao,
@@ -18,6 +19,7 @@ import {
   hashTokenRecuperacao,
 } from '../../comum/senha.js'
 import { AuthRepositorio, type UsuarioAutenticavel } from './auth.repositorio.js'
+import { configGoogle, EMISSOR_GOOGLE, verificarIdToken } from './google.js'
 import { NotificacaoService } from '../notificacao/notificacao.service.js'
 
 /** Validade do access token. Curta o bastante para limitar dano, longa o bastante para um turno. */
@@ -56,6 +58,7 @@ export class AuthService {
    * senha.
    */
   async login(dados: Login, ip: string | null, userAgent: string | null): Promise<RespostaLogin> {
+    this.exigirAusenciaDeProvedor('entrar')
     const u = await this.banco.semContexto((db) => this.repo.porEmail(db, dados.email))
 
     if (!u) {
@@ -90,6 +93,147 @@ export class AuthService {
 
     await this.anotar(u, dados.email, true, null, ip, userAgent)
 
+    return this.abrirSessao(u, ip, userAgent, u.deve_trocar_senha || this.senhaExpirou(u))
+  }
+
+  /**
+   * Fecha os caminhos de senha onde há provedor de identidade.
+   *
+   * Senha que sobrevive ao lado do provedor é porta alternativa com fatores
+   * mais fracos: quem adota o Google para eliminar a senha não ganha nada se a
+   * senha continuar valendo, e quem ataca escolhe a porta que preferir.
+   *
+   * Vale também para a recuperação, e aí a razão é mais direta — não há o que
+   * recuperar. A credencial é do Google; quem a perde recupera no Google, com
+   * os fatores do Google. Oferecer uma recuperação própria seria oferecer um
+   * caminho de redefinição que contorna o provedor inteiro, que é o oposto do
+   * que se quis ao adotá-lo.
+   *
+   * A verificação é por configuração a cada chamada, e não guardada na
+   * construção: trocar a variável de ambiente passa a valer no próximo pedido,
+   * sem reiniciar — e uma instalação que ligue o provedor fecha a senha na
+   * hora, que é o momento em que ela mais precisa estar fechada.
+   */
+  private exigirAusenciaDeProvedor(acao: 'entrar' | 'recuperar'): void {
+    if (!configGoogle()) return
+    throw new ErroDominio(
+      'NAO_AUTENTICADO',
+      acao === 'entrar' ? 'Entrada por senha desativada' : 'Recuperação por senha desativada',
+      {
+        status: 401,
+        detail:
+          acao === 'entrar'
+            ? 'Esta instalação entra pelo Google.'
+            : 'A senha desta conta é a da conta Google. Recupere o acesso pelo Google.',
+        acoes: [{ code: 'ENTRAR_GOOGLE', descricao: 'Entrar com Google' }],
+      },
+    )
+  }
+
+  /**
+   * Entrada pelo Google.
+   *
+   * O token verificado responde **quem é a pessoa**. Nada mais: o que ela pode
+   * fazer, a que locatário pertence e qual o recorte dela continuam saindo do
+   * `usuario` que alguém convidou. Conta Google sem convite não entra, e essa é
+   * a frase que sustenta o resto — sem ela, a porta de acesso ao sistema
+   * passaria a ser "ter e-mail".
+   *
+   * A ordem da busca não é arbitrária. Primeiro pelo vínculo, porque o `sub` é
+   * estável e o e-mail não; só depois pelo e-mail, que é o que existe antes do
+   * primeiro acesso. O vínculo se estabelece aí, uma vez, e não se reescreve.
+   */
+  async loginGoogle(
+    dados: LoginGoogle,
+    ip: string | null,
+    userAgent: string | null,
+  ): Promise<RespostaLogin> {
+    const config = configGoogle()
+    if (!config) {
+      throw new ErroDominio('NAO_AUTENTICADO', 'Entrada com Google não configurada', {
+        status: 401,
+        detail: 'Esta instalação não tem provedor de identidade configurado.',
+      })
+    }
+
+    const identidade = await verificarIdToken(dados.credential, config)
+
+    /*
+     * Recusa uniforme, como no login por senha: "não convidado", "inativo" e
+     * "vinculado a outra conta" devolvem a mesma coisa. Diferenciar faria da
+     * tela de entrada um verificador de quem trabalha aqui — basta uma lista de
+     * palpites e ler a diferença entre as respostas.
+     */
+    const recusar = () =>
+      new ErroDominio('NAO_AUTENTICADO', 'Conta sem acesso ao IARX', {
+        status: 401,
+        detail: 'Esta conta Google não tem acesso. Peça um convite a quem administra o sistema.',
+        acoes: [{ code: 'PEDIR_CONVITE', descricao: 'Solicitar convite ao administrador' }],
+      })
+
+    const u =
+      (await this.banco.semContexto((db) =>
+        this.repo.porOidc(db, EMISSOR_GOOGLE, identidade.subject),
+      )) ?? (await this.banco.semContexto((db) => this.repo.porEmail(db, identidade.email)))
+
+    if (!u || u.status !== 'ATIVO') {
+      if (u) await this.anotar(u, identidade.email, false, `usuário ${u.status}`, ip, userAgent)
+      throw recusar()
+    }
+
+    if (!u.subject_oidc) {
+      /*
+       * Primeiro acesso: confiança no primeiro uso contra o e-mail convidado.
+       *
+       * A gravação é condicional no banco (`where subject_oidc is null`), e é
+       * ela quem decide — não o `if` acima. Duas entradas simultâneas da mesma
+       * pessoa chegariam aqui as duas com o campo nulo; é o `update` que
+       * serializa, e a segunda recebe zero linhas.
+       */
+      const vinculou = await this.banco.semContexto((db) =>
+        this.repo.vincularOidc(db, u.id, EMISSOR_GOOGLE, identidade.subject),
+      )
+      if (!vinculou) {
+        await this.anotar(u, identidade.email, false, 'vínculo OIDC já existente', ip, userAgent)
+        throw recusar()
+      }
+    } else if (u.subject_oidc !== identidade.subject) {
+      /*
+       * O e-mail convidado bate, mas a conta já pertence a outra identidade do
+       * Google. Acontece quando um endereço é reaproveitado — pessoa sai da
+       * empresa, a caixa vai para outra. Deixar entrar daria ao sucessor o
+       * histórico e o escopo do antecessor; o caminho certo é um convite novo.
+       */
+      await this.anotar(u, identidade.email, false, 'subject OIDC divergente', ip, userAgent)
+      throw recusar()
+    }
+
+    await this.anotar(u, identidade.email, true, null, ip, userAgent)
+
+    /*
+     * `deve_trocar_senha` é sempre falso por aqui, e não é descuido: no fluxo
+     * do provedor não existe senha nossa para trocar. Quem cuida de expiração,
+     * força e recuperação de credencial é o Google.
+     */
+    return this.abrirSessao(u, ip, userAgent, false)
+  }
+
+  /**
+   * Abre a sessão e emite o token — o que todo caminho de entrada faz igual.
+   *
+   * Extraído quando o Google entrou. A alternativa era duplicar: dois lugares
+   * decidindo validade de sessão, montando claims e escolhendo o que vai na
+   * resposta. Duplicação aqui não envelhece como inconsistência de estilo,
+   * envelhece como **dois modelos de sessão** — um caminho ganha uma claim que
+   * o outro não tem, e a permissão passa a depender de por onde a pessoa
+   * entrou.
+   */
+  private abrirSessao(
+    u: UsuarioAutenticavel,
+    ip: string | null,
+    userAgent: string | null,
+    deveTrocarSenha: boolean,
+  ): Promise<RespostaLogin> {
     return this.banco.semContexto(async (db) => {
       const expiraEm = new Date(Date.now() + HORAS_SESSAO * 3600_000)
       const sessaoId = await this.repo.abrirSessao(db, {
@@ -117,7 +261,7 @@ export class AuthService {
       return {
         token,
         expira_em: expiraEm.toISOString(),
-        deve_trocar_senha: u.deve_trocar_senha || this.senhaExpirou(u),
+        deve_trocar_senha: deveTrocarSenha,
         usuario: {
           id: u.id,
           nome: u.nome,
@@ -178,6 +322,7 @@ export class AuthService {
    * é legítima.
    */
   async solicitarRecuperacao(dados: SolicitarRecuperacao, ip: string | null): Promise<void> {
+    this.exigirAusenciaDeProvedor('recuperar')
     await this.banco.semContexto(async (db) => {
       const u = await this.repo.porEmail(db, dados.email)
       if (!u || u.status !== 'ATIVO') return
@@ -208,6 +353,7 @@ export class AuthService {
   }
 
   async redefinirSenha(dados: RedefinirSenha): Promise<void> {
+    this.exigirAusenciaDeProvedor('recuperar')
     await this.banco.semContexto(async (db) => {
       const alvo = await this.repo.consumirTokenRecuperacao(db, hashTokenRecuperacao(dados.token))
       if (!alvo) {

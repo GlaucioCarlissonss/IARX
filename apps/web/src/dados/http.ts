@@ -129,7 +129,15 @@ interface ProblemaRfc9457 {
   code?: string
   title?: string
   detail?: string
-  acoes?: string[]
+  /**
+   * `acoes_sugeridas`, com o nome que a API usa, e com objetos — não strings.
+   *
+   * Eu tinha escrito `acoes?: string[]` aqui de memória, e teria funcionado em
+   * todos os testes que eu mesmo escrevesse: o campo simplesmente viria vazio,
+   * e toda recusa chegaria à tela sem saída. É o tipo de engano que não falha,
+   * só empobrece — e por isso o formato vem do contrato, conferido.
+   */
+  acoes_sugeridas?: { code: string; descricao: string }[]
 }
 
 /**
@@ -154,7 +162,7 @@ async function comoErro(resposta: Response): Promise<ErroApi> {
         return new ErroApi(
           corpo.code,
           corpo.detail || corpo.title || 'A operação não pôde ser concluída.',
-          corpo.acoes ?? [],
+          (corpo.acoes_sugeridas ?? []).map((a) => a.descricao),
         )
       }
     } catch {

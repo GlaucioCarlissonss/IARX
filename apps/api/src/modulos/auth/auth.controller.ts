@@ -1,5 +1,5 @@
 import { Body, Controller, HttpCode, Post, Req } from '@nestjs/common'
-import { Login, RedefinirSenha, SolicitarRecuperacao, TrocarSenha } from '@iarx/contracts'
+import { Login, LoginGoogle, RedefinirSenha, SolicitarRecuperacao, TrocarSenha } from '@iarx/contracts'
 import type { Request } from 'express'
 import { EscopoProprio, Publico } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
@@ -21,6 +21,37 @@ import { AuthService } from './auth.service.js'
 export class AuthController {
   constructor(private readonly servico: AuthService) {}
 
+  /**
+   * Entrada pelo Google.
+   *
+   * `@Publico()` porque quem entra ainda não tem sessão — é o que esta rota
+   * emite. A autenticação acontece dentro: o ID token é verificado contra as
+   * chaves do Google, e só então o e-mail é procurado entre os convidados.
+   *
+   * Permissão necessária: **nenhuma**. Como no login por senha, é a rota que
+   * cria a credencial; exigir permissão aqui seria exigir estar dentro para
+   * poder entrar.
+   */
+  @Post('google')
+  @HttpCode(200)
+  @Publico()
+  loginGoogle(@Body(validar(LoginGoogle)) corpo: LoginGoogle, @Req() req: Request) {
+    return this.servico.loginGoogle(corpo, ipDe(req), req.headers['user-agent'] ?? null)
+  }
+
+  /**
+   * Entrada por senha — fechada onde houver provedor de identidade.
+   *
+   * A rota continua existindo, e é deliberado: instalação sem Google
+   * configurado continua entrando por aqui. O que não pode é a senha
+   * sobreviver **ao lado** do provedor, como porta alternativa com fatores
+   * mais fracos. Quem adota o provedor justamente para eliminar a senha não
+   * ganha nada se a senha continuar valendo.
+   *
+   * A decisão é de configuração e não de esquema, pelo que está escrito na
+   * migração 0025: esquema que decide política deixa a política impossível de
+   * mudar sem migração.
+   */
   @Post('login')
   @HttpCode(200)
   @Publico()

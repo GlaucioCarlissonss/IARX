@@ -143,7 +143,16 @@ test('problem+json vira ErroApi com o código estável e as ações', async () =
     code: 'CREDITO_BLOQUEADO',
     title: 'Crédito bloqueado',
     detail: 'O cliente está com o crédito bloqueado desde 12/03.',
-    acoes: ['Liberar o crédito', 'Registrar exceção'],
+    /*
+     * A forma é a do contrato: `acoes_sugeridas`, com objetos. Eu tinha
+     * escrito `acoes: ['...']` de memória nos dois lados, e os dois
+     * concordavam entre si e discordavam da API — o teste passava e a tela
+     * teria recebido toda recusa sem saída.
+     */
+    acoes_sugeridas: [
+      { code: 'LIBERAR_CREDITO', descricao: 'Liberar o crédito' },
+      { code: 'REGISTRAR_EXCECAO', descricao: 'Registrar exceção' },
+    ],
   })
 
   await assert.rejects(

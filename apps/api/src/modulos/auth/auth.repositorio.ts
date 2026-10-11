@@ -25,6 +25,12 @@ export interface UsuarioAutenticavel {
   cliente_id: string | null
   status: string
   senha_hash: string | null
+  /**
+   * Vínculo com o provedor de identidade. Ausente nas consultas por id, que
+   * servem a fluxos já autenticados e não precisam dele.
+   */
+  subject_oidc?: string | null
+  emissor_oidc?: string | null
   senha_alterada_em: Date | null
   deve_trocar_senha: boolean
   bloqueado_ate: Date | null
@@ -44,6 +50,35 @@ export class AuthRepositorio {
       `select * from app.auth_usuario_por_email($1)`,
       [email],
     )
+  }
+
+  /**
+   * Busca pelo vínculo com o provedor, e não pelo e-mail.
+   *
+   * O e-mail da conta Google muda — renomeação de caixa, troca de domínio do
+   * locatário; o `sub` não. Quem já entrou uma vez continua sendo reconhecido
+   * depois de uma dessas mudanças, que de outra forma transformaria a equipe
+   * inteira em desconhecidos no mesmo dia.
+   */
+  async porOidc(db: Executor, emissor: string, subject: string): Promise<UsuarioAutenticavel | null> {
+    return db.consultarUm<UsuarioAutenticavel & Record<string, unknown>>(
+      `select * from app.auth_usuario_por_oidc($1, $2)`,
+      [emissor, subject],
+    )
+  }
+
+  /** Vincula no primeiro acesso. Devolve `false` se alguém já estava vinculado. */
+  async vincularOidc(
+    db: Executor,
+    usuarioId: string,
+    emissor: string,
+    subject: string,
+  ): Promise<boolean> {
+    const linha = await db.consultarUm<{ auth_vincular_oidc: number }>(
+      `select * from app.auth_vincular_oidc($1, $2, $3)`,
+      [usuarioId, emissor, subject],
+    )
+    return (linha?.auth_vincular_oidc ?? 0) > 0
   }
 
   async porId(db: Executor, id: string): Promise<UsuarioAutenticavel | null> {
