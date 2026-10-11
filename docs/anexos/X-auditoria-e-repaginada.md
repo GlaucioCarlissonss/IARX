@@ -985,7 +985,19 @@ Ordens de Serviço e Estoque já constavam como **pendência de especificação*
 nesta mesma lista. O que a medição acrescenta é que a dependência é mútua: não
 dá para ligar o front sem elas, e não dá para construí-las sem a especificação.
 
-### Bloqueio 2: a sessão não fecha
+### Bloqueio 2: a sessão não fecha — **resolvido**
+
+~~O que vinha abaixo era a descrição do impasse.~~ Ele foi fechado junto com a
+entrada pelo Google: existe `GET /api/v1/auth/sessao`, com `@EscopoProprio()` —
+o mesmo tratamento que a troca da própria senha já tinha, e pela mesma razão.
+O `id` vem do token e não do pedido, então a rota responde sobre quem a chamou
+e sobre mais ninguém; exigir `usuario:gerenciar` criaria um perfil incapaz de
+descobrir quem ele próprio é.
+
+O registro do impasse fica porque a saída veio de notar que o caso **já tinha
+precedente na base** — não de inventar um decorador novo.
+
+### O impasse, como estava escrito
 
 `POST /api/v1/auth/login` devolve `token`, `deve_trocar_senha`, `permissoes` e
 um usuário com `id`, `nome`, `email` e `tipo`.
@@ -1022,3 +1034,100 @@ tela sem rota, as duas continuam no pacote. Com cobertura parcial, ligar o front
 Vale escrito porque é contraintuitivo e porque a pendência prometia o contrário:
 **ligar metade do front à API custa bytes em vez de economizar.** A economia é
 tudo ou nada, e hoje não é nenhum dos dois.
+
+
+---
+
+## X.18 Entrada pelo Google
+
+Decisão do operador: Google para todos, convite continua sendo o que autoriza,
+e a recuperação de senha deixa de ser nossa.
+
+### O terreno estava preparado, com dois erros
+
+`usuario.subject_oidc` existe desde a migração **0002**, com índice único
+global e uma nota explícita: não há FK para `auth.users` porque isso "mantém o
+núcleo de dados portável para outro provedor OIDC". Faltava o provedor.
+
+Os dois erros só aparecem quando se olha um provedor de verdade em vez de supor:
+
+| O que estava | Por que não serve |
+| --- | --- |
+| `subject_oidc uuid` | O `sub` do Google é string numérica de até 21 dígitos. `110169484474386276334` não é UUID |
+| Só o subject no índice | `sub` é único *dentro* de um provedor. Sem o emissor, o índice afirma o que o dado não sustenta — e o segundo provedor não entra sem reescrever a chave |
+
+A coluna nunca tinha sido escrita por código nenhum, então a 0025 é só mudança
+de tipo: não houve linha a migrar.
+
+### A frase que sustenta o resto
+
+**O Google prova quem a pessoa é, nunca o que ela pode fazer.**
+
+Um ID token válido é trivial de obter — qualquer pessoa com conta Google tem
+um. Se a posse do token bastasse para entrar, a porta de acesso ao sistema
+passaria a ser "ter e-mail". Quem a pessoa é no IARX, a que locatário pertence
+e qual o recorte dela continuam saindo do `usuario` que alguém convidou.
+
+A busca é primeiro pelo vínculo e só depois pelo e-mail, porque o `sub` é
+estável e o e-mail não: quem já entrou continua reconhecido depois de uma
+renomeação de caixa ou troca de domínio — que de outra forma transformaria a
+equipe inteira em desconhecidos no mesmo dia. O vínculo se estabelece uma vez,
+por confiança no primeiro uso contra o e-mail convidado, e a condição mora no
+`update` (`where subject_oidc is null`), não no `if`: duas entradas simultâneas
+não se atropelam.
+
+### A senha fecha onde há provedor
+
+Login e recuperação por senha recusam quando `IARX_GOOGLE_CLIENT_ID` está
+configurado. Senha que sobrevive ao lado do provedor é porta alternativa com
+fatores mais fracos — quem adota o Google para eliminar a senha não ganha nada
+se a senha continuar valendo, e quem ataca escolhe a porta que preferir.
+
+A decisão é de **configuração e não de esquema**: esquema que decide política
+deixa a política impossível de mudar sem migração. Por isso as tabelas de senha
+continuam onde estão, e instalação sem provedor continua entrando por senha.
+
+### Quinze testes, sem rede
+
+O par de chaves é gerado no teste e a pública injetada no lugar do JWKS do
+Google. A assinatura é conferida de verdade; o que fica de fora é só se o
+servidor do Google está no ar, que nenhum teste deveria afirmar.
+
+Dois casos merecem nome próprio:
+
+**O que separa verificar de decodificar.** Um token com claims perfeitas —
+e-mail convidado, audiência certa, emissor certo — assinado por outra chave.
+`JSON.parse(atob(partes[1]))` lê o conteúdo e não verifica nada; quem faz isso
+transforma autenticação em formulário de autodeclaração, e o resultado parece
+certo em todos os testes feitos com tokens de verdade.
+
+**O ataque mais fácil contra este fluxo.** Um ID token legítimo do Google,
+assinado com a mesma chave, emitido para **outro aplicativo**. Sem conferir
+`aud`, qualquer site com login Google passa a emitir credenciais para este.
+
+Controle negativo nos dois: tirar a checagem de audiência reprova; tirar
+`email_verified` reprova.
+
+### Duas correções minhas, as duas pegas por teste
+
+`acoes` não é `string[]` — é `acoes_sugeridas`, com objetos `{code, descricao}`.
+Eu tinha escrito a forma errada no front **e** no teste do front, que
+concordavam entre si e discordavam da API. Não teria falhado: o campo viria
+vazio, e toda recusa chegaria à tela sem saída. É o engano que não quebra, só
+empobrece.
+
+E o primeiro teste usava um usuário semeado **sem perfil**, então "o token
+emitido funciona" reprovava com 403. O código estava certo — entrar e poder são
+coisas diferentes, e o 403 era a separação funcionando.
+
+### O que falta, e o que depende de quem
+
+| Item | De quem |
+| --- | --- |
+| ID do cliente OAuth e origens autorizadas no Google Cloud | **Do operador** — nada é testável de ponta a ponta sem isso |
+| Botão do Google na tela de entrada | Meu |
+| `ProvedorSessao` aceitar usuário vindo da API, e não só id da base em memória | Meu — é a última costura, e muda o contexto de sessão |
+
+O arquivo de duplo clique continua como está: sem API configurada, base em
+memória e entrada de demonstração. O fluxo do Google exige origem registrada no
+console, e `file://` não é origem registrável.

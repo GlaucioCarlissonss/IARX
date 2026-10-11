@@ -237,6 +237,54 @@ describe('entrada pelo Google', () => {
   })
 })
 
+describe('a sessão corrente', () => {
+  it('o token do Google abre a própria sessão, com perfis e escopo', async () => {
+    const entrada = await chamar(api, 'POST', '/api/v1/auth/google', {
+      corpo: { credential: await idToken() },
+    })
+    assert.equal(entrada.status, 200)
+
+    const r = await chamar(api, 'GET', '/api/v1/auth/sessao', { token: entrada.corpo.data.token })
+
+    assert.equal(r.status, 200)
+    assert.equal(r.corpo.data.usuario.email, EMAIL_CONVIDADO)
+
+    /*
+     * O que o login não devolve e a interface precisa. `perfis` carrega o
+     * escopo, e é dele que sai o recorte por unidade (D-27) — sem isso o
+     * portal do cliente não sabe o que pode mostrar.
+     */
+    assert.equal(r.corpo.data.usuario.status, 'ATIVO')
+    assert.ok(Array.isArray(r.corpo.data.usuario.perfis))
+    assert.ok(r.corpo.data.usuario.perfis.length > 0, 'usuário semeado tem perfil atribuído')
+    assert.ok(r.corpo.data.permissoes.includes('usuario:gerenciar'))
+  })
+
+  it('sem token, a rota recusa', async () => {
+    const r = await chamar(api, 'GET', '/api/v1/auth/sessao')
+    assert.equal(r.status, 401)
+  })
+
+  it('responde sobre quem chamou, e não aceita perguntar por outro', async () => {
+    /*
+     * O `id` vem do token, não do pedido — não há parâmetro para trocar. Este
+     * caso existe para que a ausência continue sendo verdade: no dia em que
+     * alguém acrescentar `?usuario=`, ele reprova.
+     */
+    const entrada = await chamar(api, 'POST', '/api/v1/auth/google', {
+      corpo: { credential: await idToken() },
+    })
+    const r = await chamar(
+      api,
+      'GET',
+      `/api/v1/auth/sessao?usuario=11111111-1111-4111-8111-111111110011`,
+      { token: entrada.corpo.data.token },
+    )
+    assert.equal(r.status, 200)
+    assert.equal(r.corpo.data.usuario.email, EMAIL_CONVIDADO)
+  })
+})
+
 describe('a senha fecha onde há provedor', () => {
   it('login por senha é recusado com caminho para o Google', async () => {
     /*

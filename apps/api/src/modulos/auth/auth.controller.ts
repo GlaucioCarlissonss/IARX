@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Req } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common'
 import { Login, LoginGoogle, RedefinirSenha, SolicitarRecuperacao, TrocarSenha } from '@iarx/contracts'
 import type { Request } from 'express'
 import { EscopoProprio, Publico } from '../../comum/decoradores.js'
@@ -20,6 +20,21 @@ import { AuthService } from './auth.service.js'
 @Controller('api/v1/auth')
 export class AuthController {
   constructor(private readonly servico: AuthService) {}
+
+  /**
+   * A sessão corrente.
+   *
+   * Permissão necessária: **nenhuma do catálogo** — `@EscopoProprio()`, o
+   * mesmo tratamento da troca da própria senha, e pela mesma razão. O `id` vem
+   * do token e não do pedido: a rota responde sobre quem a chamou e sobre mais
+   * ninguém. Exigir `usuario:gerenciar` aqui criaria a situação absurda de um
+   * perfil incapaz de descobrir quem ele próprio é.
+   */
+  @Get('sessao')
+  @EscopoProprio()
+  sessao() {
+    return this.servico.sessao()
+  }
 
   /**
    * Entrada pelo Google.

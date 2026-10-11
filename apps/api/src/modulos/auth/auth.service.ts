@@ -3,6 +3,7 @@ import { SignJWT } from 'jose'
 import type {
   Login,
   LoginGoogle,
+  Usuario,
   RedefinirSenha,
   RespostaLogin,
   SolicitarRecuperacao,
@@ -21,6 +22,7 @@ import {
 import { AuthRepositorio, type UsuarioAutenticavel } from './auth.repositorio.js'
 import { configGoogle, EMISSOR_GOOGLE, verificarIdToken } from './google.js'
 import { NotificacaoService } from '../notificacao/notificacao.service.js'
+import { IamService } from '../iam/iam.service.js'
 
 /** Validade do access token. Curta o bastante para limitar dano, longa o bastante para um turno. */
 const HORAS_SESSAO = 8
@@ -38,6 +40,7 @@ export class AuthService {
     private readonly banco: BancoService,
     private readonly repo: AuthRepositorio,
     private readonly notificacao: NotificacaoService,
+    private readonly iam: IamService,
   ) {}
 
   /**
@@ -94,6 +97,35 @@ export class AuthService {
     await this.anotar(u, dados.email, true, null, ip, userAgent)
 
     return this.abrirSessao(u, ip, userAgent, u.deve_trocar_senha || this.senhaExpirou(u))
+  }
+
+  /**
+   * A sessão corrente: quem é quem tem este token, e o que ele pode.
+   *
+   * Existe porque a resposta do login não fecha o modelo de sessão do front —
+   * ela traz id, nome, e-mail e tipo, e a interface precisa também de status,
+   * perfis com escopo, convite pendente e último acesso. O escopo em
+   * particular não é detalhe de exibição: é ele que decide o recorte por
+   * unidade (D-27), ou seja, **o que o portal do cliente mostra**.
+   *
+   * O caminho óbvio não servia: `GET /usuarios/:id` exige `usuario:gerenciar`,
+   * e usuário comum não tem permissão para ler o próprio registro — o que está
+   * certo para a tela de administração e errado para esta pergunta.
+   *
+   * Permissão necessária: **nenhuma além de estar autenticado**. O `id` vem do
+   * token, não do pedido, então não há como perguntar por outra pessoa: a
+   * rota responde sobre quem a chamou e sobre mais ninguém.
+   *
+   * É também o que permite a interface sobreviver a um recarregamento sem
+   * refazer login — o token está guardado, e esta rota reconstrói o resto.
+   */
+  async sessao(): Promise<{ usuario: Usuario; permissoes: string[] }> {
+    const claims = exigirClaims()
+    const usuario = await this.iam.usuarioPorId(claims.usuario_id)
+    const permissoes = await this.banco.semContexto((db) =>
+      this.repo.permissoesDe(db, claims.usuario_id),
+    )
+    return { usuario, permissoes: permissoes.filter(ehPermissao) }
   }
 
   /**
