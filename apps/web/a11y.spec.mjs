@@ -118,12 +118,29 @@ async function recusarTiles(page) {
  */
 async function abrir(
   page,
-  { hash = '', tema = 'light', largura = 1360, altura = 900, tiles = 'servidos', pedidos } = {},
+  { hash = '', tema = 'light', largura = 1360, altura = 900, tiles = 'servidos', pedidos, api } = {},
 ) {
   await page.setViewportSize({ width: largura, height: altura })
   await page.emulateMedia({ colorScheme: tema })
   if (tiles === 'servidos') await servirTiles(page, pedidos)
   else await recusarTiles(page)
+
+  /*
+   * `api` liga o modo servido: endereço da API e id do cliente OAuth, pelas
+   * mesmas variáveis de janela que uma instalação real usaria. Sem isto a
+   * aplicação é a de arquivo único, com base em memória — que é o padrão e o
+   * que todo o resto desta suíte exercita.
+   */
+  if (api) {
+    await page.addInitScript(
+      ({ url, clientId }) => {
+        window.__IARX_API_URL__ = url
+        window.__IARX_GOOGLE_CLIENT_ID__ = clientId
+      },
+      { url: api.url ?? 'https://api.iarx.test', clientId: api.clientId ?? 'teste.apps.googleusercontent.com' },
+    )
+  }
+
   await page.goto(APP + hash)
   await assentar(page)
 }
@@ -1661,6 +1678,59 @@ test('o agrupamento se abre ao aproximar — o critério é o que o olho vê', a
   await page.waitForTimeout(250)
 
   expect(await maiorGrupo()).toBeLessThan(antes)
+})
+
+/* ------------------------------------------------------- entrada pelo Google */
+
+/**
+ * O modo servido tem uma tela de entrada diferente, e ela não tinha cobertura
+ * nenhuma — o artefato de arquivo único nunca passa por esse caminho, porque
+ * não há API configurada nele.
+ *
+ * O que se verifica aqui não é o fluxo do Google: esse depende do domínio do
+ * Google responder, e um teste que dependa disso é uma aposta. O que se
+ * verifica é **o que a aplicação faz em volta dele** — qual tela aparece, o que
+ * acontece quando o script não carrega, e se a porta que o servidor fechou
+ * continua fechada na interface.
+ */
+
+test('com API configurada, a entrada é pelo Google e a senha não é oferecida', async ({ page }) => {
+  await page.route('https://accounts.google.com/**', (rota) => rota.abort())
+  await abrir(page, { hash: '#/entrar', api: {} })
+
+  /*
+   * A senha some da tela. A API recusa login por senha quando há provedor, e
+   * oferecer o campo manteria viva, na interface, a porta que o servidor já
+   * fechou — a pessoa preencheria para ser recusada.
+   */
+  await expect(page.getByLabel('Senha')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Esqueci minha senha/i })).toHaveCount(0)
+
+  // E a tela diz o que decide o acesso, que não é ter conta Google.
+  await expect(page.getByText(/depende de convite/i)).toBeVisible()
+})
+
+test('se o Google não carrega, a tela explica e oferece saída', async ({ page }) => {
+  /*
+   * O caso real é rede corporativa bloqueando `accounts.google.com`. Sem
+   * mensagem, o botão simplesmente não aparece: quem olha conclui que o
+   * sistema está quebrado, sem nada que indique onde — e abre chamado.
+   */
+  await page.route('https://accounts.google.com/**', (rota) => rota.abort())
+  await abrir(page, { hash: '#/entrar', api: {} })
+
+  const aviso = page.getByText(/não foi possível carregar a entrada do google/i)
+  await expect(aviso).toBeVisible({ timeout: 15000 })
+  await expect(page.getByText(/accounts\.google\.com/)).toBeVisible()
+})
+
+test('sem API configurada, a entrada de demonstração continua intacta', async ({ page }) => {
+  // O artefato de duplo clique não muda: é o padrão, e é o que esta suíte
+  // inteira exercita. Este caso existe para que a troca seja de fato por
+  // configuração, e não uma mudança que vazou para os dois modos.
+  await abrir(page, { hash: '#/entrar' })
+  await expect(page.getByLabel('Senha')).toBeVisible()
+  await expect(page.getByText(/demonstração com dados fictícios/i)).toBeVisible()
 })
 
 test('o mapa é operável só pelo teclado', async ({ page }) => {

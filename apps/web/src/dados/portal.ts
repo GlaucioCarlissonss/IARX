@@ -53,7 +53,17 @@ export interface EscopoDoPortal {
  * escopo, a operação. O shell não pergunta "o perfil é de cliente?" em lugar
  * nenhum; pergunta se há recorte.
  */
-export function escopoDoUsuario(usuario: Usuario): EscopoDoPortal | null {
+/*
+ * Recebe só o que lê, e não `Usuario` inteiro.
+ *
+ * A sessão vinda da API não tem `criadoEm` — a resposta não traz, e preencher
+ * com uma data inventada seria pior que não ter o campo. Exigir o tipo
+ * completo obrigaria a inventar cinco campos para responder uma pergunta que
+ * depende de três.
+ */
+export function escopoDoUsuario(
+  usuario: Pick<Usuario, 'tipo' | 'clienteId' | 'escopoCliente'>,
+): EscopoDoPortal | null {
   if (usuario.tipo !== 'CLIENTE' || !usuario.clienteId) return null
   const e: EscopoCliente = usuario.escopoCliente ?? { tipo: 'CLIENTE' }
   return {

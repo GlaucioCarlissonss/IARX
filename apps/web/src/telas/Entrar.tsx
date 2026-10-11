@@ -6,6 +6,9 @@ import { useSessao, useToast } from '../lib/contexto'
 import { useFormulario } from '../lib/useFormulario'
 import { Aviso, Botao, Entrada } from '../componentes/ui/primitivos'
 import { ResumoErros } from '../componentes/ui/formulario'
+import { BotaoGoogle } from '../componentes/ui/BotaoGoogle'
+import { apiConfigurada } from '../dados/http'
+import type { SessaoRemota } from '../dados/google'
 
 /**
  * Tela de entrada.
@@ -42,6 +45,22 @@ export function Entrar() {
   const { avisar } = useToast()
   const [passo, setPasso] = useState<Passo>({ qual: 'credencial' })
   const [neutra, setNeutra] = useState<string | null>(null)
+  const comApi = apiConfigurada()
+
+  /*
+   * A entrada pelo provedor devolve a sessão inteira — usuário, perfil e
+   * escopo —, e não um id para procurar na base local. Procurar ali devolveria
+   * silenciosamente o primeiro usuário da demonstração.
+   */
+  function concluirRemoto(sessao: SessaoRemota) {
+    entrar(sessao)
+    avisar({
+      tom: 'ok',
+      titulo: `Bem-vindo, ${sessao.usuario.nome.split(' ')[0]}`,
+      texto: 'Sessão aberta.',
+    })
+    navegar('/')
+  }
 
   function concluir(usuarioId: string, nome: string) {
     entrar(usuarioId)
@@ -62,7 +81,15 @@ export function Entrar() {
           </div>
         </div>
 
-        {passo.qual === 'credencial' && (
+        {/*
+            Com API configurada, a entrada é pelo provedor e só por ele — é a
+            mesma decisão que a API toma ao recusar senha quando há provedor.
+            Oferecer os dois na tela manteria viva, na interface, a porta que o
+            servidor já fechou.
+        */}
+        {comApi && <BotaoGoogle aoEntrar={concluirRemoto} />}
+
+        {!comApi && passo.qual === 'credencial' && (
           <Credencial
             id="entrar-titulo"
             neutra={neutra}
@@ -78,7 +105,7 @@ export function Entrar() {
           />
         )}
 
-        {passo.qual === 'recuperar' && (
+        {!comApi && passo.qual === 'recuperar' && (
           <Recuperar
             id="entrar-titulo"
             aoVoltar={(mensagem) => {
@@ -88,14 +115,15 @@ export function Entrar() {
           />
         )}
 
-        {passo.qual === 'definir-senha' && (
+        {!comApi && passo.qual === 'definir-senha' && (
           <DefinirSenha id="entrar-titulo" passo={passo} aoConcluir={concluir} />
         )}
       </main>
 
       <p className="entrar__nota">
-        Ambiente de demonstração com dados fictícios. A verificação de senha da aplicação real é Argon2id no
-        servidor, com política de senha por locatário.
+        {comApi
+          ? 'A identidade é verificada pelo Google. O acesso ao IARX depende de convite: conta sem convite não entra.'
+          : 'Ambiente de demonstração com dados fictícios. Na instalação com servidor, a entrada é pelo Google.'}
       </p>
     </div>
   )

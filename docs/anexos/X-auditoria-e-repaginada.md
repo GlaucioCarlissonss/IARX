@@ -1131,3 +1131,54 @@ coisas diferentes, e o 403 era a separação funcionando.
 O arquivo de duplo clique continua como está: sem API configurada, base em
 memória e entrada de demonstração. O fluxo do Google exige origem registrada no
 console, e `file://` não é origem registrável.
+
+### O botão, e o que não dá para fazer como o Base44 faz
+
+Pedido do operador: que a entrada pelo Google seja nativa, "como já é no
+Base44".
+
+Base44 consegue isso porque **ele é a plataforma**: tem um cliente OAuth
+registrado para `*.base44.app`, e todo aplicativo hospedado ali herda essa
+registro. O Google emite credencial para **origem registrada**, e essa é regra
+do Google, não escolha de implementação. Um aplicativo que roda no domínio de
+quem o opera não tem plataforma de quem herdar — mesmo o Supabase Auth, que o
+Anexo H já escolheu como provedor, pede o ID do cliente.
+
+O que dá para fazer, e foi feito: reduzir a configuração a **um único valor**.
+Não há segredo a guardar, chave a rotacionar, arquivo a editar. O ID do cliente
+entra por `VITE_GOOGLE_CLIENT_ID` no build ou `window.__IARX_GOOGLE_CLIENT_ID__`
+no arquivo pronto, e o resto já está escrito.
+
+O ID, aliás, **não é segredo** — ele aparece no HTML de qualquer página que use
+entrada pelo Google, por desenho. O que protege a conta não é escondê-lo: é a
+lista de origens autorizadas, que recusa o mesmo ID vindo de outro endereço.
+
+| Peça | Estado |
+| --- | --- |
+| Botão desenhado pelo Google, com as diretrizes de marca dele | feito |
+| Troca do ID token pela sessão do IARX, em duas viagens | feito |
+| `ProvedorSessao` aceitando sessão vinda da API | feito |
+| Recuperação da sessão no recarregamento | feito |
+| ID do cliente OAuth e origens autorizadas | **do operador** |
+
+Três decisões nessa costura valem registro.
+
+**O botão é o do Google, não um parecido.** As diretrizes de marca exigem
+forma, cor e texto específicos, e um botão caseiro que imita o deles é pior que
+os dois extremos — parece oficial sem ser, que é exatamente o que se aprende a
+desconfiar numa tela de senha.
+
+**Com API, a senha some da tela.** A API recusa login por senha quando há
+provedor; manter o campo manteria viva, na interface, a porta que o servidor já
+fechou — e a pessoa preencheria só para ser recusada.
+
+**A permissão não é guardada no navegador.** O token sobrevive em
+`sessionStorage`; perfil, escopo e permissões não. Guardar permissão ali seria
+guardar uma decisão de autorização onde quem opera a máquina pode editá-la. A
+cada abertura, `GET /auth/sessao` responde de novo.
+
+Três testes novos cobrem o caminho servido, que o artefato de arquivo único
+nunca percorre. Um deles existe só para a degradação: rede corporativa que
+bloqueia `accounts.google.com` precisa virar explicação na tela, porque sem ela
+o botão apenas não aparece — e quem olha conclui que o sistema quebrou, sem
+nada que indique onde.
