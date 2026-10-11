@@ -83,16 +83,35 @@ remoção limpa.
 de defeito que esta base já corrigiu três vezes — peça construída, nunca ligada.
 Remover é uma decisão; ligar é outra. Não é limpeza.
 
-### Exports desnecessários: **112** — corrigido na Entrega 7
+### Exports desnecessários: **69 em módulos internos** — corrigido três vezes
 
 Símbolos exportados e usados **só dentro do próprio arquivo**. Não são código
 morto: são superfície pública maior que o necessário.
 
-~~Cerca de 60.~~ **Errado, e o erro foi de leitura:** a listagem original foi
-truncada em oitenta linhas e eu contei o que a tela mostrava. O total distinto
-é **112**, dos quais **68 fora de `packages/contracts`**. A distinção importa:
-um pacote de contratos compartilhado exporta amplamente **por desenho**, e
-nem toda exportação dele é excesso.
+~~Cerca de 60.~~ ~~**112**, dos quais 68 fora de `packages/contracts`.~~
+**Também errado.** O número honesto, para módulos internos de `apps/`, é **69,
+em 29 arquivos**.
+
+Vale o histórico porque o item já custou três contagens erradas, cada uma por
+um motivo diferente:
+
+| Contagem | Por que estava errada |
+| --- | --- |
+| ~60 | Listagem truncada em oitenta linhas; contei o que a tela mostrava |
+| 112 | Misturava `packages/contracts`, que exporta amplamente **por desenho** |
+| 129 | `src/**/*.ts` não casa com arquivo direto em `src/`: `app.module.ts` ficou de fora, e todo controller do Nest apareceu como órfão |
+| 80 | Os testes não entraram como consumidores — e é deles que vêm os usos de `resolverFranquia`, `lerRespostaNominatim`, `montarChave` |
+| **69** | Declarantes em `src/`, consumidores em `src/` **e** `test/`, `packages/contracts` fora |
+
+Mesmo 69 é teto e não número final: a contagem ainda duplica símbolo declarado
+duas vezes no mesmo arquivo, e não distingue tipo que uma assinatura pública
+precisa nomear de tipo que só serve ali dentro.
+
+O achado que sobrevive às cinco contagens não é a cifra — é que **este item
+resiste a ser medido de passagem**. Quatro tentativas, quatro respostas, e cada
+erro parecia certo até a verificação seguinte. É a razão pela qual ele continua
+em aberto: não por ser grande, mas por exigir uma verificação que ninguém
+escreveu ainda.
 
 ### Dependências não usadas: **zero**
 
@@ -729,7 +748,7 @@ nesta auditoria, três vezes, não era.
 | Arquivo único × divisão de código (X.6.2) | Decisão do operador |
 | Ligar o front à API (X.6.3) | Rodada própria; destrava otimização de banco e tira ~300 kB do pacote |
 | Família tipográfica embutida (X.6.1) | Decidido por ora: identidade por sistema, sem arquivo de fonte |
-| 112 exports desnecessários | Baixo retorno; pede verificação automática que distinga pacote compartilhado de módulo interno |
+| 69 exports desnecessários (X.3) | Baixo retorno; pede verificação automática que distinga pacote compartilhado de módulo interno, declarante de consumidor, e tipo de assinatura pública de tipo interno — quatro contagens de passagem deram quatro números |
 | Paleta por unidade, Faróis, Projetos, SLA (X.0) | Não existem nesta base; dependem de orientação |
 | `mascararCnpj` sem consumidor | Requisito do Anexo C que a interface não cumpre — decisão de produto, não de limpeza |
 | Ordens de Serviço e Estoque | Pendência de **especificação**, antes de ser de construção |
