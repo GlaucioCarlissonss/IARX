@@ -28,3 +28,9 @@ packages/contracts/dist/
 # Saída do Playwright — artefato de execução, não fonte.
 test-results/
 playwright-report/
+
+# Cópia do build de arquivo único deixada na raiz para entrega manual — mesma
+# saída de `apps/web/dist/index.html`, 863 kB de JS e CSS gerados. Versionar
+# geraria um diff ilegível a cada build e um histórico que cresce sem informar.
+# Quem quiser o arquivo roda `npm run build`.
+/IARX.html
