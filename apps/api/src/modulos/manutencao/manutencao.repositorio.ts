@@ -47,21 +47,24 @@ const SELECT_OS = `
          o.custo_terceiros::text    as custo_terceiros,
          o.custo_deslocamento::text as custo_deslocamento,
          o.custo_total::text        as custo_total,
-         o.os_origem_id, o.created_at
+         o.os_origem_id
     from public.ordem_servico o
 `
 
-interface LinhaOs extends Record<string, unknown> {
-  id: string
-  created_at: Date
-}
-
-export const cursorDeOs = (o: LinhaOs) => ({ criadoEm: o.created_at.toISOString(), id: o.id })
-
-function semCursor(o: LinhaOs): OrdemServico {
-  const { created_at: _descartado, ...resto } = o
-  return resto as unknown as OrdemServico
-}
+/*
+ * A ordenação é por `abertura_em`, e o cursor é montado do mesmo campo.
+ *
+ * A primeira versão ordenava por `created_at` e o serviço montava o cursor com
+ * `abertura_em`. São colunas diferentes — `abertura_em` é quando o chamado
+ * entrou, `created_at` é quando a linha foi gravada — e elas divergem sempre
+ * que uma OS é registrada depois do fato, que é o caso de todo chamado aberto
+ * por telefone e digitado mais tarde. Com as duas trocadas, a segunda página
+ * pula ou repete linhas, e a fila mente sem errar nada visível.
+ *
+ * `abertura_em` é também a ordem que faz sentido para quem lê: a fila é por
+ * quando o problema começou, não por quando alguém digitou.
+ */
+type LinhaOs = OrdemServico & Record<string, unknown>
 
 @Injectable()
 export class ManutencaoRepositorio {
@@ -108,26 +111,25 @@ export class ManutencaoRepositorio {
     if (cursor) {
       valores.push(cursor.criadoEm, cursor.id)
       clausulas.push(
-        `(o.created_at, o.id) < ($${valores.length - 1}::timestamptz, $${valores.length}::uuid)`,
+        `(o.abertura_em, o.id) < ($${valores.length - 1}::timestamptz, $${valores.length}::uuid)`,
       )
     }
 
     valores.push(filtro.limit + 1)
     const linhas = await db.consultar<LinhaOs>(
       `${SELECT_OS} where ${clausulas.join(' and ')}
-        order by o.created_at desc, o.id desc limit $${valores.length}`,
+        order by o.abertura_em desc, o.id desc limit $${valores.length}`,
       valores,
     )
 
     return {
-      linhas: linhas.slice(0, filtro.limit).map(semCursor),
+      linhas: linhas.slice(0, filtro.limit) as OrdemServico[],
       temMais: linhas.length > filtro.limit,
     }
   }
 
   async porId(db: Executor, id: string): Promise<OrdemServico | null> {
-    const o = await db.consultarUm<LinhaOs>(`${SELECT_OS} where o.id = $1 and o.deleted_at is null`, [id])
-    return o ? semCursor(o) : null
+    return db.consultarUm<LinhaOs>(`${SELECT_OS} where o.id = $1 and o.deleted_at is null`, [id])
   }
 
   async abrir(db: Executor, dados: AbrirOs, autorId: string): Promise<OrdemServico | null> {

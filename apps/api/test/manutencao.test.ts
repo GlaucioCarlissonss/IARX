@@ -264,6 +264,41 @@ describe('pausa de SLA', () => {
   })
 })
 
+describe('paginação', () => {
+  it('a segunda página continua de onde a primeira parou, sem pular nem repetir', async () => {
+    /*
+     * Este caso nasceu de um defeito que o portão de superfície de módulo
+     * revelou de lado: a consulta ordenava por `created_at` e o cursor era
+     * montado com `abertura_em`. São colunas diferentes — quando o chamado
+     * entrou contra quando a linha foi gravada — e divergem sempre que uma OS
+     * é digitada depois do fato, que é todo chamado aberto por telefone.
+     *
+     * Com as duas trocadas, a fila mente sem errar nada visível: a segunda
+     * página pula linhas ou repete, e só quem conferir uma por uma percebe.
+     */
+    const tk = await comTudo()
+    for (let i = 0; i < 3; i++) await abrir(tk)
+
+    const p1 = await chamar(api, 'GET', '/api/v1/ordens-servico?limit=2', { token: tk })
+    assert.equal(p1.status, 200)
+    assert.equal(p1.corpo.data.length, 2)
+    assert.ok(p1.corpo.meta.next_cursor, 'faltou cursor com mais páginas disponíveis')
+
+    const p2 = await chamar(
+      api,
+      'GET',
+      `/api/v1/ordens-servico?limit=2&cursor=${encodeURIComponent(p1.corpo.meta.next_cursor)}`,
+      { token: tk },
+    )
+    assert.equal(p2.status, 200)
+
+    const ids1 = p1.corpo.data.map((o: { id: string }) => o.id)
+    const ids2 = p2.corpo.data.map((o: { id: string }) => o.id)
+    const repetidos = ids2.filter((id: string) => ids1.includes(id))
+    assert.deepEqual(repetidos, [], 'a segunda página repetiu linhas da primeira')
+  })
+})
+
 describe('permissões', () => {
   it('cada transição exige a sua, e ler não basta para agir', async () => {
     const soLer = await token({ tenant: TENANT_A, usuario: USUARIO_A, permissoes: ['os:ler'] })
