@@ -67,6 +67,21 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       errors: [{ field: 'franquia_quantidade', code: 'FRANQUIA_INCOMPLETA' }],
     }),
 
+  os_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição não permitida', {
+      detail:
+        'A ordem de serviço não pode ir deste estado para o informado. Reabertura cria uma OS nova, vinculada à original.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  os_rn027_segregacao: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Quem executou não pode validar', {
+      detail:
+        'RN-027: a validação da ordem de serviço precisa ser feita por outra pessoa. Validação é o ponto em que o custo entra no resultado — conferir o próprio trabalho torna a conferência formalidade.',
+      errors: [{ field: 'validado_por', code: 'SEGREGACAO_DE_FUNCOES' }],
+      acoes: [{ code: 'OUTRO_VALIDADOR', descricao: 'Pedir a validação a outro supervisor' }],
+    }),
+
   ci_desconto_com_motivo: () =>
     new ErroDominio('REGRA_DE_NEGOCIO', 'Desconto sem justificativa', {
       detail: 'RN-009: todo desconto exige motivo registrado, porque ele é auditável.',

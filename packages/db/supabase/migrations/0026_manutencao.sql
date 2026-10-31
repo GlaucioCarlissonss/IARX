@@ -381,3 +381,60 @@ begin
          for each row execute function app.touch_updated_at()', t, t);
   end loop;
 end $$;
+
+-- -----------------------------------------------------------------------------
+-- As duas recusas passam a ter nome
+--
+-- Sem `using constraint`, um `raise exception` chega à API como `23514` sem
+-- nome, e o tratamento genérico a transforma em `A operação viola a regra
+-- "não identificada"`. O operador lê isso e não tem o que fazer — a mensagem
+-- que importava ("quem executou não pode validar") ficou no log do servidor.
+--
+-- Nomear a constraint liga o gatilho à tabela de mensagens que a API já mantém
+-- por nome, e é como o resto desta base já faz. Custo: uma linha por regra.
+-- -----------------------------------------------------------------------------
+create or replace function app.validar_os_transicao()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status = old.status then
+    return new;
+  end if;
+
+  if not app.os_transicao_valida(old.status, new.status) then
+    raise exception 'transição de ordem de serviço inválida: % → %', old.status, new.status
+      using errcode = '23514',
+            constraint = 'os_transicao_valida',
+            hint = 'Ver Anexo B.3. Reabertura cria uma OS nova vinculada à original, não volta o status.';
+  end if;
+
+  /*
+   * RN-027 — segregação de funções: quem valida não é quem executou.
+   *
+   * Validação é o ponto em que o custo da OS entra no resultado e o ativo
+   * volta a ficar disponível; deixar o executor validar o próprio trabalho
+   * transforma a conferência em formalidade, e é onde um reparo mal feito
+   * volta como reincidência no mês seguinte.
+   *
+   * A comparação é por `usuario_id` do técnico: técnico sem login não valida
+   * nada, e por isso não há como coincidir.
+   */
+  if new.status = 'VALIDADA' then
+    if exists (
+      select 1
+        from public.tecnico t
+       where t.id = new.tecnico_responsavel_id
+         and t.usuario_id is not null
+         and t.usuario_id = new.validado_por
+    ) then
+      raise exception 'RN-027: quem executou a ordem de serviço não pode validá-la'
+        using errcode = '23514',
+              constraint = 'os_rn027_segregacao',
+              hint = 'A validação precisa ser feita por outra pessoa.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;

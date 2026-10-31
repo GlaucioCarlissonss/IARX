@@ -162,6 +162,22 @@ insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo
    '11111111-1111-4111-8111-1111111150a1', 'TENANT');
 
 -- -----------------------------------------------------------------------------
+-- Dois técnicos: um com login e outro sem.
+--
+-- O sem login não é enfeite — é o terceirizado que recebe ordem pelo
+-- supervisor e nunca entra no sistema. Ter os dois na massa é o que faz
+-- RN-027 ser testável nos dois sentidos: só o técnico com `usuario_id` pode
+-- coincidir com quem valida.
+-- -----------------------------------------------------------------------------
+insert into public.tecnico (id, tenant_id, usuario_id, nome, matricula, filial_id) values
+  ('11111111-1111-4111-8111-11111111e201', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-111111110001', 'Operador Alfa', 'T-001',
+   '11111111-1111-4111-8111-1111111111f1'),
+  ('11111111-1111-4111-8111-11111111e202', '11111111-1111-4111-8111-111111111111',
+   null, 'Terceirizado Beta', 'T-002',
+   '11111111-1111-4111-8111-1111111111f1');
+
+-- -----------------------------------------------------------------------------
 -- Medidor do equipamento livre 1.
 --
 -- Um só, e do tipo CONTADOR: é o caso que o faturamento por página usa. O valor
