@@ -14,6 +14,9 @@ import { EquipamentosController } from './modulos/equipamentos/equipamentos.cont
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
 import { AuthController } from './modulos/auth/auth.controller.js'
+import { CatalogoController } from './modulos/catalogo/catalogo.controller.js'
+import { CatalogoRepositorio } from './modulos/catalogo/catalogo.repositorio.js'
+import { CatalogoService } from './modulos/catalogo/catalogo.service.js'
 import { AuthRepositorio } from './modulos/auth/auth.repositorio.js'
 import { AuthService } from './modulos/auth/auth.service.js'
 import {
@@ -107,6 +110,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     PerfisController,
     PermissoesController,
     AuthController,
+    CatalogoController,
     CentrosCustoController,
     ContasBancariasController,
     NotificacaoController,
@@ -139,6 +143,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     IamService,
     AuthRepositorio,
     AuthService,
+    CatalogoService,
+    CatalogoRepositorio,
     FinanceiroRepositorio,
     FinanceiroService,
     NotificacaoService,
