@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Contador, DataHora, Dinheiro, Paginacao, Uuid } from './primitivos.js'
+import { DataHora, Dinheiro, Paginacao, Uuid } from './primitivos.js'
 
 /**
  * Equipamento — Anexo A.3 e B.2.
@@ -106,12 +106,10 @@ export const BloquearEquipamento = z.object({
   ate: DataHora.nullable().default(null),
 })
 
-/* Sem consumidor (Anexo X §X.2): esquema de `equipamento:leitura_registrar`,
-   rota especificada e não construída — hoje a leitura entra pelo fechamento de
-   competência, não por rota própria. */
-export const RegistrarLeitura = z.object({
-  valor: Contador,
-  medido_em: DataHora,
-  origem: z.enum(['MANUAL', 'TELEMETRIA', 'OS', 'IMPORTACAO']).default('MANUAL'),
-  evidencia_url: z.string().url().optional(),
-})
+/* `RegistrarLeitura` ficava aqui, marcado como "rota especificada e não
+   construída". Ao ser construída, a especificação divergia do banco em cinco
+   pontos — `medido_em` contra `data_leitura`, origens que o `check` não
+   aceita, dois status onde há três, valor inteiro onde a coluna é
+   `numeric(14,2)`, e nenhum `medidor_id`. Foi substituída por
+   `RegistrarLeituraMedidor`, em `medicao.ts`, escrita contra o esquema
+   medido. */

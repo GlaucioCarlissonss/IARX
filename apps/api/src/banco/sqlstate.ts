@@ -184,11 +184,39 @@ export function traduzirErroPg(e: unknown): ErroDominio | null {
         causa: e,
       })
 
-    case SQLSTATE_CHECK:
+    case SQLSTATE_CHECK: {
+      /*
+       * Partição ausente chega como `23514`, e sem nome de constraint.
+       *
+       * `leitura_medidor`, `log_acesso` e `audit_log` são particionadas por
+       * data. Quando o período da linha não tem partição, o PostgreSQL levanta
+       * check_violation com a mensagem "no partition of relation ... found for
+       * row" — e o tratamento genérico a transformava em
+       * `A operação viola a regra "não identificada"`.
+       *
+       * Isso não é hipótese de laboratório: é exatamente o que o operador vê no
+       * dia em que a criação de partições atrasa, ou em que alguém lança uma
+       * leitura com a data digitada errada. "Regra não identificada" manda a
+       * pessoa procurar um erro no próprio dado, que está certo, e esconde a
+       * única informação acionável — que o período não está aberto.
+       */
+      if (/no partition of relation/i.test(e.message ?? '')) {
+        return new ErroDominio('REGRA_DE_NEGOCIO', 'Período não aberto para registro', {
+          detail:
+            'A data informada está fora dos períodos abertos. Confira a data ou peça a abertura do período.',
+          acoes: [
+            { code: 'CONFERIR_DATA', descricao: 'Conferir a data informada' },
+            { code: 'ABRIR_PERIODO', descricao: 'Solicitar abertura do período ao administrador' },
+          ],
+          causa: e,
+        })
+      }
+
       return new ErroDominio('REGRA_DE_NEGOCIO', 'Restrição de integridade violada', {
         detail: `A operação viola a regra "${e.constraint ?? 'não identificada'}".`,
         causa: e,
       })
+    }
 
     case SQLSTATE_FK:
       return new ErroDominio('REGRA_DE_NEGOCIO', 'Referência inválida', {

@@ -14,6 +14,9 @@ import { EquipamentosController } from './modulos/equipamentos/equipamentos.cont
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
 import { AuthController } from './modulos/auth/auth.controller.js'
+import { MedicaoController } from './modulos/medicao/medicao.controller.js'
+import { MedicaoRepositorio } from './modulos/medicao/medicao.repositorio.js'
+import { MedicaoService } from './modulos/medicao/medicao.service.js'
 import { ComercialController } from './modulos/comercial/comercial.controller.js'
 import { ComercialRepositorio } from './modulos/comercial/comercial.repositorio.js'
 import { ComercialService } from './modulos/comercial/comercial.service.js'
@@ -115,6 +118,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     AuthController,
     CatalogoController,
     ComercialController,
+    MedicaoController,
     CentrosCustoController,
     ContasBancariasController,
     NotificacaoController,
@@ -151,6 +155,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     CatalogoRepositorio,
     ComercialService,
     ComercialRepositorio,
+    MedicaoService,
+    MedicaoRepositorio,
     FinanceiroRepositorio,
     FinanceiroService,
     NotificacaoService,

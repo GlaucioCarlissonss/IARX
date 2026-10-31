@@ -162,6 +162,20 @@ insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo
    '11111111-1111-4111-8111-1111111150a1', 'TENANT');
 
 -- -----------------------------------------------------------------------------
+-- Medidor do equipamento livre 1.
+--
+-- Um só, e do tipo CONTADOR: é o caso que o faturamento por página usa. O valor
+-- inicial não é zero de propósito — equipamento recondicionado entra no parque
+-- com contador rodado, e um teste que parta de zero não exercita a subtração
+-- que a fatura faz.
+-- -----------------------------------------------------------------------------
+insert into public.medidor (id, tenant_id, equipamento_id, tipo, unidade,
+                            valor_inicial, valor_atual, acumulado_total, ativo) values
+  ('11111111-1111-4111-8111-11111111b001', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111a002', 'CONTADOR', 'paginas',
+   1200.00, 1200.00, 1200.00, true);
+
+-- -----------------------------------------------------------------------------
 -- Alçada de aprovação de pagamento, e três aprovadores com postos distintos.
 --
 -- Os limites (10 mil / 50 mil / 250 mil) são massa deste arquivo, não regra de
