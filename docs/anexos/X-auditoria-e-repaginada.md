@@ -1182,3 +1182,107 @@ nunca percorre. Um deles existe só para a degradação: rede corporativa que
 bloqueia `accounts.google.com` precisa virar explicação na tela, porque sem ela
 o botão apenas não aparece — e quem olha conclui que o sistema quebrou, sem
 nada que indique onde.
+
+---
+
+## X.19 O levantamento completo, e o que foi construído
+
+Pedido: levantar tudo o que falta e implementar sem parar. O levantamento vem
+primeiro porque ele mudou o plano — duas afirmações deste próprio anexo não se
+sustentavam.
+
+### A primeira correção: não faltava especificação
+
+X.15 listava "Ordens de Serviço e Estoque" como **pendência de especificação,
+antes de ser de construção**. Ao ir construir, a especificação estava toda
+escrita, e em quatro anexos:
+
+| Onde | O quê |
+| --- | --- |
+| Anexo A.6 / A.7 | As tabelas, campo a campo |
+| Anexo B.3 / B.5 | As máquinas de estado, com atores e pré-condições |
+| Anexo C | As doze permissões de OS e as quatro de estoque |
+| Anexo D | O catálogo de rotas |
+
+A pendência era de construção desde sempre. **"Falta especificar" é uma
+afirmação que envelhece, e envelhece em silêncio** porque ninguém reabre o
+anexo para conferir — é a mesma classe de erro das cinco contagens de export,
+com a diferença de que esta bloqueava trabalho.
+
+### A segunda: o catálogo de permissões já era a especificação
+
+Dezesseis permissões estavam no Anexo C sem nenhuma rota correspondente. Elas
+não eram lista de desejos: cada uma nomeia uma capacidade com recorte decidido,
+e construir contra elas foi construir contra requisito escrito.
+
+### O levantamento
+
+| Módulo | Tabela | Rota antes | Agora |
+| --- | --- | --- | --- |
+| Catálogo | existia (0003) | nenhuma | `GET /catalogo` |
+| Comercial | existia (0012) | nenhuma | `GET /comercial/politica`, `/descontos` |
+| Medição | existia (0004) | nenhuma | medidores, leituras, estorno |
+| Manutenção | **não existia** | nenhuma | 0026 + 11 rotas |
+| Estoque | **não existia** | nenhuma | 0027 + 5 rotas |
+| Anexos | **não existia** | nenhuma | 0028 + 3 rotas |
+| Mapa | existia | nenhuma | `GET /mapa/pontos` |
+| Resultado | derivado | nenhuma | `GET /resultado` |
+
+Fora do recorte, por não terem tela no front: inventário, plano preventivo,
+ordem de compra e relatórios agendados. As permissões existem; as telas, não.
+Construir API para tela que não existe é construir contra suposição.
+
+### Seis defeitos que a construção revelou
+
+Nenhum deles estava na lista do levantamento. Todos apareceram ao escrever o
+teste, que é o padrão desta auditoria inteira.
+
+**1. Erro de partição ilegível.** `leitura_medidor` é particionada por mês.
+Linha cujo período não tem partição levanta `23514` sem nome de constraint, e a
+API respondia `A operação viola a regra "não identificada"`. É o que o operador
+vê quando a criação de partições atrasa ou quando alguém digita o ano errado —
+mandava procurar defeito no dado, que está certo.
+
+**2. RN-027 ilegível, pelo mesmo motivo.** A segregação entre executor e
+validador recusava corretamente e chegava como a mesma frase vazia. Os dois
+`raise` passaram a nomear a constraint, que é como o resto da base já liga
+gatilho à tabela de mensagens.
+
+**3. Contrato de dinheiro errado.** Escrevi a tabela de preço supondo centavos
+inteiros; o schema diz `numeric(15,4)`, e o schema está certo. A franquia é
+pior: seis casas, porque página custa **fração de centavo** — R$ 0,0385 por
+página mono é preço corrente, e arredondar para centavo erraria trinta por
+cento.
+
+**4. Portão acusando inocente, terceira vez.** `14_rnf_lancamentos_e_caixa`
+recusa tabela de posição gravada e detectava com `like '%posicao%'`, que casa
+com `politica_re**posicao**`. A regra estava certa; a detecção não
+correspondia a ela.
+
+**5. Paginação com duas colunas diferentes.** A fila de OS ordenava por
+`created_at` e montava o cursor com `abertura_em`. Divergem sempre que um
+chamado é digitado depois do fato — e a segunda página pula ou repete sem
+errar nada visível.
+
+**6. Suposição sobre o modelo.** Supus `local_operacao_id` em `equipamento`.
+Não existe, e o motivo é bom: o equipamento muda de local ao ser realocado, e
+guardar o local no ativo apagaria por onde ele passou.
+
+### Três ausências que viraram teste
+
+Deliberadas, e cada uma com um caso que reprova se alguém as preencher por
+conveniência:
+
+- **Nenhuma rota escreve saldo de estoque.** O saldo é projeção do movimento
+  (RN-017); um `PATCH /saldos` recriaria pela porta da frente o caminho de
+  divergência que o banco fecha.
+- **Nenhuma rota recebe arquivo.** O byte vai direto ao armazenamento; a API
+  registra o metadado. Upload pela API deixaria o processo segurando megabytes
+  em memória e o tempo limite de requisição virando limite de tamanho.
+- **A validação de OS não aceita corpo.** `validado_por` vem das claims; se
+  viesse do corpo, RN-027 seria cumprida por quem quisesse.
+
+### Números
+
+De 277 para **359** testes de API, de 18 para **20** arquivos de invariante de
+banco, três migrações novas e oito módulos. Portões todos verdes.

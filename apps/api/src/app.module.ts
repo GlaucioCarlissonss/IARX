@@ -14,6 +14,8 @@ import { EquipamentosController } from './modulos/equipamentos/equipamentos.cont
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
 import { AuthController } from './modulos/auth/auth.controller.js'
+import { ResultadoController } from './modulos/resultado/resultado.controller.js'
+import { ResultadoService } from './modulos/resultado/resultado.service.js'
 import { MapaController } from './modulos/mapa/mapa.controller.js'
 import { MapaService } from './modulos/mapa/mapa.service.js'
 import { AnexoController } from './modulos/anexo/anexo.controller.js'
@@ -134,6 +136,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     EstoqueController,
     AnexoController,
     MapaController,
+    ResultadoController,
     CentrosCustoController,
     ContasBancariasController,
     NotificacaoController,
@@ -179,6 +182,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     AnexoService,
     AnexoRepositorio,
     MapaService,
+    ResultadoService,
     FinanceiroRepositorio,
     FinanceiroService,
     NotificacaoService,
