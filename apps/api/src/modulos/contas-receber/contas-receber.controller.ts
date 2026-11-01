@@ -86,6 +86,25 @@ export class ContasReceberController {
     return this.servico.porId(id)
   }
 
+  /**
+   * A composição da cobrança.
+   *
+   * Rota própria, e não um campo de `GET :id`. A diferença é de custo e de
+   * propósito: a lista de títulos abre a tela de contas a receber e não precisa
+   * da memória de nenhum deles; a memória abre quando alguém pergunta de onde
+   * saiu **um** número. Embutir faria toda listagem carregar a composição de
+   * todas as cobranças para responder uma pergunta que ninguém fez ainda.
+   *
+   * `receber:ler` e não uma permissão nova: quem pode ver a cobrança pode ver
+   * do que ela é feita. O contrário — ver o total e não a composição — é
+   * exatamente a situação que esta rota existe para acabar.
+   */
+  @Get(':id/memoria')
+  @ExigePermissao('receber:ler')
+  memoria(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.memoria(id)
+  }
+
   @Patch(':id')
   @ExigePermissao('receber:criar')
   editar(

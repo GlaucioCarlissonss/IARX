@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  ItemDaCobranca,
   AprovacaoReceber,
   CriarTituloReceber,
   Dinheiro,
@@ -745,6 +746,29 @@ export class ContasReceberRepositorio {
           and ($2::uuid is null or u.id <> $2)
         order by u.nome`,
       [nivel, excluirUsuarioId],
+    )
+  }
+
+  /**
+   * A composição da cobrança.
+   *
+   * Os valores saem como texto porque são `numeric(15,4)` — ver `Dinheiro` nos
+   * primitivos. Os contadores saem como inteiro porque são contagem de página,
+   * e página não tem fração.
+   */
+  async memoria(db: Executor, tituloId: string): Promise<ItemDaCobranca[]> {
+    return db.consultar<ItemDaCobranca & Record<string, unknown>>(
+      `select id, contrato_item_id, equipamento_id, descricao,
+              valor_mensal::text    as valor_mensal,
+              valor_excedente::text as valor_excedente,
+              desconto::text        as desconto,
+              valor_liquido::text   as valor_liquido,
+              paginas_mono, paginas_color, franquia_mono, franquia_color,
+              excedente_mono, excedente_color
+         from public.titulo_receber_item
+        where titulo_id = $1
+        order by descricao`,
+      [tituloId],
     )
   }
 }

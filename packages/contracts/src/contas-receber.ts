@@ -285,3 +285,52 @@ export const ResultadoFechamento = z.object({
   ja_existiam: z.number().int().min(0),
 })
 export type ResultadoFechamento = z.infer<typeof ResultadoFechamento>
+
+/* ------------------------------------------------- memória de cálculo */
+
+/**
+ * Uma linha da composição da cobrança.
+ *
+ * É o que o cliente lê ao contestar, e por isso carrega o consumo junto do
+ * valor: "paguei a mais por quê" se responde mostrando páginas, franquia e
+ * excedente lado a lado, não mandando o cliente cruzar dois relatórios.
+ *
+ * Os contadores vêm copiados do consumo da competência, e não referenciados.
+ * Uma reabertura que recalcule `consumo_competencia` mudaria o número que ele
+ * está contestando — e a memória deixaria de explicar a cobrança que ele
+ * recebeu.
+ */
+export const ItemDaCobranca = z.object({
+  id: Uuid,
+  contrato_item_id: Uuid.nullable(),
+  equipamento_id: Uuid.nullable(),
+  /** Com patrimônio por extenso: é o texto que a pessoa lê, não um uuid. */
+  descricao: z.string(),
+  valor_mensal: Dinheiro,
+  valor_excedente: Dinheiro,
+  desconto: Dinheiro,
+  /** Derivado no banco: mensal + excedente − desconto, sem caminho de escrita. */
+  valor_liquido: Dinheiro,
+  paginas_mono: z.number().int(),
+  paginas_color: z.number().int(),
+  franquia_mono: z.number().int(),
+  franquia_color: z.number().int(),
+  excedente_mono: z.number().int(),
+  excedente_color: z.number().int(),
+})
+export type ItemDaCobranca = z.infer<typeof ItemDaCobranca>
+
+export const MemoriaDaCobranca = z.object({
+  titulo_id: Uuid,
+  itens: z.array(ItemDaCobranca),
+  /**
+   * A soma das linhas, devolvida ao lado do total do título.
+   *
+   * Dois números que **devem** ser iguais, enviados juntos de propósito: se um
+   * dia divergirem, quem lê a resposta vê a divergência em vez de confiar num
+   * total que a composição não sustenta.
+   */
+  soma_itens: Dinheiro,
+  valor_titulo: Dinheiro,
+})
+export type MemoriaDaCobranca = z.infer<typeof MemoriaDaCobranca>

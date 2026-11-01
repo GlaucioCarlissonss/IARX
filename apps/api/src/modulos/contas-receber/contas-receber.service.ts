@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  MemoriaDaCobranca,
   AplicarDesconto,
   BaixarSemRecebimento,
   CancelarTituloReceber,
@@ -641,5 +642,34 @@ export class ContasReceberService {
       }
     }
     return e
+  }
+
+  /**
+   * A memória de cálculo de uma cobrança.
+   *
+   * Devolve a soma das linhas **junto** com o total do título. São dois
+   * números que devem ser iguais, e mandá-los juntos é deliberado: se um dia
+   * divergirem, quem lê a resposta vê a divergência em vez de confiar num
+   * total que a composição não sustenta.
+   *
+   * Isso é mais do que zelo. A memória existe para o cliente que contesta — e
+   * uma memória que não fecha com a cobrança transforma a conversa sobre o
+   * valor numa conversa sobre qual dos dois números do fornecedor está errado.
+   */
+  async memoria(id: string): Promise<MemoriaDaCobranca> {
+    return this.banco.emTransacao(async (db) => {
+      const titulo = await this.repo.porId(db, id)
+      if (!titulo) throw naoEncontrado('título')
+
+      const itens = await this.repo.memoria(db, id)
+      const soma = itens.reduce((t, i) => t + Number(i.valor_liquido), 0)
+
+      return {
+        titulo_id: id,
+        itens,
+        soma_itens: soma.toFixed(4) as MemoriaDaCobranca['soma_itens'],
+        valor_titulo: titulo.valor_liquido,
+      }
+    })
   }
 }
