@@ -1286,3 +1286,76 @@ conveniência:
 
 De 277 para **359** testes de API, de 18 para **20** arquivos de invariante de
 banco, três migrações novas e oito módulos. Portões todos verdes.
+
+---
+
+## X.20 Faturamento — e a tabela que não foi criada
+
+A pendência dizia: "pré-fatura e fatura: modelagem pendente, a tela existe e a
+tabela não". Ao ir modelar, a afirmação não se sustentou — a terceira vez nesta
+auditoria que uma pendência registrada estava descrita errada.
+
+### O que de fato faltava
+
+`consumo_competencia` guarda o consumo por equipamento. `titulo_receber` guarda
+o total. **Não havia elo entre os dois.** A descrição do título é uma linha só:
+*"Locação e consumo — contrato X, competência Y"*.
+
+O efeito aparece no dia em que o cliente contesta: ninguém consegue mostrar de
+onde saiu o número. Nem o operador, que teria de refazer o cálculo à mão sobre
+um mês fechado, nem o portal, que exibe consumo e valor sem conseguir ligar um
+ao outro.
+
+### A decisão que contraria o Anexo A.8
+
+O anexo descreve uma tabela `fatura` com `serie`, `numero`, `nf_chave`,
+`boleto_linha_digitavel`. **Ela não foi criada**, e a justificativa precisa
+estar escrita porque contraria o documento normativo.
+
+`titulo_receber` já **é** a cobrança contratual por competência: cliente,
+contrato, competência, valores, emissão, vencimento, aprovação, recebimento.
+Criar `fatura` ao lado seria manter duas tabelas para o mesmo fato, com duas
+fontes de verdade para "quanto o cliente deve" — e a pergunta *qual das duas
+vale* não teria resposta boa.
+
+O que `fatura` traria de genuinamente novo é a **emissão fiscal**. E isso não é
+modelagem: é integração com a SEFAZ e com um emissor de boleto, e depende de
+decisões que ninguém tomou — qual provedor, qual regime tributário, qual série
+por filial. Modelar os campos agora seria criar colunas cujo preenchimento
+ninguém sabe descrever.
+
+A pendência foi reclassificada de **construção** para **decisão**, e a
+distinção importa: a primeira espera alguém trabalhar, a segunda espera alguém
+escolher. Tratá-las igual faz a construção parecer bloqueada quando não está.
+
+### Uma única implementação da precificação
+
+`app.valor_contratual_competencia` passou a ser a **soma** de
+`app.itens_contratuais_competencia`, em vez de repetir a conta.
+
+Não é refatoração por elegância. Duas implementações da mesma precificação
+divergiriam, e a que diverge é sempre a que ninguém está olhando — a memória
+mostraria itens que não somam o total cobrado, e a conversa com o cliente
+deixaria de ser sobre o valor para virar sobre qual dos dois números do
+fornecedor está errado. Um caso de teste compara as duas.
+
+### Quatro guardas que a limpeza do teste precisou contornar
+
+Memória imutável, competência selada, item de tabela ativa e exigência de fim
+de vigência. Cada uma recusou o `delete` da massa.
+
+Vale registrar como evidência, e não como inconveniente: **quando remover dados
+de teste exige desligar quatro gatilhos, as invariantes estão onde deveriam
+estar.** O que não se fez em nenhum dos casos foi abrir exceção no gatilho para
+"limpeza" — condição dessas em produção é a porta pela qual a imutabilidade
+deixa de valer, e quem a usar não vai se chamar de teste.
+
+### Dois enganos meus, ambos no teste
+
+Semeei uma tabela de franquia esperando que ela precificasse o excedente; quem
+o precifica é `contrato_item.valor_excedente_unitario`. E cadastrei a categoria
+sem `tipo_medidor_padrao`, que o banco recusa — categoria sem medidor não cobra
+página, e a recusa estava certa.
+
+Os dois seguem o padrão desta auditoria: o código estava certo e o teste olhava
+para o lugar errado.

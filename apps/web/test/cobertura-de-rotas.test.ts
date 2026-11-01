@@ -81,18 +81,31 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'relatorio:agendar': 'idem',
 
   /*
-   * Faturamento. A tela existe; o modelo de dados de pré-fatura e fatura, não.
-   * Entra depois da migração correspondente, que é a ordem acordada — modelagem
-   * antes de API.
+   * Faturamento — e a razão mudou depois da 0030.
+   *
+   * O motivo registrado era "modelagem pendente", e estava errado: a cobrança
+   * contratual já era `titulo_receber`, e a composição dela passou a ser
+   * `titulo_receber_item`. O que falta não é tabela.
+   *
+   * O que falta é **emissão fiscal**: série, chave de NF-e, linha digitável de
+   * boleto. Isso é integração com a SEFAZ e com um emissor, e depende de
+   * decisões que ninguém tomou — qual provedor, qual regime tributário, qual
+   * série por filial. Modelar os campos agora seria criar colunas cujo
+   * preenchimento ninguém sabe descrever.
+   *
+   * Pendência de **decisão**, portanto, e não de construção. A distinção
+   * importa: a primeira espera alguém escolher, a segunda espera alguém
+   * trabalhar — e tratá-las igual faz a segunda parecer bloqueada quando não
+   * está.
    */
-  'prefatura:gerar': 'pré-fatura: modelagem pendente (tela existe, tabela não)',
+  'prefatura:gerar': 'a prévia já existe como previa-fechamento; falta a emissão fiscal',
   'prefatura:editar': 'idem',
-  'prefatura:aprovar': 'idem',
-  'fatura:emitir': 'fatura: modelagem pendente',
-  'fatura:cancelar': 'idem',
-  'fatura:desconto_aplicar': 'idem',
-  'fatura:nota_correcao': 'idem',
-  'faturamento:exportar': 'idem',
+  'prefatura:aprovar': 'aprovação já existe em contas a receber, por alçada',
+  'fatura:emitir': 'emissão fiscal: pendência de decisão (provedor, regime, série)',
+  'fatura:cancelar': 'o cancelamento da cobrança existe em contas a receber',
+  'fatura:desconto_aplicar': 'o desconto existe em contas a receber',
+  'fatura:nota_correcao': 'nota de correção: depende do mesmo provedor fiscal',
+  'faturamento:exportar': 'exportação fiscal: depende do mesmo provedor',
 
   /*
    * Capacidades transversais que hoje são de configuração de ambiente, não de
