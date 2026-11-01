@@ -162,6 +162,26 @@ insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo
    '11111111-1111-4111-8111-1111111150a1', 'TENANT');
 
 -- -----------------------------------------------------------------------------
+-- Estoque: um depósito e uma peça, com política de reposição.
+--
+-- O ponto de pedido em 5 sobre saldo zero é deliberado: a peça já nasce
+-- abaixo dele, que é o estado que a fila de compra existe para mostrar.
+-- -----------------------------------------------------------------------------
+insert into public.deposito (id, tenant_id, filial_id, codigo, nome, tipo) values
+  ('11111111-1111-4111-8111-11111111f101', '11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-1111111111f1', 'ALM-01', 'Almoxarifado Central', 'ALMOXARIFADO');
+
+insert into public.peca (id, tenant_id, codigo_interno, descricao, unidade, criticidade) values
+  ('11111111-1111-4111-8111-11111111f201', '11111111-1111-4111-8111-111111111111',
+   'ROL-001', 'Rolete de tracao', 'UN', 'ALTA');
+
+insert into public.politica_reposicao
+  (tenant_id, peca_id, deposito_id, estoque_minimo, ponto_pedido, lead_time_dias) values
+  ('11111111-1111-4111-8111-111111111111',
+   '11111111-1111-4111-8111-11111111f201',
+   '11111111-1111-4111-8111-11111111f101', 2, 5, 7);
+
+-- -----------------------------------------------------------------------------
 -- Dois técnicos: um com login e outro sem.
 --
 -- O sem login não é enfeite — é o terceirizado que recebe ordem pelo
