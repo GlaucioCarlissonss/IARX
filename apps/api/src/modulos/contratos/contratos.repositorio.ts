@@ -289,6 +289,36 @@ export class ContratosRepositorio {
     )
     return l?.situacao_credito ?? null
   }
+
+  /**
+   * Muda o status do contrato.
+   *
+   * Um método para todas as transições, e não um por ação. A decisão de qual
+   * transição é legal mora no gatilho (Anexo B.2); repeti-la aqui em onze
+   * métodos criaria onze lugares para ela divergir — e o gatilho continuaria
+   * sendo o único que vale.
+   *
+   * O que varia entre as ações é o **motivo** e a permissão, e esses ficam
+   * onde variam: no controller e no corpo.
+   */
+  async mudarStatus(
+    db: Executor,
+    id: string,
+    status: string,
+    motivo: string | null,
+    autorId: string,
+  ): Promise<Contrato | null> {
+    const linha = await db.consultarUm<{ id: string }>(
+      `update public.contrato
+          set status = $2::app.contrato_status,
+              motivo_status = coalesce($3, motivo_status),
+              updated_by = $4
+        where id = $1 and deleted_at is null
+        returning id`,
+      [id, status, motivo, autorId],
+    )
+    return linha ? this.porId(db, id) : null
+  }
 }
 
 function mapearContrato(l: LinhaContrato): Contrato {
@@ -327,4 +357,5 @@ function mapearItem(l: LinhaItem): ContratoItem {
     status: l.status,
     version: l.version,
   }
+
 }

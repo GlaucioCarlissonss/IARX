@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  ContratoStatus,
   AcaoSugerida,
   AlocarItem,
   Contrato,
@@ -225,5 +226,26 @@ export class ContratosService {
       ],
       acoes,
     })
+  }
+
+  /**
+   * As transições do ciclo de vida (Anexo B.2).
+   *
+   * Um método, e não onze. A decisão de qual transição é legal mora no gatilho
+   * do banco; repeti-la aqui criaria um segundo lugar para ela divergir, e o
+   * segundo valeria só para quem passa por esta API.
+   *
+   * O que muda entre as ações é a permissão — que fica no controller — e o
+   * motivo, que fica no corpo de quem o exige. Nenhuma das duas coisas é
+   * decisão de máquina de estados.
+   */
+  async mudarStatus(id: string, status: ContratoStatus, motivo: string | null): Promise<Contrato> {
+    const claims = exigirClaims()
+    const contrato = await this.banco.emTransacao(
+      (db) => this.repo.mudarStatus(db, id, status, motivo, claims.usuario_id),
+      { motivo: motivo ?? `contrato ${status.toLowerCase()}` },
+    )
+    if (!contrato) throw naoEncontrado('contrato')
+    return contrato
   }
 }

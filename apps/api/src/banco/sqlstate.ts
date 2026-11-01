@@ -67,6 +67,47 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       errors: [{ field: 'franquia_quantidade', code: 'FRANQUIA_INCOMPLETA' }],
     }),
 
+  contrato_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição não permitida', {
+      detail:
+        'O contrato não pode ir deste estado para o informado. Renovação que muda vigência cria uma nova versão, vinculada à original.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  contrato_sem_item: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Contrato sem item', {
+      detail:
+        'Um contrato sem item em aprovação faz o gestor aprovar nada: ele ativa e a primeira competência fecha em zero.',
+      errors: [{ field: 'itens', code: 'ITEM_OBRIGATORIO' }],
+      acoes: [{ code: 'ALOCAR_ITEM', descricao: 'Alocar ao menos um equipamento' }],
+    }),
+
+  contrato_item_em_campo: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Há itens em campo', {
+      detail:
+        'Encerrar com equipamento instalado tira o ativo do parque alocável e deixa a máquina no cliente — ninguém a cobra e ninguém a busca.',
+      errors: [{ field: 'itens', code: 'ITEM_EM_CAMPO' }],
+      acoes: [{ code: 'REGISTRAR_DEVOLUCAO', descricao: 'Registrar a devolução dos itens' }],
+    }),
+
+  contrato_item_entregue: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Contrato já teve item entregue', {
+      detail:
+        'Cancelamento é para contrato que nunca vigorou. Com item entregue, a saída é distrato ou encerramento — a diferença é que o distrato calcula multa.',
+      errors: [{ field: 'status', code: 'ITEM_JA_ENTREGUE' }],
+      acoes: [
+        { code: 'DISTRATAR', descricao: 'Distratar, se for rescisão antecipada' },
+        { code: 'ENCERRAR', descricao: 'Encerrar, após a devolução dos itens' },
+      ],
+    }),
+
+  contrato_motivo_obrigatorio: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Motivo obrigatório', {
+      detail:
+        'Suspensão, distrato e encerramento interrompem faturamento ou liberam ativo. Sem motivo registrado, nenhuma das três se explica depois.',
+      errors: [{ field: 'motivo', code: 'JUSTIFICATIVA_OBRIGATORIA' }],
+    }),
+
   os_transicao_valida: () =>
     new ErroDominio('TRANSICAO_INVALIDA', 'Transição não permitida', {
       detail:

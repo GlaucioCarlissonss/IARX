@@ -194,3 +194,47 @@ export const EncerrarItem = z.object({
   encerrado_em: DataHora,
   motivo: z.string().min(5),
 })
+
+/* ------------------------------------------------- ciclo de vida (B.2) */
+
+/**
+ * As transições do contrato, como ações nomeadas.
+ *
+ * Pelo mesmo motivo da ordem de serviço: um `PATCH status` tornaria as onze
+ * permissões do Anexo C a mesma coisa na prática — quem pudesse mudar o status
+ * levaria o contrato de rascunho a ativo sozinho, sem passar por aprovação nem
+ * por assinatura. A separação entre `contrato:aprovar` e `contrato:ativar` só
+ * significa alguma coisa se forem rotas diferentes.
+ *
+ * A máquina mora no banco (gatilho `contrato_transicao`). Estes esquemas
+ * carregam apenas o que **cada transição exige** — e a exigência é a parte que
+ * um `PATCH` genérico não teria como impor.
+ */
+
+/** Motivo obrigatório: suspensão, distrato e encerramento mexem em dinheiro. */
+const Motivo = z.string().trim().min(10, 'descreva o motivo')
+
+export const SuspenderContrato = z.object({
+  motivo: Motivo,
+  /** Até quando, quando se sabe. Suspensão sem prazo vira esquecimento. */
+  previsao_retomada: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+})
+export type SuspenderContrato = z.infer<typeof SuspenderContrato>
+
+export const EncerrarContrato = z.object({ motivo: Motivo })
+export type EncerrarContrato = z.infer<typeof EncerrarContrato>
+
+export const DistratarContrato = z.object({
+  motivo: Motivo,
+  /**
+   * Distrato antes do prazo mínimo calcula multa (F-CTR-13). O valor vem de
+   * fora porque depende de negociação — e por isso precisa ficar registrado
+   * junto com o motivo, não embutido num título solto que ninguém relaciona ao
+   * contrato depois.
+   */
+  multa: Dinheiro.nullish(),
+})
+export type DistratarContrato = z.infer<typeof DistratarContrato>
+
+export const ReprovarContrato = z.object({ motivo: Motivo })
+export type ReprovarContrato = z.infer<typeof ReprovarContrato>

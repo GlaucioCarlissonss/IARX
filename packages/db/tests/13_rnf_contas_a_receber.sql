@@ -277,7 +277,10 @@ begin
 
   -- O contrato 002 é suspenso **antes** do fechamento: é o cenário da RN-F11,
   -- e ele tem de conviver com o fechamento dos outros dois na mesma chamada.
-  update public.contrato set status = 'SUSPENSO'
+  -- Motivo obrigatório desde a 0029: o Anexo B.2 exige "motivo e período
+  -- informados" na suspensão, e a regra passou a ser imposta por gatilho.
+  update public.contrato set status = 'SUSPENSO',
+         motivo_status = 'suspensao contratual para a massa deste teste'
    where id = (select valor::uuid from _ctx where chave = 'contrato_susp');
 
   set local role iarx_app;

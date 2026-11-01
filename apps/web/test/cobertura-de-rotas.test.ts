@@ -164,19 +164,15 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
    * e no catálogo, com a máquina de estados de contrato já no banco: aprovar,
    * ativar, suspender, retomar, renovar, encerrar, distratar, cancelar.
    *
-   * A leitura e a criação existem; o ciclo, não. É a maior pendência que
-   * sobrou, e é a que o levantamento manual perdeu — porque listar o que falta
-   * à mão é listar o que se lembra.
+   * **Construídas.** Nove das dezoito saíram desta lista quando as rotas
+   * entraram: submeter, aprovar, reprovar, ativar, suspender, retomar,
+   * renovar, encerrar, distratar e cancelar. Ficam as de reajuste, desconto e
+   * item, que dependem de alçada e de cálculo ainda não construídos.
+   *
+   * O que a lista provou ao encolher é o que ela existe para provar: entrar
+   * exige escrever por quê, sair acontece sozinho quando a rota aparece, e um
+   * teste reprova quem esquecer de tirar.
    */
-  'contrato:editar': 'ciclo de vida do contrato: ação pendente',
-  'contrato:aprovar': 'idem',
-  'contrato:ativar': 'idem',
-  'contrato:suspender': 'idem',
-  'contrato:retomar': 'idem',
-  'contrato:renovar': 'idem',
-  'contrato:encerrar': 'idem',
-  'contrato:distratar': 'idem',
-  'contrato:cancelar': 'idem',
   'contrato:reajuste_aprovar': 'idem',
   'contrato:desconto_conceder': 'idem',
   'contrato:item_encerrar': 'item de contrato: ação pendente',

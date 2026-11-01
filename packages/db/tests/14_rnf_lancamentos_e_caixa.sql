@@ -529,7 +529,10 @@ begin
     raise exception 'FALHA: a exceção antiga sobreviveu à conversão bem-sucedida';
   end if;
 
-  update public.contrato set status = 'SUSPENSO' where id = v_susp;
+  -- Motivo obrigatório desde a 0029 (Anexo B.2).
+  update public.contrato set status = 'SUSPENSO',
+         motivo_status = 'suspensao contratual para a massa deste teste'
+   where id = v_susp;
   reset role;
   raise notice 'caso 7 OK — RN-F16: recusa com motivo, e a recusa não é definitiva';
 end $$;

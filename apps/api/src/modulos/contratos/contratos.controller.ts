@@ -1,5 +1,13 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
-import { AlocarItem, CriarContrato, ListarContratos } from '@iarx/contracts'
+import {
+  AlocarItem,
+  CriarContrato,
+  DistratarContrato,
+  EncerrarContrato,
+  ListarContratos,
+  ReprovarContrato,
+  SuspenderContrato,
+} from '@iarx/contracts'
 import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { ContratosService } from './contratos.service.js'
@@ -53,5 +61,128 @@ export class ContratosController {
     @Body(validar(AlocarItem)) corpo: AlocarItem,
   ) {
     return this.servico.alocarItem(id, corpo)
+  }
+
+  /* ------------------------------------------- ciclo de vida (Anexo B.2) */
+
+  /*
+   * Uma rota por transição, e não um `PATCH status`.
+   *
+   * O Anexo C separa `contrato:aprovar` de `contrato:ativar` de
+   * `contrato:encerrar`, e essa separação só significa alguma coisa se forem
+   * rotas diferentes: com um `PATCH` genérico, quem pudesse mudar o status
+   * levaria o contrato de rascunho a ativo sozinho — sem aprovação de gestor e
+   * sem assinatura.
+   *
+   * Todas respondem 200: o contrato já existe e já tem URL. A ação muda o
+   * estado dele, não cria recurso.
+   *
+   * Nenhuma confere o estado de partida. A máquina é gatilho no banco, e
+   * conferir aqui criaria um segundo lugar para a mesma regra — com o segundo
+   * valendo só para quem passa por esta API, e ainda perdendo a corrida com
+   * duas requisições simultâneas.
+   */
+
+  @Post(':id/submeter')
+  @HttpCode(200)
+  @ExigePermissao('contrato:editar')
+  submeter(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.mudarStatus(id, 'EM_APROVACAO', null)
+  }
+
+  @Post(':id/aprovar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:aprovar')
+  aprovar(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.mudarStatus(id, 'AGUARDANDO_ASSINATURA', null)
+  }
+
+  /** Reprovação devolve para ajuste, com o motivo registrado. */
+  @Post(':id/reprovar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:aprovar')
+  reprovar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(ReprovarContrato)) corpo: ReprovarContrato,
+  ) {
+    return this.servico.mudarStatus(id, 'RASCUNHO', corpo.motivo)
+  }
+
+  /** Ativação reserva os itens planejados — efeito do gatilho, não daqui. */
+  @Post(':id/ativar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:ativar')
+  ativar(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.mudarStatus(id, 'ATIVO', null)
+  }
+
+  @Post(':id/suspender')
+  @HttpCode(200)
+  @ExigePermissao('contrato:suspender')
+  suspender(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(SuspenderContrato)) corpo: SuspenderContrato,
+  ) {
+    return this.servico.mudarStatus(id, 'SUSPENSO', corpo.motivo)
+  }
+
+  @Post(':id/retomar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:retomar')
+  retomar(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.mudarStatus(id, 'ATIVO', null)
+  }
+
+  @Post(':id/renovar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:renovar')
+  renovar(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
+    return this.servico.mudarStatus(id, 'EM_RENOVACAO', null)
+  }
+
+  /**
+   * Encerramento.
+   *
+   * O gatilho recusa se houver item em campo, e essa recusa é a mais
+   * importante do módulo: encerrar com equipamento instalado tira o ativo do
+   * parque alocável e deixa a máquina no cliente — ninguém a cobra, ninguém a
+   * busca, e ela continua existindo.
+   */
+  @Post(':id/encerrar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:encerrar')
+  encerrar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(EncerrarContrato)) corpo: EncerrarContrato,
+  ) {
+    return this.servico.mudarStatus(id, 'ENCERRADO', corpo.motivo)
+  }
+
+  /** Distrato é rescisão antes do prazo mínimo, e calcula multa (F-CTR-13). */
+  @Post(':id/distratar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:distratar')
+  distratar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(DistratarContrato)) corpo: DistratarContrato,
+  ) {
+    return this.servico.mudarStatus(id, 'DISTRATADO', corpo.motivo)
+  }
+
+  /**
+   * Cancelamento — só antes de qualquer entrega.
+   *
+   * Cancelar é "este contrato nunca existiu na prática". Com item entregue a
+   * saída é distrato ou encerramento, e a diferença importa porque uma calcula
+   * multa e a outra não. O gatilho é quem recusa.
+   */
+  @Post(':id/cancelar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:cancelar')
+  cancelar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(EncerrarContrato)) corpo: EncerrarContrato,
+  ) {
+    return this.servico.mudarStatus(id, 'CANCELADO', corpo.motivo)
   }
 }
