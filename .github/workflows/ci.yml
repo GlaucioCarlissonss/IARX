@@ -4,6 +4,14 @@ on:
   push:
     branches: ['**']
   pull_request:
+  # Reexecução manual.
+  #
+  # O grupo de concorrência abaixo cancela a execução em andamento a cada push
+  # novo, o que é certo — ninguém quer esperar o CI de um commit que já foi
+  # substituído. O efeito colateral é que uma sequência rápida de pushes deixa
+  # o branch sem veredito: a última execução foi cancelada, e sem gatilho
+  # manual a única saída é um commit vazio.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
