@@ -1127,12 +1127,29 @@ end $$;
 do $$
 declare v_n integer; v_col text;
 begin
+  /*
+   * Fronteira de palavra, e não `%posicao%`.
+   *
+   * O padrão solto acusava `politica_reposicao` — "re**posicao**" —, uma
+   * tabela de política de reposição de estoque que não tem nada a ver com
+   * posição de caixa. Qualquer palavra terminada em "-posição" cairia aqui:
+   * composição, disposição, exposição.
+   *
+   * Portão que reprova quem está certo é desligado antes de pegar quem está
+   * errado, e esta base já pagou por isso duas vezes — a verificação textual
+   * de RLS e a de filtros de tela. A regra continua a mesma; só a detecção
+   * passou a corresponder a ela.
+   */
   select count(*) into v_n from information_schema.tables
    where table_schema = 'public'
-     and (table_name like '%posicao%' or table_name like '%projecao%'
-          or table_name like '%fluxo_caixa%' or table_name like '%saldo_dia%');
+     and (table_name ~ '(^|_)posicao($|_)' or table_name ~ '(^|_)projecao($|_)'
+          or table_name ~ '(^|_)fluxo_caixa($|_)' or table_name ~ '(^|_)saldo_dia($|_)');
   if v_n <> 0 then
-    raise exception 'FALHA: existe tabela de posição/projeção gravada';
+    raise exception 'FALHA: existe tabela de posição/projeção gravada: %',
+      (select string_agg(table_name, ', ') from information_schema.tables
+        where table_schema = 'public'
+          and (table_name ~ '(^|_)posicao($|_)' or table_name ~ '(^|_)projecao($|_)'
+               or table_name ~ '(^|_)fluxo_caixa($|_)' or table_name ~ '(^|_)saldo_dia($|_)'));
   end if;
 
   select string_agg(table_name || '.' || column_name, ', ') into v_col
