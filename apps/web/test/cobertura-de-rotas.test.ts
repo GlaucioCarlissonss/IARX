@@ -182,10 +182,22 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
    * exige escrever por quê, sair acontece sozinho quando a rota aparece, e um
    * teste reprova quem esquecer de tirar.
    */
-  'contrato:reajuste_aprovar': 'idem',
-  'contrato:desconto_conceder': 'idem',
-  'contrato:item_encerrar': 'item de contrato: ação pendente',
-  'contrato:item_substituir': 'idem',
+  /*
+   * Conferida no corpo, não no decorador — e por isso fica aqui.
+   *
+   * `contrato:desconto_conceder` é exigida em `alocarItem` quando o payload
+   * traz desconto; a mesma alocação sem desconto continua precisando apenas de
+   * `contrato:item_alocar`. Pôr `@ExigePermissao('contrato:desconto_conceder')`
+   * na rota obrigaria todo operador a tê-la para alocar, que é o colapso
+   * oposto ao que RN-009 quer evitar.
+   *
+   * Este portão lê decoradores, então ele não a enxerga. Declará-la como
+   * "coberta" afrouxaria a medição; deixá-la aqui com o motivo certo mantém a
+   * lista verdadeira — ela registra o que o portão não alcança, não só o que
+   * não foi construído.
+   */
+  'contrato:desconto_conceder':
+    'exigida no corpo de POST /contratos/{id}/itens (RN-009), não por decorador de rota',
 
   /* Outras ações previstas e não construídas. */
   'cliente:inativar': 'inativação de cliente: ação pendente',

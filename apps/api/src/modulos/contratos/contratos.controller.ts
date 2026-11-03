@@ -4,18 +4,26 @@ import {
   CriarContrato,
   DistratarContrato,
   EncerrarContrato,
+  EncerrarItem,
   ListarContratos,
+  ListarReajustes,
+  ProporReajuste,
   ReprovarContrato,
+  SubstituirItem,
   SuspenderContrato,
 } from '@iarx/contracts'
 import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { ContratosService } from './contratos.service.js'
+import { ReajustesService } from './reajustes.service.js'
 
 /** `CTR` — Contratos e alocação de itens (Anexo D.2). */
 @Controller('api/v1/contratos')
 export class ContratosController {
-  constructor(private readonly servico: ContratosService) {}
+  constructor(
+    private readonly servico: ContratosService,
+    private readonly reajustes: ReajustesService,
+  ) {}
 
   @Get()
   @ExigePermissao('contrato:ler')
@@ -184,5 +192,68 @@ export class ContratosController {
     @Body(validar(EncerrarContrato)) corpo: EncerrarContrato,
   ) {
     return this.servico.mudarStatus(id, 'CANCELADO', corpo.motivo)
+  }
+
+  /* ----------------------------------------------------- ações de item --- */
+
+  /**
+   * Encerra a cobrança de um item sem mexer no resto do contrato — a devolução
+   * de uma máquina num parque de quarenta.
+   */
+  @Post(':id/itens/:itemId/encerrar')
+  @HttpCode(200)
+  @ExigePermissao('contrato:item_encerrar')
+  encerrarItem(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('itemId', new ParseUUIDPipe({ version: '4' })) itemId: string,
+    @Body(validar(EncerrarItem)) corpo: EncerrarItem,
+  ) {
+    return this.reajustes.encerrarItem(id, itemId, corpo)
+  }
+
+  /**
+   * Troca o ativo do item: encerra o atual como SUBSTITUIDO e cria o sucessor
+   * com a mesma precificação, vinculado ao antecessor.
+   */
+  @Post(':id/itens/:itemId/substituir')
+  @HttpCode(200)
+  @ExigePermissao('contrato:item_substituir')
+  @Idempotente()
+  substituirItem(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Param('itemId', new ParseUUIDPipe({ version: '4' })) itemId: string,
+    @Body(validar(SubstituirItem)) corpo: SubstituirItem,
+  ) {
+    return this.reajustes.substituirItem(id, itemId, corpo)
+  }
+
+  /* ---------------------------------------------------------- reajuste --- */
+
+  @Get(':id/reajustes')
+  @ExigePermissao('contrato:ler')
+  reajustesDoContrato(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query(validar(ListarReajustes)) filtro: ListarReajustes,
+  ) {
+    return this.reajustes.listar({ ...filtro, contrato_id: id })
+  }
+
+  /**
+   * Propõe o reajuste da competência de aniversário.
+   *
+   * Mesma permissão da aprovação porque o Anexo C traz uma só —
+   * `contrato:reajuste_aprovar`. A separação que RN-008 exige é entre **propor
+   * e aplicar**, e ela está nas rotas e na máquina do banco: proposta não vira
+   * cobrança sem passar por `aprovar`.
+   */
+  @Post(':id/reajustes')
+  @HttpCode(201)
+  @ExigePermissao('contrato:reajuste_aprovar')
+  @Idempotente()
+  proporReajuste(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(ProporReajuste)) corpo: ProporReajuste,
+  ) {
+    return this.reajustes.propor(id, corpo)
   }
 }

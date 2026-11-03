@@ -187,13 +187,19 @@ export const AlocarItem = z
 
 export type AlocarItem = z.infer<typeof AlocarItem>
 
-/* Sem consumidor (Anexo X §X.2): esquema de `contrato:item_encerrar`, rota
-   especificada no Anexo D e **não construída**. Apagá-lo removeria a
-   especificação, não código morto. */
+/**
+ * Encerramento de item — `contrato:item_encerrar`.
+ *
+ * Encerrar o item é o que para a cobrança daquela máquina sem mexer no resto do
+ * contrato. `encerrado_em` vem no corpo e não do relógio porque a devolução
+ * aconteceu quando aconteceu: lançá-la no dia em que alguém registrou cobraria
+ * dias em que o equipamento já estava de volta na base.
+ */
 export const EncerrarItem = z.object({
   encerrado_em: DataHora,
   motivo: z.string().min(5),
 })
+export type EncerrarItem = z.infer<typeof EncerrarItem>
 
 /* ------------------------------------------------- ciclo de vida (B.2) */
 

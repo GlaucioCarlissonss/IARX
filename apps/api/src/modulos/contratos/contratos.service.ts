@@ -143,6 +143,31 @@ export class ContratosService {
           throw naoEncontrado('Equipamento', dto.equipamento_id)
         }
 
+        /*
+         * RN-009 — conceder desconto é permissão própria.
+         *
+         * Está aqui, e não no decorador da rota, porque depende do corpo: a
+         * mesma alocação sem desconto só exige `contrato:item_alocar`. Exigir
+         * `desconto_conceder` na rota inteira obrigaria todo operador a tê-la
+         * para alocar, que é o colapso oposto.
+         *
+         * O teto por perfil é conferido no banco, pelo gatilho da 0033. Esta
+         * checagem é a anterior: se a pessoa pode conceder desconto.
+         */
+        if ((dto.desconto_percentual ?? 0) > 0) {
+          const claims = exigirClaims()
+          if (!claims.permissoes.includes('contrato:desconto_conceder')) {
+            throw new ErroDominio('SEM_PERMISSAO', 'Conceder desconto exige permissão própria', {
+              detail:
+                'Desconto em item de contrato se repete em toda competência até o fim da vigência. RN-009 o separa da alocação, e o teto por perfil é conferido depois.',
+              errors: [{ field: 'desconto_percentual', code: 'PERMISSAO_AUSENTE' }],
+              acoes: [
+                { code: 'ALOCAR_SEM_DESCONTO', descricao: 'Alocar sem desconto e pedir a concessão a quem tem alçada' },
+              ],
+            })
+          }
+        }
+
         return this.repo.inserirItem(db, contratoId, dto)
       })
     } catch (e) {

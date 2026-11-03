@@ -10,6 +10,9 @@ import { ProblemaFilter } from './comum/problema.filter.js'
 import { ContratosController } from './modulos/contratos/contratos.controller.js'
 import { ContratosRepositorio } from './modulos/contratos/contratos.repositorio.js'
 import { ContratosService } from './modulos/contratos/contratos.service.js'
+import { ReajustesController } from './modulos/contratos/reajustes.controller.js'
+import { ReajustesRepositorio } from './modulos/contratos/reajustes.repositorio.js'
+import { ReajustesService } from './modulos/contratos/reajustes.service.js'
 import { EquipamentosController } from './modulos/equipamentos/equipamentos.controller.js'
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
@@ -125,6 +128,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     EquipamentosController,
     TransferenciasController,
     ContratosController,
+    ReajustesController,
     NotasFiscaisController,
     FornecedoresController,
     LocaisController,
@@ -165,6 +169,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     MovimentacaoService,
     ContratosRepositorio,
     ContratosService,
+    ReajustesRepositorio,
+    ReajustesService,
     NotasFiscaisRepositorio,
     NotasFiscaisService,
     LocaisRepositorio,

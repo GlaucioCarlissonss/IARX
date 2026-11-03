@@ -123,6 +123,51 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       acoes: [{ code: 'OUTRO_VALIDADOR', descricao: 'Pedir a validação a outro supervisor' }],
     }),
 
+  /* ------------------------------------- reajuste e alçada de desconto --- */
+
+  contrato_desconto_acima_da_alcada: () =>
+    new ErroDominio('SEM_PERMISSAO', 'Desconto acima da alçada', {
+      detail:
+        'RN-009: o percentual excede o teto do seu perfil. Desconto em item de contrato não é um abatimento único — ele se repete em toda competência até o fim da vigência.',
+      errors: [{ field: 'desconto_percentual', code: 'ACIMA_DA_ALCADA' }],
+      acoes: [{ code: 'PEDIR_APROVACAO', descricao: 'Pedir a concessão a quem tem alçada maior' }],
+    }),
+
+  reajuste_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição de reajuste não permitida', {
+      detail:
+        'RN-008: a proposta passa por aprovação antes de ser aplicada, e o que já foi aplicado ou renunciado não volta atrás.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  reajuste_nasce_proposto: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Reajuste nasce como proposta', {
+      detail: 'A aplicação exige aprovação, e aprovação exige que haja uma proposta a aprovar.',
+      errors: [{ field: 'status', code: 'ESTADO_INICIAL_INVALIDO' }],
+    }),
+
+  reajuste_renuncia_com_motivo: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Renúncia exige motivo', {
+      detail:
+        'Reajuste não aplicado é receita renunciada e entra no indicador do período. Sem motivo, ninguém sabe depois por que se deixou de cobrar.',
+      errors: [{ field: 'motivo', code: 'JUSTIFICATIVA_OBRIGATORIA' }],
+    }),
+
+  reajuste_imutavel: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Reajuste não é apagado', {
+      detail:
+        'A saída é renunciar com motivo. Apagar faria o indicador de receita renunciada medir zero justamente nos casos que ele existe para medir.',
+      errors: [{ field: 'id', code: 'REGISTRO_IMUTAVEL' }],
+      acoes: [{ code: 'RENUNCIAR', descricao: 'Renunciar ao reajuste, registrando o motivo' }],
+    }),
+
+  reajuste_competencia_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Já há reajuste nesta competência', {
+      detail:
+        'Existe um reajuste vivo para este contrato na competência informada. Renuncie ao atual antes de propor outro — a renúncia fica registrada.',
+      errors: [{ field: 'competencia', code: 'REAJUSTE_DUPLICADO' }],
+    }),
+
   /* ------------------------------------------ ciclo de vida do ativo --- */
 
   equipamento_transicao_valida: () =>
