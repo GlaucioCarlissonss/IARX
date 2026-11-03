@@ -123,6 +123,74 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       acoes: [{ code: 'OUTRO_VALIDADOR', descricao: 'Pedir a validação a outro supervisor' }],
     }),
 
+  /* ------------------------------------------ ciclo de vida do ativo --- */
+
+  equipamento_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição não permitida', {
+      detail:
+        'O equipamento não pode ir deste estado para o informado. Entrega passa por reserva e trânsito; retorno passa por inspeção.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  equipamento_alocado_nao_baixa: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Equipamento alocado em contrato', {
+      detail:
+        'Baixa é o encerramento patrimonial: o ativo sai do balanço e do parque alocável. Com item de contrato vigente, a máquina continua no cliente — que segue pagando por um equipamento que o sistema passa a dizer que não existe.',
+      errors: [{ field: 'status', code: 'ALOCACAO_VIGENTE' }],
+      acoes: [{ code: 'ENCERRAR_ITENS', descricao: 'Encerrar os itens de contrato antes da baixa' }],
+    }),
+
+  equipamento_com_os_nao_baixa: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Equipamento com ordem de serviço aberta', {
+      detail:
+        'A ordem em aberto ainda vai acumular custo de mão de obra, peça e deslocamento. Baixar antes é perder esse custo de vista no momento em que ele é apurado.',
+      errors: [{ field: 'status', code: 'OS_ABERTA' }],
+      acoes: [{ code: 'CONCLUIR_OS', descricao: 'Concluir ou cancelar as ordens de serviço' }],
+    }),
+
+  equipamento_retorno_alocado: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'O ativo ainda está em contrato', {
+      detail:
+        'O retorno de manutenção de equipamento com item de contrato vigente é LOCADO, não DISPONÍVEL. Marcá-lo disponível o devolve ao parque alocável enquanto ele está na mesa do cliente, e o próximo contrato a reservá-lo descobre isso na entrega.',
+      errors: [{ field: 'status', code: 'RETORNO_INCOERENTE' }],
+      acoes: [{ code: 'RETORNAR_LOCADO', descricao: 'Registrar o retorno como LOCADO' }],
+    }),
+
+  equipamento_retorno_sem_contrato: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'O ativo não tem contrato vigente', {
+      detail:
+        'O retorno de manutenção de equipamento sem item de contrato vigente é DISPONÍVEL. LOCADO sem contrato é uma máquina que o parque considera entregue e que nenhuma cobrança alcança.',
+      errors: [{ field: 'status', code: 'RETORNO_INCOERENTE' }],
+      acoes: [{ code: 'RETORNAR_DISPONIVEL', descricao: 'Registrar o retorno como DISPONÍVEL' }],
+    }),
+
+  equipamento_ja_alocado: () =>
+    new ErroDominio('EQUIPAMENTO_JA_ALOCADO', 'Equipamento já alocado', {
+      detail: 'Existe item de contrato vigente para este equipamento.',
+      errors: [{ field: 'status', code: 'ALOCACAO_VIGENTE' }],
+    }),
+
+  equipamento_indisponivel_alocacao: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Equipamento indisponível para alocação', {
+      detail:
+        'RN-003 e RN-014: o ativo está bloqueado ou em estado operacional que impede a alocação (manutenção, trânsito, extravio, bloqueio ou baixa).',
+      errors: [{ field: 'equipamento_id', code: 'ATIVO_INDISPONIVEL' }],
+      acoes: [{ code: 'DESBLOQUEAR', descricao: 'Verificar bloqueio por preventiva vencida' }],
+    }),
+
+  equipamento_motivo_obrigatorio: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Motivo obrigatório', {
+      detail:
+        'RN-010: todo estado diferente de disponível, reservado ou locado exige motivo tipificado — é ele que explica, depois, por que o ativo não estava rendendo.',
+      errors: [{ field: 'motivo', code: 'JUSTIFICATIVA_OBRIGATORIA' }],
+    }),
+
+  equipamento_bloqueio_com_motivo: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Bloqueio sem justificativa', {
+      detail: 'RN-014: bloquear um ativo tira receita; sem motivo registrado, ninguém sabe o que destravar.',
+      errors: [{ field: 'motivo', code: 'JUSTIFICATIVA_OBRIGATORIA' }],
+    }),
+
   ci_desconto_com_motivo: () =>
     new ErroDominio('REGRA_DE_NEGOCIO', 'Desconto sem justificativa', {
       detail: 'RN-009: todo desconto exige motivo registrado, porque ele é auditável.',
