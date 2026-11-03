@@ -133,11 +133,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'medicao:consolidar': 'parte do fechamento de competência, sem ação própria ainda',
   'medicao:estimar': 'idem',
 
-  /* Estoque: reserva e política entram com a tela de OS consumindo peça. */
-  'estoque:reservar': 'reserva de peça na OS: tela pendente',
-  'estoque:politica_definir': 'política de reposição: edição pendente (leitura já existe)',
-  'estoque:ajustar': 'ajuste entra hoje como movimento AJUSTE_INVENTARIO',
-
   /* Peça: cadastro ainda não tem tela de edição. */
   'peca:criar': 'cadastro de peça: tela pendente',
   'peca:editar': 'idem',

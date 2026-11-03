@@ -123,6 +123,53 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       acoes: [{ code: 'OUTRO_VALIDADOR', descricao: 'Pedir a validação a outro supervisor' }],
     }),
 
+  /* --------------------------------------- reserva de peça e inventário --- */
+
+  os_peca_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição de peça não permitida', {
+      detail:
+        'Anexo B.5. Peça consumida não volta por edição de status — volta por entrada de estoque, que deixa rastro e recalcula o custo médio.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  os_peca_sem_saldo: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Sem saldo desta peça no depósito', {
+      detail: 'Não há registro de saldo da peça no depósito informado.',
+      errors: [{ field: 'deposito_id', code: 'SEM_SALDO' }],
+      acoes: [{ code: 'REGISTRAR_ENTRADA', descricao: 'Registrar a entrada no depósito' }],
+    }),
+
+  os_peca_sem_deposito: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Reserva sem depósito', {
+      detail: 'O saldo é por depósito: sem ele não há de onde reservar nem onde baixar.',
+      errors: [{ field: 'deposito_id', code: 'OBRIGATORIO' }],
+    }),
+
+  os_peca_nasce_solicitada: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Peça de OS nasce solicitada', {
+      detail: 'Entre pedir e reservar há a pergunta "tem saldo?", e é ela que leva a ordem para aguardando peça quando a resposta é não.',
+      errors: [{ field: 'status', code: 'ESTADO_INICIAL_INVALIDO' }],
+    }),
+
+  os_peca_sem_destino: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Há peças sem destino definido', {
+      detail:
+        'RN-015: concluir com peça reservada deixa saldo comprometido por uma ordem que acabou — a peça não está na prateleira para a próxima OS, e não está no custo desta.',
+      errors: [{ field: 'pecas', code: 'DESTINO_INDEFINIDO' }],
+      acoes: [
+        { code: 'CONSUMIR', descricao: 'Baixar as peças aplicadas' },
+        { code: 'DEVOLVER', descricao: 'Devolver as que não foram usadas' },
+      ],
+    }),
+
+  estoque_ajuste_acima_da_alcada: () =>
+    new ErroDominio('SEM_PERMISSAO', 'Ajuste acima da alçada', {
+      detail:
+        'O valor do ajuste excede o teto do seu perfil. Ajuste é o único movimento que cria ou destrói quantidade sem contrapartida.',
+      errors: [{ field: 'quantidade', code: 'ACIMA_DA_ALCADA' }],
+      acoes: [{ code: 'PEDIR_APROVACAO', descricao: 'Pedir o ajuste a quem tem alçada maior' }],
+    }),
+
   /* ------------------------------------- reajuste e alçada de desconto --- */
 
   contrato_desconto_acima_da_alcada: () =>

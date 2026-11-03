@@ -1,6 +1,17 @@
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { chamar, DEPOSITO_A, PECA_A, subirApi, token, TENANT_A, USUARIO_A, type Servidor } from './apoio.js'
+import {
+  APROVADOR_N2,
+  chamar,
+  chaveIdempotencia,
+  DEPOSITO_A,
+  PECA_A,
+  subirApi,
+  token,
+  TENANT_A,
+  USUARIO_A,
+  type Servidor,
+} from './apoio.js'
 
 /**
  * Estoque.
@@ -108,35 +119,48 @@ describe('o sinal precisa casar com o tipo', () => {
   })
 })
 
+/*
+ * O ajuste saiu da rota genérica de movimento.
+ *
+ * Estes dois casos exercitavam `POST /movimentos-estoque` com
+ * `tipo: AJUSTE_INVENTARIO`, e passavam com `estoque:movimentar` — que é
+ * exatamente o colapso que o Anexo C não quer: `estoque:ajustar` existia no
+ * catálogo sem significar nada. Agora o ajuste tem rota e permissão próprias,
+ * e a rota genérica recusa o tipo.
+ */
 describe('ajuste de inventário', () => {
+  const ajustar = () =>
+    token({ tenant: TENANT_A, usuario: APROVADOR_N2, permissoes: ['peca:ler', 'estoque:ajustar'] })
+
   it('sem motivo é recusado', async () => {
-    const r = await chamar(api, 'POST', '/api/v1/movimentos-estoque', {
-      token: await movimentar(),
+    const r = await chamar(api, 'POST', '/api/v1/estoque/ajustes', {
+      token: await ajustar(),
+      cabecalhos: { 'Idempotency-Key': chaveIdempotencia('ajuste-sem-motivo') },
       corpo: {
         peca_id: PECA_A,
         deposito_id: DEPOSITO_A,
-        tipo: 'AJUSTE_INVENTARIO',
         quantidade: '-1.000',
         custo_unitario: '25.0000',
       },
     })
-    assert.equal(r.status, 422)
+    // 400 e não 422: o contrato da rota recusa antes do banco, apontando o campo.
+    assert.equal(r.status, 400, JSON.stringify(r.corpo))
+    assert.equal(r.corpo.errors[0].field, 'motivo')
   })
 
   it('com motivo legível é aceito e fica no histórico', async () => {
-    const corpo = {
-      peca_id: PECA_A,
-      deposito_id: DEPOSITO_A,
-      tipo: 'AJUSTE_INVENTARIO',
-      quantidade: '-1.000',
-      custo_unitario: '25.0000',
-      motivo: 'divergencia apurada no inventario ciclico de novembro',
-    }
-    const r = await chamar(api, 'POST', '/api/v1/movimentos-estoque', {
-      token: await movimentar(),
-      corpo,
+    const r = await chamar(api, 'POST', '/api/v1/estoque/ajustes', {
+      token: await ajustar(),
+      cabecalhos: { 'Idempotency-Key': chaveIdempotencia('ajuste-com-motivo') },
+      corpo: {
+        peca_id: PECA_A,
+        deposito_id: DEPOSITO_A,
+        quantidade: '-1.000',
+        custo_unitario: '25.0000',
+        motivo: 'divergencia apurada no inventario ciclico de novembro',
+      },
     })
-    assert.equal(r.status, 201)
+    assert.equal(r.status, 201, JSON.stringify(r.corpo))
 
     const historico = await chamar(api, 'GET', `/api/v1/movimentos-estoque?peca_id=${PECA_A}`, {
       token: await ler(),

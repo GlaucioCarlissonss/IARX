@@ -163,3 +163,123 @@ export const ListarMovimentos = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 })
 export type ListarMovimentos = z.infer<typeof ListarMovimentos>
+
+/**
+ * Ajuste de inventário — rota e permissão próprias (`estoque:ajustar`).
+ *
+ * Separado de `estoque:movimentar` porque é o único movimento que **cria ou
+ * destrói quantidade sem contrapartida**: toda diferença entre o sistema e a
+ * prateleira passa por ele. Enquanto coubesse na rota genérica de movimento,
+ * `estoque:ajustar` existia no catálogo e não valia nada — quem podia
+ * movimentar ajustava.
+ *
+ * `quantidade` sem a restrição de sinal dos demais tipos: o ajuste é o único
+ * movimento em que os dois sentidos são legítimos e significam coisas
+ * diferentes — sobra costuma ser compra não lançada, falta costuma ser perda.
+ */
+export const RegistrarAjuste = z.object({
+  peca_id: Uuid,
+  deposito_id: Uuid,
+  quantidade: Quantidade.refine((q) => Number(q) !== 0, 'ajuste de zero não corrige nada'),
+  custo_unitario: Dinheiro.default('0.0000'),
+  motivo: z.string().trim().min(10, 'descreva a diferença apurada'),
+})
+export type RegistrarAjuste = z.infer<typeof RegistrarAjuste>
+
+/**
+ * Política de reposição — `estoque:politica_definir` (RN-016).
+ *
+ * `PUT` e não `POST`: a política é um atributo do par (peça, depósito), não um
+ * evento. A chave primária da tabela é esse par, e definir duas vezes a mesma
+ * política tem de deixar uma, não duas.
+ */
+export const DefinirPolitica = z
+  .object({
+    peca_id: Uuid,
+    deposito_id: Uuid,
+    estoque_minimo: Quantidade.default('0'),
+    estoque_maximo: Quantidade.nullish(),
+    ponto_pedido: Quantidade.default('0'),
+    lote_economico: Quantidade.nullish(),
+    lead_time_dias: z.number().int().min(0).max(365).default(0),
+  })
+  .refine(
+    (v) => v.estoque_maximo === null || v.estoque_maximo === undefined
+      || Number(v.estoque_maximo) >= Number(v.estoque_minimo),
+    { message: 'o máximo não pode ser menor que o mínimo', path: ['estoque_maximo'] },
+  )
+export type DefinirPolitica = z.infer<typeof DefinirPolitica>
+
+export const PoliticaReposicao = z.object({
+  peca_id: Uuid,
+  peca_codigo: z.string().nullable(),
+  deposito_id: Uuid,
+  deposito_nome: z.string().nullable(),
+  estoque_minimo: Quantidade,
+  estoque_maximo: Quantidade.nullable(),
+  ponto_pedido: Quantidade,
+  lote_economico: Quantidade.nullable(),
+  lead_time_dias: z.number().int(),
+})
+export type PoliticaReposicao = z.infer<typeof PoliticaReposicao>
+
+/**
+ * Sugestão de reposição (RN-016).
+ *
+ * Derivada, nunca armazenada: é a comparação entre o disponível e o ponto de
+ * pedido, no instante da consulta. Guardá-la criaria uma lista que envelhece —
+ * e uma sugestão de compra desatualizada é pior que nenhuma, porque parece
+ * decidida.
+ */
+export const SugestaoReposicao = z.object({
+  peca_id: Uuid,
+  peca_codigo: z.string().nullable(),
+  deposito_id: Uuid,
+  deposito_nome: z.string().nullable(),
+  quantidade_disponivel: Quantidade,
+  ponto_pedido: Quantidade,
+  sugerido: Quantidade,
+  lead_time_dias: z.number().int(),
+})
+export type SugestaoReposicao = z.infer<typeof SugestaoReposicao>
+
+/* ---------------------------------------------- reserva de peça na OS --- */
+
+export const OS_PECA_STATUS = [
+  'SOLICITADA',
+  'RESERVADA',
+  'CONSUMIDA',
+  'DEVOLVIDA',
+  'EM_FALTA',
+  'CANCELADA',
+] as const
+export const OsPecaStatus = z.enum(OS_PECA_STATUS)
+export type OsPecaStatus = z.infer<typeof OsPecaStatus>
+
+export const OsPeca = z.object({
+  id: Uuid,
+  ordem_servico_id: Uuid,
+  peca_id: Uuid,
+  peca_codigo: z.string().nullable(),
+  deposito_id: Uuid.nullable(),
+  quantidade_reservada: Quantidade,
+  quantidade_consumida: Quantidade,
+  custo_unitario_baixa: Dinheiro.nullable(),
+  status: OsPecaStatus,
+})
+export type OsPeca = z.infer<typeof OsPeca>
+
+/**
+ * Pedido de peça para a OS — `estoque:reservar`.
+ *
+ * Nasce SOLICITADA e é atendida por quem tem o almoxarifado na mão. Os dois
+ * passos são o Anexo B.5 e não cerimônia: entre pedir e reservar há a pergunta
+ * "tem saldo?", e é a resposta dela que leva a OS para AGUARDANDO_PEÇA quando
+ * é não.
+ */
+export const SolicitarPeca = z.object({
+  peca_id: Uuid,
+  deposito_id: Uuid,
+  quantidade: Quantidade.refine((q) => Number(q) > 0, 'a quantidade precisa ser positiva'),
+})
+export type SolicitarPeca = z.infer<typeof SolicitarPeca>

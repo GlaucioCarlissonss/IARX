@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common'
 import type {
+  DefinirPolitica,
   Deposito,
   ListarMovimentos,
   ListarPecas,
   MovimentoEstoque,
+  OsPeca,
   Peca,
+  PoliticaReposicao,
   RegistrarMovimento,
   SaldoEstoque,
+  SolicitarPeca,
+  SugestaoReposicao,
 } from '@iarx/contracts'
 import type { Executor } from '../../banco/banco.service.js'
 import { decodificarCursor } from '../../comum/pagina.js'
@@ -189,6 +194,143 @@ export class EstoqueRepositorio {
         dados.motivo ?? null,
         autorId,
       ],
+    )
+  }
+
+  /* ------------------------------------------- política de reposição --- */
+
+  /**
+   * `on conflict do update` aqui é correto, ao contrário do caso do saldo: a
+   * chave é (tenant, peça, depósito) e não há `check` sobre a linha candidata
+   * que a colisão possa reprovar. É uma substituição de atributo, não um
+   * evento acumulado.
+   */
+  async definirPolitica(db: Executor, dados: DefinirPolitica): Promise<void> {
+    await db.consultar(
+      `insert into public.politica_reposicao
+         (tenant_id, peca_id, deposito_id, estoque_minimo, estoque_maximo,
+          ponto_pedido, lote_economico, lead_time_dias, created_by, updated_by)
+       values (app.tenant_atual(), $1, $2, $3::numeric, $4::numeric, $5::numeric,
+               $6::numeric, $7, app.usuario_atual(), app.usuario_atual())
+       on conflict (tenant_id, peca_id, deposito_id) do update
+          set estoque_minimo = excluded.estoque_minimo,
+              estoque_maximo = excluded.estoque_maximo,
+              ponto_pedido   = excluded.ponto_pedido,
+              lote_economico = excluded.lote_economico,
+              lead_time_dias = excluded.lead_time_dias,
+              updated_at = now(), updated_by = app.usuario_atual()`,
+      [
+        dados.peca_id,
+        dados.deposito_id,
+        dados.estoque_minimo,
+        dados.estoque_maximo ?? null,
+        dados.ponto_pedido,
+        dados.lote_economico ?? null,
+        dados.lead_time_dias,
+      ],
+    )
+  }
+
+  async politicas(db: Executor, pecaId?: string): Promise<PoliticaReposicao[]> {
+    return db.consultar<PoliticaReposicao & Record<string, unknown>>(
+      `select pr.peca_id, p.codigo_interno as peca_codigo, pr.deposito_id,
+              d.nome as deposito_nome,
+              pr.estoque_minimo::text as estoque_minimo,
+              pr.estoque_maximo::text as estoque_maximo,
+              pr.ponto_pedido::text   as ponto_pedido,
+              pr.lote_economico::text as lote_economico,
+              pr.lead_time_dias
+         from public.politica_reposicao pr
+         join public.peca p     on p.id = pr.peca_id
+         join public.deposito d on d.id = pr.deposito_id
+        where ($1::uuid is null or pr.peca_id = $1)
+        order by p.codigo_interno, d.nome`,
+      [pecaId ?? null],
+    )
+  }
+
+  /**
+   * Sugestões de reposição (RN-016), derivadas no instante da consulta.
+   *
+   * `left join` no saldo, e não `join`: peça com política e **sem nenhum
+   * saldo** é o caso que mais precisa aparecer — disponível zero contra ponto
+   * de pedido positivo é exatamente o que se quer comprar. Com `join` ela
+   * sumiria da lista justamente por estar esgotada.
+   */
+  async sugestoesReposicao(db: Executor): Promise<SugestaoReposicao[]> {
+    return db.consultar<SugestaoReposicao & Record<string, unknown>>(
+      `select pr.peca_id, p.codigo_interno as peca_codigo, pr.deposito_id,
+              d.nome as deposito_nome,
+              coalesce(s.quantidade_disponivel, 0)::text as quantidade_disponivel,
+              pr.ponto_pedido::text as ponto_pedido,
+              greatest(
+                coalesce(pr.lote_economico,
+                         coalesce(pr.estoque_maximo, pr.ponto_pedido)
+                           - coalesce(s.quantidade_disponivel, 0)),
+                0
+              )::text as sugerido,
+              pr.lead_time_dias
+         from public.politica_reposicao pr
+         join public.peca p     on p.id = pr.peca_id
+         join public.deposito d on d.id = pr.deposito_id
+         left join public.saldo_estoque s
+           on s.peca_id = pr.peca_id and s.deposito_id = pr.deposito_id
+        where coalesce(s.quantidade_disponivel, 0) <= pr.ponto_pedido
+          and pr.ponto_pedido > 0
+        order by (pr.ponto_pedido - coalesce(s.quantidade_disponivel, 0)) desc`,
+    )
+  }
+
+  /* --------------------------------------------- reserva de peça na OS --- */
+
+  async solicitarPeca(db: Executor, osId: string, dados: SolicitarPeca): Promise<string | null> {
+    const l = await db.consultarUm<{ id: string }>(
+      `insert into public.os_peca
+         (tenant_id, ordem_servico_id, peca_id, deposito_id, quantidade_reservada, created_by)
+       values (app.tenant_atual(), $1, $2, $3, $4::numeric, app.usuario_atual())
+       returning id`,
+      [osId, dados.peca_id, dados.deposito_id, dados.quantidade],
+    )
+    return l ? l.id : null
+  }
+
+  /**
+   * Muda o estado da peça na OS. Os efeitos no saldo — reservar, baixar com
+   * custo médio, liberar — são do gatilho da 0035, não daqui.
+   *
+   * `and ordem_servico_id = $2` porque a peça é endereçada pelo caminho da
+   * ordem: sem a conferência, trocar o id na URL consumiria a reserva de outra
+   * OS, e o custo iria para a ordem errada.
+   */
+  async mudarStatusPeca(
+    db: Executor,
+    itemId: string,
+    osId: string,
+    status: OsPeca['status'],
+  ): Promise<boolean> {
+    const r = await db.consultarUm<{ id: string }>(
+      `update public.os_peca
+          set status = $3::app.os_peca_status, updated_at = now(), updated_by = app.usuario_atual()
+        where id = $1 and ordem_servico_id = $2
+        returning id`,
+      [itemId, osId, status],
+    )
+    return r !== null
+  }
+
+  async pecasDaOs(db: Executor, osId: string): Promise<OsPeca[]> {
+    return db.consultar<OsPeca & Record<string, unknown>>(
+      `select op.id, op.ordem_servico_id, op.peca_id, p.codigo_interno as peca_codigo,
+              op.deposito_id,
+              op.quantidade_reservada::text as quantidade_reservada,
+              op.quantidade_consumida::text as quantidade_consumida,
+              op.custo_unitario_baixa::text as custo_unitario_baixa,
+              op.status::text as status
+         from public.os_peca op
+         join public.peca p on p.id = op.peca_id
+        where op.ordem_servico_id = $1
+        order by op.created_at`,
+      [osId],
     )
   }
 }
