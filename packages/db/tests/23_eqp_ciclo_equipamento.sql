@@ -340,6 +340,35 @@ begin;
   end $$;
 commit;
 
+-- ---------------------------------------------------------------- caso 9: máquina condenada no conserto
+begin;
+  set local app.tenant_id = :'t1';
+
+  do $$
+  declare v_status app.equipamento_status;
+  begin
+    update public.equipamento
+       set status = 'EM_MANUTENCAO', motivo_indisponibilidade = 'laudo de avaria estrutural'
+     where patrimonio = 'EQP-0005';
+
+    update public.equipamento
+       set status = 'BAIXADO', motivo_indisponibilidade = 'condenado em laudo tecnico'
+     where patrimonio = 'EQP-0005';
+
+    select status into v_status from public.equipamento where patrimonio = 'EQP-0005';
+    if v_status <> 'BAIXADO' then
+      raise exception 'FALHA: baixa direto da manutenção recusada (status %)', v_status;
+    end if;
+    /*
+     * O que governa a baixa são as pré-condições de RN-007, não o estado de
+     * origem — e é o que o B.2 escreve: `qualquer → BAIXADO`. Exigir origem
+     * DISPONÍVEL pareceria mais seguro e seria pior: a máquina condenada
+     * passaria pela base alocável no caminho para a baixa.
+     */
+    raise notice 'caso 9 OK — baixa alcança o ativo onde ele estiver';
+  end $$;
+commit;
+
 reset role;
 
 -- ---------------------------------------------------------------- limpeza

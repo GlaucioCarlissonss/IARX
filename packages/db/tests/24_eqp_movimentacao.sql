@@ -271,7 +271,66 @@ begin;
   end $$;
 commit;
 
--- ---------------------------------------------------------------- caso 7: isolamento entre locatários
+-- ---------------------------------------------------------------- caso 7: item de contrato de outro ativo
+begin;
+  set local app.tenant_id = :'t1';
+  set local app.teste_eq  = :'eq';
+  set local app.teste_fil = :'fil';
+  set local app.teste_emp = :'emp';
+  set local app.teste_cli = :'cli';
+
+  do $$
+  declare
+    v_erro text := null; v_constraint text := null;
+    v_outro uuid := gen_random_uuid();
+    v_ct    uuid := gen_random_uuid();
+    v_item  uuid;
+  begin
+    -- Um segundo ativo, com item de contrato próprio.
+    insert into public.equipamento (id, tenant_id, patrimonio, modelo_id, categoria_id, filial_id)
+    select v_outro, app.tenant_atual(), 'MOV-0002', e.modelo_id, e.categoria_id, e.filial_id
+      from public.equipamento e where e.patrimonio = 'MOV-0001';
+
+    insert into public.contrato (id, tenant_id, numero, empresa_id, filial_id, cliente_id,
+                                 status, data_inicio, data_fim)
+    values (v_ct, app.tenant_atual(), 'MOV-2026-001',
+            current_setting('app.teste_emp')::uuid, current_setting('app.teste_fil')::uuid,
+            current_setting('app.teste_cli')::uuid, 'RASCUNHO', '2026-01-01', '2026-12-31');
+
+    insert into public.contrato_item
+      (tenant_id, contrato_id, equipamento_id, modalidade_cobranca,
+       valor_unitario, vigencia_inicio, vigencia_fim, status)
+    values (app.tenant_atual(), v_ct, v_outro, 'FIXO_MENSAL', 500.0000,
+            '2026-01-01', '2026-12-31', 'ATIVO')
+    returning id into v_item;
+
+    begin
+      insert into public.movimentacao
+        (tenant_id, equipamento_id, tipo, contrato_item_id, status_resultante)
+      values (app.tenant_atual(), current_setting('app.teste_eq')::uuid,
+              'RETORNO', v_item, 'EM_INSPECAO');
+    exception when others then
+      v_erro := sqlerrm;
+      get stacked diagnostics v_constraint = constraint_name;
+    end;
+
+    if v_erro is null then
+      raise exception 'FALHA: movimentação apontou item de contrato de outro ativo';
+    end if;
+    if v_constraint <> 'movimentacao_item_de_outro_ativo' then
+      raise exception 'FALHA: recusado por "%": %', v_constraint, v_erro;
+    end if;
+    /*
+     * Movimentar uma máquina mexe na cobrança dela. Com o id trocado — engano
+     * de integração, ou alguém querendo parar uma cobrança sem deixar rastro —
+     * a entrega ou o recebimento atingiria o contrato de um cliente que não
+     * teve nada movimentado.
+     */
+    raise notice 'caso 7 OK — o item de contrato tem de ser do ativo movimentado';
+  end $$;
+commit;
+
+-- ---------------------------------------------------------------- caso 8: isolamento entre locatários
 begin;
   set local app.tenant_id = :'t2';
 
@@ -282,7 +341,7 @@ begin;
     if v_n <> 0 then
       raise exception 'FALHA: locatário vizinho enxergou % movimentação(ões)', v_n;
     end if;
-    raise notice 'caso 7 OK — o razão do vizinho é invisível';
+    raise notice 'caso 8 OK — o razão do vizinho é invisível';
   end $$;
 commit;
 
@@ -296,6 +355,8 @@ alter table public.movimentacao disable trigger movimentacao_sem_edicao;
 delete from public.movimentacao where tenant_id in (:'t1', :'t2');
 alter table public.movimentacao enable trigger movimentacao_sem_edicao;
 
+delete from public.contrato_item where tenant_id = :'t1';
+delete from public.contrato      where tenant_id = :'t1';
 delete from public.equipamento   where tenant_id = :'t1';
 delete from public.modelo        where tenant_id = :'t1';
 delete from public.fabricante    where tenant_id = :'t1';

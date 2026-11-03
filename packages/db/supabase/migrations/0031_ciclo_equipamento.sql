@@ -37,6 +37,30 @@
 -- Hoje isso não produziu dado ruim porque nada escrevia esse status (não havia
 -- rota). A partir desta migração passa a haver, então a lista é corrigida
 -- antes de a transição existir, e não depois.
+--
+-- ## §leitura — três setas que a tabela do B.2 não escreve literalmente
+--
+-- O Anexo B.2 lista gatilhos, não o fecho do grafo. Três arestas abaixo são
+-- leitura do texto, não transcrição dele, e ficam marcadas como tal para que
+-- quem revisar saiba o que conferir com o negócio:
+--
+--  · `RESERVADO → DISPONIVEL` — o anexo escreve a reserva (ativação de
+--    contrato) e não escreve a liberação. Sem ela, cancelar um contrato antes
+--    da expedição deixa o ativo preso em RESERVADO para sempre.
+--
+--  · `EM_TRANSITO_ENTREGA → DISPONIVEL` — é a chegada da transferência entre
+--    filiais. O anexo escreve a saída (`DISPONÍVEL → EM_TRÂNSITO_ENTREGA`,
+--    "aceite pendente no destino", RN-005) e deixa implícita a chegada.
+--
+--  · `BLOQUEADO → EM_MANUTENCAO` — o anexo escreve `BLOQUEADO → DISPONÍVEL`
+--    por "preventiva executada" e não modela a manutenção no meio. Sem esta
+--    aresta, executar a preventiva que destrava o ativo exigiria desbloqueá-lo
+--    primeiro — isto é, pôr na base alocável exatamente a máquina cuja
+--    preventiva está vencida, que é o que o bloqueio existe para impedir.
+--
+-- Nenhuma das três inventa regra de negócio: as três fecham caminhos que o
+-- texto pressupõe. Se alguma for decisão do negócio e não consequência,
+-- retirá-la é um `create or replace` desta função.
 -- =============================================================================
 
 create or replace function app.equipamento_transicao_valida(
@@ -48,17 +72,21 @@ language sql
 immutable
 as $$
   select
-    -- Bloqueio e extravio vêm de qualquer estado: são fatos, não etapas.
-    -- `BLOQUEADO` é preventiva vencida ou decisão de alçada; `EXTRAVIADO` é o
-    -- registro de que a máquina não está onde deveria. Restringir a origem
-    -- obrigaria a passar por um estado intermediário que não aconteceu.
-    p_para in ('BLOQUEADO', 'EXTRAVIADO')
+    -- Bloqueio, extravio e baixa vêm de qualquer estado: são fatos, não etapas,
+    -- e é o que o Anexo B.2 escreve — `qualquer → BLOQUEADO`, `qualquer →
+    -- EXTRAVIADO`, `qualquer → BAIXADO`. O que governa a baixa não é a origem,
+    -- são as pré-condições de RN-007, conferidas no gatilho abaixo.
+    --
+    -- Restringir a origem pareceria mais seguro e seria pior: uma máquina
+    -- condenada durante o conserto teria de passar por DISPONÍVEL para ser
+    -- baixada, e nesse instante ela estaria na base alocável.
+    p_para in ('BLOQUEADO', 'EXTRAVIADO', 'BAIXADO')
     or (p_de, p_para) in (
       ('DISPONIVEL','RESERVADO'),
       ('RESERVADO','EM_TRANSITO_ENTREGA'),
-      ('RESERVADO','DISPONIVEL'),            -- reserva liberada
+      ('RESERVADO','DISPONIVEL'),            -- ver §leitura abaixo
       ('EM_TRANSITO_ENTREGA','LOCADO'),
-      ('EM_TRANSITO_ENTREGA','DISPONIVEL'),  -- transferência entre filiais
+      ('EM_TRANSITO_ENTREGA','DISPONIVEL'),  -- ver §leitura abaixo
       ('LOCADO','EM_TRANSITO_RETORNO'),
       ('EM_TRANSITO_RETORNO','EM_INSPECAO'),
       ('EM_INSPECAO','DISPONIVEL'),
@@ -70,12 +98,7 @@ as $$
       ('EM_MANUTENCAO','DISPONIVEL'),
       ('EM_MANUTENCAO','LOCADO'),
       ('BLOQUEADO','DISPONIVEL'),
-      ('BLOQUEADO','EM_MANUTENCAO'),
-      -- Baixa: só do que não está em campo.
-      ('DISPONIVEL','BAIXADO'),
-      ('EM_INSPECAO','BAIXADO'),
-      ('EXTRAVIADO','BAIXADO'),
-      ('BLOQUEADO','BAIXADO')
+      ('BLOQUEADO','EM_MANUTENCAO')          -- ver §leitura abaixo
     );
 $$;
 

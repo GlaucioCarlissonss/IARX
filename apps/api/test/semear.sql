@@ -23,6 +23,9 @@ insert into public.empresa (id, tenant_id, razao_social, cnpj) values
 
 insert into public.filial (id, tenant_id, empresa_id, codigo, nome, regiao) values
   ('11111111-1111-4111-8111-1111111111f1', '11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111111e1', 'SP-01', 'Base São Paulo', 'Sudeste'),
+  -- Segunda filial do mesmo locatário: sem ela não há como provar transferência
+  -- entre filiais, que é o único fluxo do parque com aceite no destino (RN-005).
+  ('11111111-1111-4111-8111-1111111111f2', '11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111111e1', 'SP-02', 'Base Campinas', 'Sudeste'),
   ('22222222-2222-4222-8222-2222222222f1', '22222222-2222-4222-8222-222222222222', '22222222-2222-4222-8222-2222222222e1', 'RJ-01', 'Base Rio', 'Sudeste');
 
 insert into public.categoria_equipamento (id, tenant_id, codigo, nome, tipo_medidor_padrao) values

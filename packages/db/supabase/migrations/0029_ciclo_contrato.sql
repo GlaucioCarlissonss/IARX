@@ -193,6 +193,61 @@ begin
     update public.contrato_item
        set status = 'RESERVADO', updated_at = now()
      where contrato_id = new.id and status = 'PLANEJADO';
+
+    /*
+     * E reserva o ativo junto — `DISPONÍVEL → RESERVADO`, a primeira seta do
+     * Anexo B.2, gatilho "ativação de contrato".
+     *
+     * Estava faltando pela mesma razão que a reserva do item faltava: nada
+     * quebrava. O contrato ficava ativo, o item reservado, e o equipamento
+     * seguia DISPONÍVEL — aparecendo na base alocável de quem fosse montar o
+     * próximo contrato, já comprometido com este.
+     *
+     * `where status = 'DISPONIVEL'` porque só dessa origem a transição existe.
+     * Um ativo que já esteja locado ou em trânsito não é promovido aqui: quem
+     * impede a alocação dupla é a exclusão por vigência de RN-001, e silenciar
+     * a atualização é melhor que derrubar a ativação inteira por causa de uma
+     * projeção de status.
+     */
+    update public.equipamento e
+       set status = 'RESERVADO', updated_at = now()
+     where e.status = 'DISPONIVEL'
+       and exists (
+         select 1 from public.contrato_item ci
+          where ci.equipamento_id = e.id
+            and ci.contrato_id = new.id
+            and ci.status = 'RESERVADO'
+            and ci.deleted_at is null
+       );
+  end if;
+
+  /*
+   * Saída sem entrega: devolve o ativo à base.
+   *
+   * O B.2 escreve a reserva e não escreve a liberação — a mesma lacuna que a
+   * aresta `RESERVADO → DISPONIVEL` da 0031 fecha. Sem isto, cancelar um
+   * contrato antes da expedição deixaria a máquina presa em RESERVADO para
+   * sempre, comprometida com um contrato que não existe mais.
+   *
+   * Só alcança item em RESERVADO: o que já saiu para entrega ou está em campo
+   * tem de voltar pelo fluxo de devolução, que é o que registra a leitura
+   * final e encerra a cobrança.
+   */
+  if new.status in ('CANCELADO','DISTRATADO','ENCERRADO') then
+    update public.equipamento e
+       set status = 'DISPONIVEL', updated_at = now()
+     where e.status = 'RESERVADO'
+       and exists (
+         select 1 from public.contrato_item ci
+          where ci.equipamento_id = e.id
+            and ci.contrato_id = new.id
+            and ci.status = 'RESERVADO'
+            and ci.deleted_at is null
+       );
+
+    update public.contrato_item
+       set status = 'CANCELADO', updated_at = now()
+     where contrato_id = new.id and status in ('PLANEJADO','RESERVADO');
   end if;
 
   -- Carimbos de data, preenchidos aqui para não dependerem de quem escreve.

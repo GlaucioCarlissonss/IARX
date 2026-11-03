@@ -117,17 +117,13 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'parametro:gerenciar': 'parâmetros do locatário: configuração, sem tela',
 
   /*
-   * Ações de equipamento previstas no Anexo C e ainda não construídas. A
-   * diferença para as de cima é que aqui existe tela de parque: são ações a
-   * acrescentar nela, não módulo a criar.
+   * Restam duas do eixo de parque, e as duas dependem de coisa que o módulo
+   * não tem — não de tempo de digitação.
    */
-  'equipamento:transferir': 'ação de parque ainda não construída',
-  'equipamento:transferencia_aceitar': 'idem',
-  'equipamento:baixar': 'idem',
-  'equipamento:etiqueta_gerar': 'idem',
-  'equipamento:importar': 'idem',
-  'equipamento:patrimonial_editar': 'idem',
-  'equipamento:movimentar': 'idem',
+  'equipamento:etiqueta_gerar':
+    'etiqueta/QR: depende de um codificador de QR Code, que é dependência nova; o token já existe em equipamento.qr_token',
+  'equipamento:importar':
+    'carga em massa: o Anexo D especifica 202 + job_id, e não há executor de trabalho assíncrono no projeto',
 
   /*
    * Medição: consolidar e estimar são do fechamento de competência, que hoje
@@ -193,7 +189,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
 
   /* Outras ações previstas e não construídas. */
   'cliente:inativar': 'inativação de cliente: ação pendente',
-  'equipamento:editar': 'edição de equipamento: ação pendente',
   'fornecedor:gerenciar': 'cadastro de fornecedor: tela pendente (a leitura existe)',
   'alcada:definir': 'configuração de alçada: tela pendente',
   'competencia:reabrir': 'reabertura de competência: ação pendente',

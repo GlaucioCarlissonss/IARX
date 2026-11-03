@@ -13,6 +13,9 @@ import { ContratosService } from './modulos/contratos/contratos.service.js'
 import { EquipamentosController } from './modulos/equipamentos/equipamentos.controller.js'
 import { EquipamentosRepositorio } from './modulos/equipamentos/equipamentos.repositorio.js'
 import { EquipamentosService } from './modulos/equipamentos/equipamentos.service.js'
+import { MovimentacaoRepositorio } from './modulos/equipamentos/movimentacao.repositorio.js'
+import { MovimentacaoService } from './modulos/equipamentos/movimentacao.service.js'
+import { TransferenciasController } from './modulos/equipamentos/transferencias.controller.js'
 import { AuthController } from './modulos/auth/auth.controller.js'
 import { ResultadoController } from './modulos/resultado/resultado.controller.js'
 import { ResultadoService } from './modulos/resultado/resultado.service.js'
@@ -120,6 +123,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
   controllers: [
     SaudeController,
     EquipamentosController,
+    TransferenciasController,
     ContratosController,
     NotasFiscaisController,
     FornecedoresController,
@@ -157,6 +161,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     BancoService,
     EquipamentosRepositorio,
     EquipamentosService,
+    MovimentacaoRepositorio,
+    MovimentacaoService,
     ContratosRepositorio,
     ContratosService,
     NotasFiscaisRepositorio,

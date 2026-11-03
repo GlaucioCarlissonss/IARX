@@ -162,6 +162,33 @@ begin
       using errcode = '23514', constraint = 'movimentacao_equipamento_inexistente';
   end if;
 
+  /*
+   * O item de contrato tem de ser **deste** ativo.
+   *
+   * Sem esta conferência, movimentar uma máquina encerra a cobrança de outra:
+   * a entrega e o recebimento mexem no `contrato_item` apontado, e um id
+   * trocado — por engano de integração ou por quem quer parar uma cobrança sem
+   * deixar rastro — atingiria o contrato de um cliente que não teve nada
+   * movimentado.
+   *
+   * Fica no gatilho e não só no serviço porque é coerência entre linhas
+   * gravadas, do mesmo tipo que a do destino acima, e porque a única cópia que
+   * nunca é esquecida é a que está no caminho de escrita.
+   */
+  if new.contrato_item_id is not null
+     and not exists (
+       select 1 from public.contrato_item ci
+        where ci.id = new.contrato_item_id
+          and ci.tenant_id = new.tenant_id
+          and ci.equipamento_id = new.equipamento_id
+     ) then
+    raise exception 'item de contrato % não é do equipamento %',
+          new.contrato_item_id, new.equipamento_id
+      using errcode = '23514',
+            constraint = 'movimentacao_item_de_outro_ativo',
+            hint = 'A movimentação só mexe na cobrança do ativo que se moveu.';
+  end if;
+
   return new;
 end;
 $$;

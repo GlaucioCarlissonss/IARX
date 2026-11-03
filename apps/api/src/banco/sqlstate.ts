@@ -178,6 +178,26 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       acoes: [{ code: 'DESBLOQUEAR', descricao: 'Verificar bloqueio por preventiva vencida' }],
     }),
 
+  movimentacao_item_de_outro_ativo: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Item de contrato não é deste equipamento', {
+      detail:
+        'A movimentação mexe na cobrança do ativo que se moveu. O item informado pertence a outro equipamento — registrá-lo aqui encerraria a cobrança de um cliente que não teve nada movimentado.',
+      errors: [{ field: 'contrato_item_id', code: 'ITEM_DE_OUTRO_ATIVO' }],
+    }),
+
+  movimentacao_destino_inexistente: () =>
+    new ErroDominio('PAYLOAD_INVALIDO', 'Destino inexistente', {
+      detail: 'A filial ou o local de operação informado não existe neste locatário.',
+      errors: [{ field: 'destino', code: 'DESTINO_INEXISTENTE' }],
+    }),
+
+  movimentacao_imutavel: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Movimentação é imutável', {
+      detail:
+        'O razão do ativo não se edita nem se apaga: alguém agiu com base no que está registrado. A correção é uma movimentação nova.',
+      errors: [{ field: 'id', code: 'REGISTRO_IMUTAVEL' }],
+    }),
+
   equipamento_motivo_obrigatorio: () =>
     new ErroDominio('REGRA_DE_NEGOCIO', 'Motivo obrigatório', {
       detail:
