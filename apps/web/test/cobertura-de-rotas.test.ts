@@ -157,7 +157,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
     'exigida no corpo de POST /ordens-servico/{id}/validar quando o custo passa do teto, não por decorador',
 
   /* Auditoria e sensíveis: leitura por tela ainda não construída. */
-  'auditoria:consultar': 'consulta de trilha: sem tela',
   'dados_sensiveis:ver_completo': 'mascaramento ainda não ligado na interface (ver X.3)',
 
   /* Financeiro: exportação pendente. */
@@ -200,8 +199,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   /* Outras ações previstas e não construídas. */
   'cliente:inativar': 'inativação de cliente: ação pendente',
   'fornecedor:gerenciar': 'cadastro de fornecedor: tela pendente (a leitura existe)',
-  'alcada:definir': 'configuração de alçada: tela pendente',
-  'competencia:reabrir': 'reabertura de competência: ação pendente',
 }
 
 test('a massa é a esperada — o portão não pode passar vazio', () => {

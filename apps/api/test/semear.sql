@@ -164,6 +164,20 @@ insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo
   ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110001',
    '11111111-1111-4111-8111-1111111150a1', 'TENANT');
 
+/*
+ * Perfil de bancada para os testes de configuração de alçada.
+ *
+ * Sem usuário vinculado, de propósito: as seis regras que leem `alcada` o
+ * fazem via `usuario_perfil`, então escrever alçada aqui não muda o
+ * comportamento de nenhum outro teste. Usar um perfil real para isso — como a
+ * primeira versão fez — faz o teste de configuração alterar o resultado dos
+ * testes de emissão de fatura e de aprovação de pagamento, que leem os mesmos
+ * limites.
+ */
+insert into public.perfil (id, tenant_id, nome, tipo, is_sistema, permissoes) values
+  ('11111111-1111-4111-8111-1111111150b1', '11111111-1111-4111-8111-111111111111',
+   'Bancada de alçada', 'INTERNO', false, array['contrato:ler']);
+
 -- -----------------------------------------------------------------------------
 -- Estoque: um depósito e uma peça, com política de reposição.
 --
