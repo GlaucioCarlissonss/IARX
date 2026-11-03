@@ -123,6 +123,81 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
       acoes: [{ code: 'OUTRO_VALIDADOR', descricao: 'Pedir a validação a outro supervisor' }],
     }),
 
+  /* ------------------------------------------ compra e inventário --- */
+
+  oc_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição de ordem de compra não permitida', {
+      detail: 'Rascunho se aprova, aprovada se recebe, e o que já foi recebido não volta atrás.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  oc_sem_item: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Ordem de compra sem item', {
+      detail: 'Aprovar uma ordem vazia compromete alçada sobre valor nenhum.',
+      errors: [{ field: 'itens', code: 'ITEM_OBRIGATORIO' }],
+    }),
+
+  oc_acima_da_alcada: () =>
+    new ErroDominio('SEM_PERMISSAO', 'Ordem acima da alçada', {
+      detail: 'O valor da ordem excede o teto do seu perfil para aprovação de compra.',
+      errors: [{ field: 'valor_total', code: 'ACIMA_DA_ALCADA' }],
+      acoes: [{ code: 'PEDIR_APROVACAO', descricao: 'Pedir a aprovação a quem tem alçada maior' }],
+    }),
+
+  oc_item_apos_aprovacao: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Ordem aprovada não tem itens alterados', {
+      detail:
+        'A alçada aprovou um valor. Mudar o item depois faria a ordem chegar com outro, e a aprovação continuaria registrada como se tivesse validado este.',
+      errors: [{ field: 'itens', code: 'ORDEM_APROVADA' }],
+      acoes: [{ code: 'CANCELAR_E_REFAZER', descricao: 'Cancelar a ordem e abrir outra' }],
+    }),
+
+  oc_recebimento_sem_aprovacao: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Ordem não aprovada não recebe', {
+      detail: 'Receber antes de aprovar faria a mercadoria entrar sem que ninguém tivesse autorizado a compra.',
+      errors: [{ field: 'status', code: 'STATUS_NAO_PERMITE' }],
+    }),
+
+  oci_recebido_ate_pedido: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Recebimento maior que o pedido', {
+      detail:
+        'Receber a mais é divergência de nota, e o lugar dela é a entrada fiscal — não um número que cresce em silêncio na ordem.',
+      errors: [{ field: 'quantidade_recebida', code: 'ACIMA_DO_PEDIDO' }],
+    }),
+
+  inv_transicao_valida: () =>
+    new ErroDominio('TRANSICAO_INVALIDA', 'Transição de inventário não permitida', {
+      detail: 'A contagem se fecha antes de ser aprovada, e o que foi aprovado já virou ajuste de saldo.',
+      errors: [{ field: 'status', code: 'TRANSICAO_INVALIDA' }],
+    }),
+
+  inv_sem_contagem: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Inventário sem nenhuma contagem', {
+      detail: 'Fechar um inventário vazio registraria que nada divergiu sem ninguém ter contado.',
+      errors: [{ field: 'contagens', code: 'CONTAGEM_OBRIGATORIA' }],
+    }),
+
+  inv_divergencia_sem_justificativa: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Divergência sem justificativa', {
+      detail:
+        'Toda diferença entre o sistema e a prateleira vira ajuste de saldo. Sem justificativa, o ajuste é a linha que ninguém consegue explicar depois.',
+      errors: [{ field: 'justificativa', code: 'JUSTIFICATIVA_OBRIGATORIA' }],
+    }),
+
+  inv_contagem_fora_de_abertura: () =>
+    new ErroDominio('REGRA_DE_NEGOCIO', 'Inventário já fechado', {
+      detail:
+        'A contagem é a evidência do que estava na prateleira. Mudá-la depois do fechamento mudaria a divergência que alguém aprovou.',
+      errors: [{ field: 'status', code: 'INVENTARIO_FECHADO' }],
+    }),
+
+  inv_aberto_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Já há inventário aberto neste depósito', {
+      detail:
+        'Dois inventários simultâneos contam a mesma prateleira e geram dois ajustes para a mesma diferença — o segundo corrigindo o que o primeiro já corrigiu.',
+      errors: [{ field: 'deposito_id', code: 'INVENTARIO_EM_ANDAMENTO' }],
+    }),
+
   /* --------------------------------------- reserva de peça e inventário --- */
 
   os_peca_transicao_valida: () =>

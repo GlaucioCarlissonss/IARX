@@ -70,12 +70,7 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
    * decidir que o módulo é de integração e não de interface, que é uma
    * decisão legítima e também precisa ser escrita.
    */
-  'inventario:executar': 'módulo de inventário: sem tela no front',
-  'inventario:aprovar': 'idem',
   'plano_preventivo:gerenciar': 'manutenção preventiva programada: sem tela no front',
-  'ordem_compra:criar': 'compras: sem tela no front',
-  'ordem_compra:aprovar': 'idem',
-  'ordem_compra:receber': 'idem',
   'relatorio:criar': 'relatórios sob demanda: sem tela no front',
   'relatorio:ler': 'idem',
   'relatorio:agendar': 'idem',

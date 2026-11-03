@@ -105,11 +105,30 @@ describe('reserva de peça na ordem de serviço', () => {
     )
     assert.equal(reservada.status, 200, JSON.stringify(reservada.corpo))
 
+    /*
+     * O custo médio é lido **antes** da baixa, e não fixado no teste.
+     *
+     * A suíte da API semeia sem recriar o banco, e outros arquivos dão entrada
+     * na mesma peça a preços diferentes. Um valor constante aqui estaria
+     * provando que nenhum outro teste mexeu no estoque — não que a baixa usa o
+     * custo médio do instante, que é o que RN-017 exige.
+     */
+    const antes = await consultarBanco<{ medio: string }>(
+      TENANT_A,
+      `select round(valor_total / nullif(quantidade_fisica, 0), 4)::text as medio
+         from public.saldo_estoque where peca_id = $1 and deposito_id = $2`,
+      [PECA_A, DEPOSITO_A],
+    )
+    const medio = antes[0]!.medio
+
     const consumida = await chamar(
       api, 'POST', `/api/v1/ordens-servico/${os}/pecas/${item.id}/consumir`,
       { token: tk, cabecalhos: { 'Idempotency-Key': chaveIdempotencia('consumir') } },
     )
     assert.equal(consumida.status, 200, JSON.stringify(consumida.corpo))
+
+    const baixada = consumida.corpo.data.find((p: { id: string }) => p.id === item.id)
+    assert.equal(baixada.custo_unitario_baixa, medio)
 
     const linha = await consultarBanco<{ custo_material: string }>(
       TENANT_A,
@@ -121,7 +140,7 @@ describe('reserva de peça na ordem de serviço', () => {
      * material fica zero, a margem do ativo fica melhor do que é, e a
      * diferença só aparece no inventário.
      */
-    assert.equal(linha[0]!.custo_material, '300.0000')
+    assert.equal(Number(linha[0]!.custo_material), Number(medio) * 2)
   })
 
   it('RN-015: não conclui com peça sem destino', async () => {
