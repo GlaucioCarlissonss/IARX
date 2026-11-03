@@ -2,10 +2,12 @@ import { Injectable } from '@nestjs/common'
 import type {
   AbrirOs,
   AgendarOs,
+  AtribuirOs,
   ConcluirOs,
   ListarOs,
   OrdemServico,
   PausarOs,
+  ReabrirOs,
   Tecnico,
   TriarOs,
 } from '@iarx/contracts'
@@ -252,6 +254,101 @@ export class ManutencaoRepositorio {
       [id, validadorId],
     )
     return linha ? this.porId(db, linha.id) : null
+  }
+
+  /**
+   * Atribuição de técnico, sem tocar na janela de atendimento.
+   *
+   * `agendar` também grava `tecnico_responsavel_id`, e é por isso que esta
+   * rota existe: trocar o técnico de uma ordem já agendada por `agendar`
+   * obrigaria a reenviar a data, e quem despacha não negocia a janela.
+   */
+  async atribuir(db: Executor, id: string, dados: AtribuirOs, autorId: string): Promise<OrdemServico | null> {
+    const linha = await db.consultarUm<{ id: string }>(
+      `update public.ordem_servico
+          set tecnico_responsavel_id = $2,
+              descricao = case when $3::text is null then descricao
+                               else descricao || E'\n' || $3 end,
+              updated_by = $4
+        where id = $1 and deleted_at is null
+          and status in ('ABERTA','TRIAGEM','AGENDADA','EM_EXECUCAO','AGUARDANDO_PECA')
+        returning id`,
+      [id, dados.tecnico_id, dados.observacao ?? null, autorId],
+    )
+    return linha ? this.porId(db, linha.id) : null
+  }
+
+  /**
+   * Reabertura: cria uma OS nova apontando para a original.
+   *
+   * A original fica como está. Ela guarda o custo e o tempo do primeiro
+   * atendimento, e é a comparação entre as duas que responde se o conserto
+   * resolveu — pergunta que some se a reabertura reescrever a ordem validada.
+   */
+  async reabrir(
+    db: Executor,
+    id: string,
+    dados: ReabrirOs,
+    autorId: string,
+  ): Promise<OrdemServico | null> {
+    const origem = await db.consultarUm<{
+      equipamento_id: string
+      filial_id: string | null
+      tipo: string
+      contrato_id: string | null
+      cliente_id: string | null
+      local_operacao_id: string | null
+      descricao: string
+      status: string
+    }>(
+      `select equipamento_id, filial_id, tipo::text as tipo, contrato_id, cliente_id,
+              local_operacao_id, descricao, status::text as status
+         from public.ordem_servico
+        where id = $1 and deleted_at is null`,
+      [id],
+    )
+    if (!origem || origem.status !== 'VALIDADA') return null
+
+    const nova = await db.consultarUm<{ id: string }>(
+      `insert into public.ordem_servico
+         (tenant_id, numero, equipamento_id, filial_id, tipo, origem, status,
+          prioridade, contrato_id, cliente_id, local_operacao_id, descricao,
+          os_origem_id, created_by, updated_by)
+       values (app.tenant_atual(), app.proximo_numero_os(app.tenant_atual()),
+               $1, $2, $3::app.os_tipo, 'INTERNA', 'ABERTA',
+               coalesce($4::app.os_prioridade, 'MEDIA'), $5, $6, $7, $8, $9, $10, $10)
+       returning id`,
+      [
+        origem.equipamento_id,
+        origem.filial_id,
+        origem.tipo,
+        dados.prioridade ?? null,
+        origem.contrato_id,
+        origem.cliente_id,
+        origem.local_operacao_id,
+        `${dados.descricao ?? origem.descricao}\n\nReabertura: ${dados.motivo}`,
+        id,
+        autorId,
+      ],
+    )
+    return nova ? this.porId(db, nova.id) : null
+  }
+
+  /** Custo apurado e teto do usuário, para a guarda de `os:custo_aprovar`. */
+  async custoEAlcada(
+    db: Executor,
+    id: string,
+    usuarioId: string,
+  ): Promise<{ custo: string; limite: string; configurada: boolean } | null> {
+    const l = await db.consultarUm<{ custo: string; limite: string; configurada: boolean }>(
+      `select o.custo_total::text as custo,
+              app.limite_custo_os($2)::text as limite,
+              app.alcada_custo_os_configurada() as configurada
+         from public.ordem_servico o
+        where o.id = $1 and o.deleted_at is null`,
+      [id, usuarioId],
+    )
+    return l ?? null
   }
 
   async cancelar(db: Executor, id: string, motivo: string, autorId: string): Promise<OrdemServico | null> {

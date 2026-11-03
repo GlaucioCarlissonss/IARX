@@ -167,6 +167,36 @@ export const PausarOs = z.object({
 })
 export type PausarOs = z.infer<typeof PausarOs>
 
+/**
+ * Atribuição de técnico — `os:atribuir`.
+ *
+ * Separada de `agendar` porque o Anexo C as põe em mãos possivelmente
+ * diferentes: quem despacha decide **quem vai**, e a janela de atendimento
+ * pode ser negociada depois com o cliente. Colapsar as duas obrigaria a
+ * escolher a data para trocar o técnico de uma ordem já agendada.
+ */
+export const AtribuirOs = z.object({
+  tecnico_id: Uuid,
+  observacao: z.string().trim().max(300).optional(),
+})
+export type AtribuirOs = z.infer<typeof AtribuirOs>
+
+/**
+ * Reabertura — `os:reabrir`.
+ *
+ * Não reabre a ordem validada: **cria uma nova**, vinculada à original por
+ * `os_origem_id` (Anexo B.3, `VALIDADA → ABERTA (nova OS)`). A ordem original
+ * guarda o custo e o tempo do primeiro atendimento; reescrevê-la faria duas
+ * visitas virarem uma, e o indicador de reincidência — que é o que diz se o
+ * conserto resolveu — deixaria de existir por construção.
+ */
+export const ReabrirOs = z.object({
+  motivo: z.string().trim().min(10, 'descreva a reincidência'),
+  descricao: z.string().trim().min(5).optional().describe('quando omitida, repete a da original'),
+  prioridade: OsPrioridade.optional(),
+})
+export type ReabrirOs = z.infer<typeof ReabrirOs>
+
 export const ListarOs = Paginacao.extend({
   status: OsStatus.optional(),
   tipo: OsTipo.optional(),

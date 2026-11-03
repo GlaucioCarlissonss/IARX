@@ -154,9 +154,17 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   /* Mapa: compartilhar filtro é recurso de colaboração, sem tela. */
   'mapa:filtro_compartilhar': 'compartilhamento de filtro: sem tela',
 
-  /* OS: reabertura e custo pendentes. */
-  'os:reabrir': 'reabertura cria OS nova vinculada: fluxo pendente',
-  'os:custo_aprovar': 'aprovação de custo de OS: alçada pendente',
+  /*
+   * Como `contrato:desconto_conceder`: conferida no corpo, não no decorador.
+   *
+   * `os:custo_aprovar` é exigida em `validar` quando o custo apurado passa do
+   * teto do validador. A maioria das ordens é barata, e exigi-la na rota
+   * inteira obrigaria todo supervisor a tê-la para validar qualquer coisa.
+   * O Anexo C descreve a permissão e o Anexo D **não lhe dá rota** — essa
+   * ausência é o que diz que ela é condição sobre um passo, não um passo.
+   */
+  'os:custo_aprovar':
+    'exigida no corpo de POST /ordens-servico/{id}/validar quando o custo passa do teto, não por decorador',
 
   /* Auditoria e sensíveis: leitura por tela ainda não construída. */
   'auditoria:consultar': 'consulta de trilha: sem tela',
@@ -204,7 +212,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'fornecedor:gerenciar': 'cadastro de fornecedor: tela pendente (a leitura existe)',
   'alcada:definir': 'configuração de alçada: tela pendente',
   'competencia:reabrir': 'reabertura de competência: ação pendente',
-  'os:atribuir': 'atribuição de técnico separada do agendamento: ação pendente',
 }
 
 test('a massa é a esperada — o portão não pode passar vazio', () => {

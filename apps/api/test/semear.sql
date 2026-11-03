@@ -340,6 +340,16 @@ insert into public.alcada (tenant_id, perfil_id, tipo, limite_valor) values
   ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a3',
    'EMISSAO_FATURA', 20000);
 
+-- Alçada de custo de OS: administrador valida até R$ 1.000, financeiro até
+-- R$ 50.000. Com as duas, `app.alcada_custo_os_configurada()` passa a valer
+-- para este locatário — é o que permite testar os dois lados da guarda, e é
+-- por isso que o teto baixo existe e não é generoso.
+insert into public.alcada (tenant_id, perfil_id, tipo, limite_valor) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a1',
+   'CUSTO_OS', 1000),
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111150a3',
+   'CUSTO_OS', 50000);
+
 -- Alçada de desconto **só** no perfil financeiro. O gestor fica sem nenhuma, de
 -- propósito: é o caso negativo da RN-F12, e sem ele o teste provaria apenas que
 -- um teto alto passa.

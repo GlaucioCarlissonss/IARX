@@ -2,13 +2,15 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } fr
 import {
   AbrirOs,
   AgendarOs,
+  AtribuirOs,
   CancelarOs,
   ConcluirOs,
   ListarOs,
   PausarOs,
+  ReabrirOs,
   TriarOs,
 } from '@iarx/contracts'
-import { ExigePermissao } from '../../comum/decoradores.js'
+import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
 import { ManutencaoService } from './manutencao.service.js'
 
@@ -120,6 +122,35 @@ export class ManutencaoController {
   @ExigePermissao('os:validar')
   validarOs(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string) {
     return this.servico.validar(id)
+  }
+
+  /**
+   * Troca o técnico responsável sem mexer na janela de atendimento. Quem
+   * despacha decide quem vai; a data se negocia com o cliente.
+   */
+  @Post('ordens-servico/:id/atribuir')
+  @HttpCode(200)
+  @ExigePermissao('os:atribuir')
+  atribuir(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(AtribuirOs)) corpo: AtribuirOs,
+  ) {
+    return this.servico.atribuir(id, corpo)
+  }
+
+  /**
+   * Reincidência: cria uma OS nova vinculada à validada (Anexo B.3). Devolve a
+   * nova, que é onde quem reabriu vai trabalhar.
+   */
+  @Post('ordens-servico/:id/reabrir')
+  @HttpCode(201)
+  @ExigePermissao('os:reabrir')
+  @Idempotente()
+  reabrir(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(ReabrirOs)) corpo: ReabrirOs,
+  ) {
+    return this.servico.reabrir(id, corpo)
   }
 
   @Post('ordens-servico/:id/cancelar')
