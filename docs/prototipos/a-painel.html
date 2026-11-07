@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>IARX — protótipo A</title>
+<style>
+:root{
+  --bg:#ffffff; --surface:#f4f6f9; --raised:#ffffff; --sunken:#eaeef3;
+  --border:#c9d0da; --border-strong:#6f7885;
+  --tx:#14171c; --tx2:#535c6b; --tx3:#616a76; --on-accent:#fff;
+  --primary:#1f3a6e; --primary-sub-bg:#e9edf6; --primary-sub-fg:#1d3665;
+  --ok:#0a6b41; --ok-bg:#e4f4ec; --em-uso:#1f3a6e; --em-uso-bg:#e9edf6;
+  --warn:#79500a; --warn-bg:#fdf3dd; --crit:#a2201a; --crit-bg:#fbeae8;
+  --inativo:#5b6472; --inativo-bg:#eef0f3;
+  --ui:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--surface);color:var(--tx);font-size:14px;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-columns:244px 1fr;min-height:900px}
+
+/* ---------- rail ---------- */
+.rail{background:var(--bg);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column}
+.marca{display:flex;gap:10px;align-items:center;padding:0 16px 18px}
+.marca .barras{display:flex;gap:2px}
+.marca .barras i{display:block;width:4px;height:22px;border-radius:1px}
+.marca b{font-size:17px;letter-spacing:-.012em;display:block}
+.marca span{font-size:11px;color:var(--tx3)}
+.secao{margin-top:2px}
+.secao>button{width:100%;display:flex;align-items:center;gap:10px;padding:9px 16px;background:none;border:0;
+  font:inherit;font-weight:600;color:var(--tx);cursor:pointer;text-align:left}
+.secao>button .glifo{width:18px;text-align:center;color:var(--tx3)}
+.secao>button .cont{margin-left:auto;font-size:11px;font-weight:700;color:var(--tx3)}
+.secao>button .chev{margin-left:auto;color:var(--tx3);font-size:11px}
+.secao.aberta>button{background:var(--primary-sub-bg);color:var(--primary-sub-fg)}
+.secao.aberta>button .glifo{color:var(--primary-sub-fg)}
+.sub{padding:2px 0 8px}
+.sub a{display:flex;align-items:center;gap:8px;padding:6px 16px 6px 44px;color:var(--tx2);text-decoration:none;font-size:13px}
+.sub a.sel{color:var(--primary);font-weight:600;box-shadow:inset 3px 0 0 var(--primary)}
+.sub a .badge{margin-left:auto;background:var(--crit-bg);color:var(--crit);font-size:10px;font-weight:700;
+  border-radius:9px;padding:1px 6px}
+.rodape-rail{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--tx3)}
+
+/* ---------- topo ---------- */
+.topo{height:60px;background:var(--bg);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;padding:0 24px}
+.busca{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;
+  border:1px solid var(--border);border-radius:8px;color:var(--tx3);background:var(--bg)}
+.busca kbd{margin-left:auto;font:11px var(--mono);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--tx3)}
+.ctx{margin-left:auto;display:flex;align-items:center;gap:8px}
+.pill{display:flex;align-items:center;gap:7px;height:34px;padding:0 11px;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg);font-size:13px;color:var(--tx);cursor:pointer}
+.pill small{color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;
+  font-size:12px;font-weight:700}
+
+/* ---------- conteúdo ---------- */
+.conteudo{padding:22px 24px 40px;overflow:hidden}
+.cab{display:flex;align-items:flex-start;gap:16px;margin-bottom:18px}
+h1{font-size:27px;letter-spacing:-.022em;line-height:1.12}
+.cab p{color:var(--tx2);margin-top:5px;font-size:13px;max-width:620px}
+.cab .agora{margin-left:auto;font-size:12px;color:var(--tx3);white-space:nowrap}
+
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.kpi{position:relative;background:var(--raised);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px 13px;border-left:3px solid var(--crit);cursor:pointer;display:block;text-decoration:none;color:inherit}
+.kpi.at{border-left-color:#8a5c0b}
+.kpi.inf{border-left-color:var(--primary)}
+.kpi .n{font:700 34px/1.12 var(--ui);letter-spacing:-.022em;font-variant-numeric:tabular-nums}
+.kpi .r{font-weight:600;font-size:13px;margin-top:2px}
+.kpi .d{color:var(--tx3);font-size:12px;margin-top:3px}
+.kpi .seta{position:absolute;right:13px;top:13px;color:var(--tx3);font-size:13px}
+.kpi .delta{display:inline-flex;align-items:center;gap:3px;font:600 11px var(--mono);
+  background:var(--crit-bg);color:var(--crit);border-radius:5px;padding:1px 5px;margin-left:8px;vertical-align:4px}
+.kpi .delta.d-ok{background:var(--ok-bg);color:var(--ok)}
+
+.faixa{display:grid;grid-template-columns:1.25fr 1fr;gap:12px}
+.card{background:var(--raised);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.card h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);
+  padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center}
+.card h2 a{margin-left:auto;font-size:12px;letter-spacing:0;text-transform:none;color:var(--primary);
+  text-decoration:none;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{font:600 11px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);
+  text-align:left;padding:9px 16px;border-bottom:1px solid var(--border)}
+td{padding:10px 16px;border-bottom:1px solid var(--sunken);font-size:13px;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px}
+.tag::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-crit{background:var(--crit-bg);color:var(--crit)}
+.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-ok{background:var(--ok-bg);color:var(--ok)}
+.sub2{color:var(--tx3);font-size:12px}
+.barra-prazo{height:5px;border-radius:3px;background:var(--sunken);overflow:hidden;width:76px;margin-top:4px}
+.barra-prazo i{display:block;height:100%;border-radius:3px}
+.nota{margin-top:14px;background:var(--primary-sub-bg);border:1px solid #b9c6de;border-radius:10px;
+  padding:11px 14px;font-size:12px;color:var(--primary-sub-fg);display:flex;gap:9px;align-items:flex-start}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="rail">
+    <div class="marca">
+      <span class="barras">
+        <i style="background:#e6d15c"></i><i style="background:#6e93c4"></i>
+        <i style="background:#1f3a6e"></i><i style="background:#6e93c4"></i>
+      </span>
+      <span><b>IARX</b><span>Locação de TI</span></span>
+    </div>
+
+    <div class="secao aberta">
+      <button><span class="glifo">◧</span> Painel do dia</button>
+    </div>
+
+    <div class="secao">
+      <button><span class="glifo">▤</span> Parque <span class="chev">›</span></button>
+    </div>
+
+    <div class="secao aberta">
+      <button><span class="glifo">◰</span> Comercial <span class="chev">⌄</span></button>
+      <div class="sub">
+        <a href="#" class="sel">Contratos</a>
+        <a href="#">Clientes</a>
+        <a href="#">Política de preço</a>
+        <a href="#">Reajustes <span class="badge">3</span></a>
+      </div>
+    </div>
+
+    <div class="secao">
+      <button><span class="glifo">◔</span> Serviço <span class="chev">›</span><span class="cont">11</span></button>
+    </div>
+
+    <div class="secao">
+      <button><span class="glifo">◩</span> Financeiro <span class="chev">›</span><span class="cont">4</span></button>
+    </div>
+
+    <div class="secao">
+      <button><span class="glifo">⊞</span> Administração <span class="chev">›</span></button>
+    </div>
+
+    <div class="rodape-rail">
+      20 telas, 6 áreas.<br>Só a área aberta mostra filhos.
+    </div>
+  </nav>
+
+  <div>
+    <header class="topo">
+      <div class="busca">
+        <span>⌕</span> Buscar patrimônio, cliente, contrato, chamado…
+        <kbd>⌘K</kbd>
+      </div>
+      <div class="ctx">
+        <button class="pill"><small>Filial</small> Todas</button>
+        <button class="pill"><small>Período</small> Nov/2026</button>
+        <div class="avatar">GC</div>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <div class="cab">
+        <div>
+          <h1>O que exige ação hoje</h1>
+          <p>Esta tela mostra desvio, não volume. Cada cartão abre a lista já filtrada.</p>
+        </div>
+        <div class="agora">Atualizado às 12:14</div>
+      </div>
+
+      <div class="kpis">
+        <a class="kpi" href="#"><span class="seta">→</span>
+          <div class="n">11 <span class="delta">▲ 4</span></div>
+          <div class="r">chamados em risco de SLA</div>
+          <div class="d">menos de 4 h de prazo restante</div></a>
+        <a class="kpi" href="#"><span class="seta">→</span>
+          <div class="n">3 <span class="delta d-ok">▼ 2</span></div>
+          <div class="r">equipamentos bloqueados</div>
+          <div class="d">preventiva vencida além da tolerância</div></a>
+        <a class="kpi at" href="#"><span class="seta">→</span>
+          <div class="n">4 <span class="delta">▲ 1</span></div>
+          <div class="r">pendências de medição</div>
+          <div class="d">bloqueiam o fechamento da competência</div></a>
+        <a class="kpi at" href="#"><span class="seta">→</span>
+          <div class="n">4</div>
+          <div class="r">peças abaixo do mínimo</div>
+          <div class="d">2 travando chamado em aberto</div></a>
+        <a class="kpi inf" href="#"><span class="seta">→</span>
+          <div class="n">6</div>
+          <div class="r">contratos vencem em 90 dias</div>
+          <div class="d">sem renovação registrada</div></a>
+        <a class="kpi inf" href="#"><span class="seta">→</span>
+          <div class="n">17</div>
+          <div class="r">equipamentos em manutenção</div>
+          <div class="d">3,9% do parque indisponível</div></a>
+      </div>
+
+      <div class="faixa">
+        <section class="card">
+          <h2>Fila técnica por risco de prazo <a href="#">Ver todos (11) →</a></h2>
+          <table>
+            <thead><tr><th>Chamado</th><th>Cliente</th><th>Prazo</th><th>Técnico</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">2026-00412</td><td>Farmax<div class="sub2">Florianópolis</div></td>
+                  <td><span class="tag t-crit">vence em 38 min</span>
+                      <div class="barra-prazo"><i style="width:92%;background:#c62c24"></i></div></td>
+                  <td>R. Alves</td></tr>
+              <tr><td class="mono">2026-00408</td><td>Boi Branco<div class="sub2">Belo Horizonte</div></td>
+                  <td><span class="tag t-crit">vence em 1 h 10</span>
+                      <div class="barra-prazo"><i style="width:78%;background:#c62c24"></i></div></td>
+                  <td>M. Dias</td></tr>
+              <tr><td class="mono">2026-00401</td><td>Hospital São Bartolomeu<div class="sub2">Campinas</div></td>
+                  <td><span class="tag t-warn">vence em 3 h 25</span>
+                      <div class="barra-prazo"><i style="width:48%;background:#8a5c0b"></i></div></td>
+                  <td>— <span class="sub2">sem técnico</span></td></tr>
+              <tr><td class="mono">2026-00397</td><td>Balanço Certo<div class="sub2">Cuiabá</div></td>
+                  <td><span class="tag t-warn">vence em 3 h 50</span>
+                      <div class="barra-prazo"><i style="width:42%;background:#8a5c0b"></i></div></td>
+                  <td>J. Prado</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="card">
+          <h2>Reposição urgente <a href="#">Ver estoque →</a></h2>
+          <table>
+            <thead><tr><th>Peça</th><th>Situação</th><th>Saldo</th><th>Sugestão</th></tr></thead>
+            <tbody>
+              <tr><td>Unidade fusora<div class="sub2">FUSOR-01</div></td>
+                  <td><span class="tag t-crit">trava 2 chamados</span></td>
+                  <td class="mono">0</td><td class="mono">12</td></tr>
+              <tr><td>Rolo de pressão<div class="sub2">ROLO-01</div></td>
+                  <td><span class="tag t-warn">abaixo do mínimo</span></td>
+                  <td class="mono">3</td><td class="mono">15</td></tr>
+              <tr><td>Toner preto<div class="sub2">TONER-01</div></td>
+                  <td><span class="tag t-warn">abaixo do mínimo</span></td>
+                  <td class="mono">8</td><td class="mono">40</td></tr>
+              <tr><td>Kit manutenção<div class="sub2">KIT-200K</div></td>
+                  <td><span class="tag t-ok">no ponto de pedido</span></td>
+                  <td class="mono">11</td><td class="mono">10</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <div class="nota">
+        <span>◆</span>
+        <span><b>O que muda:</b> o menu passa de 20 itens sempre visíveis para 6 áreas com só a aberta
+        expandida; os cartões ganham seta e variação contra o período anterior, dizendo que são clicáveis e
+        se o número piorou; a barra de topo troca três <i>selects</i> por contexto (filial, período) e conta.</span>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
