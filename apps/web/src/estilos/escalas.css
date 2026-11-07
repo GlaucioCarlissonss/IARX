@@ -93,6 +93,17 @@
   /* -------------------------------------------------------------- medidas */
 
   --largura-rail: 244px;
+  /*
+   * O rail em notebook pequeno.
+   *
+   * Ele colapsava para uma coluna de glifos abaixo de 1024px, e o rótulo virava
+   * texto de leitor de tela. Com o menu em áreas isso ficava pior, não melhor:
+   * seis áreas mais os filhos da aberta são até dezesseis ícones sem nome.
+   *
+   * 200px deixam 824px de conteúdo num viewport de 1024 — e o conteúdo reflui,
+   * o que um ícone sem rótulo não faz.
+   */
+  --largura-rail-compacto: 200px;
   --altura-barra: 60px;
   --alvo-toque: 44px;
   /* Piso da WCAG 2.5.8 (AA). `--alvo-toque` é a medida confortável, usada em

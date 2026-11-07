@@ -516,6 +516,216 @@ test('estado nunca depende só de cor: todo chip tem rótulo textual', async ({ 
 
 /* ------------------------------------------------------------------ navegação */
 
+/* ==================================================================== */
+/* Navegação em áreas — Anexo Y, fase 1                                 */
+/* ==================================================================== */
+
+/**
+ * O que estes testes protegem.
+ *
+ * O menu tinha vinte itens sempre visíveis, nove deles em Financeiro, e em
+ * notebook a última área já ficava fora da dobra. O acordeão resolve isso — e
+ * cria um risco novo: esconder um destino para sempre. Os casos abaixo medem
+ * os dois lados.
+ *
+ * O caso de celular é o mais importante da fase. Antes, abaixo de 760px o rail
+ * virava uma faixa horizontal de glifos **sem rótulo** com seis dos vinte
+ * destinos; para as outras quatorze telas não havia caminho nenhum. Era um
+ * defeito que nenhum teste pegava porque nenhum perguntava "dá para chegar
+ * lá?".
+ */
+
+test('o menu mostra seis áreas, e só a da tela atual vem aberta', async ({ page }) => {
+  await abrir(page)
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+
+  for (const area of ['Parque', 'Comercial', 'Serviço', 'Financeiro', 'Administração']) {
+    await expect(menu.getByRole('button', { name: porInicio(area) })).toBeVisible()
+  }
+
+  // Na raiz, nenhuma área precisa estar aberta: "Painel do dia" é link direto.
+  await expect(menu.getByRole('link', { name: 'Painel do dia' })).toBeVisible()
+  for (const area of ['Parque', 'Comercial', 'Financeiro']) {
+    await expect(menu.getByRole('button', { name: porInicio(area) })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  }
+})
+
+test('chegar numa tela abre a área dela sozinha', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+
+  /*
+   * Sem isto o acordeão seria submenu de verdade: quem chega por link — paleta
+   * de comandos, cartão do painel, migalha — veria o menu apontando para outro
+   * lugar e teria de redescobrir onde a tela mora para voltar a ela.
+   */
+  await expect(menu.getByRole('button', { name: porInicio('Financeiro') })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(menu.getByRole('link', { name: 'Contas a receber' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  await expect(menu.getByRole('button', { name: porInicio('Parque') })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+})
+
+test('toda tela do menu é alcançável pelo menu, em duas interações', async ({ page }) => {
+  await abrir(page)
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+
+  /*
+   * O critério que fecha o acordeão como desenho: **um clique na área, um no
+   * destino**. Se alguma tela exigisse um terceiro, o acordeão teria virado
+   * submenu aninhado — que é o que ele existe para não ser.
+   */
+  const telas = [
+    ['Parque', 'Parque instalado'],
+    ['Parque', 'Mapa'],
+    ['Comercial', 'Contratos'],
+    ['Comercial', 'Clientes'],
+    ['Comercial', 'Política comercial'],
+    ['Serviço', 'Chamados'],
+    ['Serviço', 'Peças e suprimentos'],
+    ['Financeiro', 'Contas a receber'],
+    ['Financeiro', 'Contas a pagar'],
+    ['Financeiro', 'Contas bancárias'],
+    ['Financeiro', 'Faturamento'],
+    ['Financeiro', 'Notas fiscais'],
+    ['Financeiro', 'Resultado'],
+    ['Financeiro', 'Fluxo de caixa'],
+    ['Financeiro', 'Lançamentos futuros'],
+    ['Financeiro', 'Despesas'],
+    ['Financeiro', 'Centros de custo'],
+    ['Administração', 'Usuários'],
+    ['Administração', 'Perfis de acesso'],
+  ]
+
+  for (const [area, tela] of telas) {
+    await abrirArea(page, area)
+    const destino = menu.getByRole('link', { name: porInicio(tela) })
+    await expect(destino, `${tela} deveria estar visível sob ${area}`).toBeVisible()
+  }
+})
+
+test('em 390px todo destino é alcançável, e cada um tem rótulo visível', async ({ page }) => {
+  /*
+   * O defeito que a fase 1 corrige. Antes, o rail virava uma faixa de glifos
+   * sem rótulo com seis destinos; as outras quatorze telas não tinham caminho.
+   *
+   * O teste exige as duas coisas: **rótulo** em cada atalho da barra inferior,
+   * e **caminho** para os vinte destinos através de "Mais".
+   */
+  await abrir(page, { largura: 390, altura: 844 })
+
+  const inferior = page.getByRole('navigation', { name: 'Navegação em celular' })
+  await expect(inferior).toBeVisible()
+
+  for (const rotulo of ['Painel', 'Parque', 'Serviço', 'Finanças', 'Mais']) {
+    await expect(inferior.getByText(rotulo, { exact: true })).toBeVisible()
+  }
+
+  // O rail lateral não fica escondido visualmente: ele não é renderizado, para
+  // o leitor de tela não anunciar a mesma navegação duas vezes.
+  await expect(page.getByRole('navigation', { name: 'Navegação principal' })).toHaveCount(0)
+
+  await inferior.getByRole('button', { name: /Mais/ }).click()
+  const folha = page.getByRole('navigation', { name: 'Todas as áreas' })
+  await expect(folha).toBeVisible()
+
+  for (const tela of [
+    'Painel do dia', 'Parque instalado', 'Mapa', 'Contratos', 'Clientes',
+    'Política comercial', 'Chamados', 'Peças e suprimentos', 'Contas a receber',
+    'Contas a pagar', 'Contas bancárias', 'Faturamento', 'Notas fiscais',
+    'Resultado', 'Fluxo de caixa', 'Lançamentos futuros', 'Despesas',
+    'Centros de custo', 'Usuários', 'Perfis de acesso',
+  ]) {
+    await expect(folha.getByRole('link', { name: porInicio(tela) }), `${tela} sem caminho em 390px`).toBeVisible()
+  }
+})
+
+test('em 390px os alvos da barra inferior respeitam o piso de toque', async ({ page }) => {
+  await abrir(page, { largura: 390, altura: 844 })
+  const inferior = page.getByRole('navigation', { name: 'Navegação em celular' })
+  const alvos = inferior.locator('.barra-inferior__item')
+
+  const n = await alvos.count()
+  expect(n, 'a barra inferior deve ter cinco alvos').toBe(5)
+
+  for (let i = 0; i < n; i += 1) {
+    const caixa = await alvos.nth(i).boundingBox()
+    expect(caixa.height, 'altura do alvo de toque').toBeGreaterThanOrEqual(44)
+    // WCAG 2.5.8 pede 24px; o piso de dedo do projeto é 44. Em 390px dividido
+    // por cinco sobram 78px por alvo, então a largura não é o aperto.
+    expect(caixa.width, 'largura do alvo de toque').toBeGreaterThanOrEqual(24)
+  }
+})
+
+test('a folha de Mais fecha ao escolher um destino', async ({ page }) => {
+  await abrir(page, { largura: 390, altura: 844 })
+  const inferior = page.getByRole('navigation', { name: 'Navegação em celular' })
+  await inferior.getByRole('button', { name: /Mais/ }).click()
+
+  const folha = page.getByRole('navigation', { name: 'Todas as áreas' })
+  await folha.getByRole('link', { name: 'Centros de custo', exact: true }).click()
+
+  // A folha é um caminho, não um destino: deixá-la aberta cobriria a tela que
+  // o usuário acabou de pedir.
+  await expect(folha).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 1, name: /Centros de custo/ })).toBeVisible()
+})
+
+test('nenhum item do menu fica sem rótulo visível, em nenhuma largura', async ({ page }) => {
+  /*
+   * O rail colapsava para glifos abaixo de 1024px: o rótulo virava texto de
+   * leitor de tela e sobrava uma coluna de ícones. Com vinte itens já era ruim;
+   * com o acordeão aberto em Financeiro ficavam dezesseis glifos sem rótulo —
+   * o mesmo defeito que a barra inferior do celular veio corrigir, reproduzido
+   * em notebook pequeno.
+   *
+   * O teste varre as larguras onde o rail existe e exige texto visível em cada
+   * item. Ícone sem rótulo não reflui: ou se sabe o que ele é, ou não se sabe.
+   */
+  for (const largura of [1440, 1180, 1024, 900, 800]) {
+    await abrir(page, { hash: '#/contas-receber', largura, altura: 900 })
+    const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+    const rotulos = menu.locator('.nav__rotulo')
+
+    const n = await rotulos.count()
+    expect(n, `menu vazio em ${largura}px`).toBeGreaterThan(5)
+
+    for (let i = 0; i < n; i += 1) {
+      const caixa = await rotulos.nth(i).boundingBox()
+      const texto = (await rotulos.nth(i).textContent())?.trim() ?? ''
+      expect(caixa, `"${texto}" sem rótulo visível em ${largura}px`).not.toBeNull()
+      expect(caixa.width, `"${texto}" com rótulo de largura zero em ${largura}px`).toBeGreaterThan(8)
+    }
+  }
+})
+
+test('o seletor de perfil é da demonstração, e some quando há API configurada', async ({ page }) => {
+  /*
+   * Anexo Y §Y.3.7. Trocar o próprio perfil pela barra superior contradiz o
+   * modelo do servidor: o perfil vem do token, e a troca pela interface seria
+   * um caminho sem permissão e sem trilha de auditoria.
+   *
+   * O artefato de arquivo único **é** a demonstração, então ali ele aparece. A
+   * instalação com API é o sinal de que não é demonstração.
+   */
+  await abrir(page)
+  await expect(page.getByLabel(/Perfil de acesso/)).toBeVisible()
+
+  await abrir(page, { api: { url: 'https://api.iarx.test' } })
+  await expect(page.getByLabel(/Perfil de acesso/)).toHaveCount(0)
+})
+
+
 test('paleta de comandos: atalho, setas, Enter e devolução de foco', async ({ page }) => {
   await abrir(page)
 
@@ -580,14 +790,29 @@ test('migalhas aparecem fora da raiz e voltam ao painel', async ({ page }) => {
 
 test('perfil sem permissão não vê o item no menu nem acessa a rota', async ({ page }) => {
   await abrir(page)
+  await abrirArea(page, 'Financeiro')
   await expect(page.getByRole('link', { name: /Resultado/ })).toBeVisible()
 
   await page.getByLabel('Perfil de acesso').selectOption('perf-suporte')
 
-  // Supervisor de suporte não tem painel executivo nem faturamento.
+  /*
+   * Supervisor de suporte não tem painel executivo nem faturamento. A área
+   * Financeiro **continua existindo** porque ele tem `nota_fiscal:ler` — a
+   * entrada fiscal de compra é o documento de recebimento, e quem recebe é a
+   * manutenção. Afirmar aqui que a área some seria afirmar sobre o recorte de
+   * permissão deste perfil, e não sobre o acordeão.
+   *
+   * O que vale medir é o item, não a área. E que a área só aparece quando tem
+   * algum filho visível — provado abaixo com Administração, que o supervisor
+   * não tem por inteiro.
+   */
+  await abrirArea(page, 'Financeiro')
   await expect(page.getByRole('link', { name: /Resultado/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: /Faturamento/ })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Notas fiscais/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: porInicio('Administração') })).toHaveCount(0)
   // Mas tem chamados e estoque.
+  await abrirArea(page, 'Serviço')
   await expect(page.getByRole('link', { name: /Chamados/ })).toBeVisible()
 
   // Acesso direto pela URL também é barrado, com explicação e caminho de saída.
@@ -823,6 +1048,32 @@ test('sem permissão de orçamento, a tela lê e diz o que falta', async ({ page
  * saldo negativo, CNPJ inválido. O formulário precisa recusar apontando o
  * campo, não com um alerta genérico.
  */
+
+/**
+ * Abre uma área do menu.
+ *
+ * O menu é um acordeão desde a fase 1 do Anexo Y: só a área da tela atual fica
+ * aberta, e as outras precisam de um clique. Os testes que verificam a
+ * presença de um item no menu passam por aqui — sem isso eles verificariam
+ * "está na tela", que agora é uma pergunta sobre o acordeão e não sobre
+ * permissão.
+ *
+ * Idempotente: área já aberta não é fechada. Um `click` cego alternaria, e o
+ * teste seguinte dependeria da ordem em que os anteriores rodaram.
+ */
+/*
+ * O nome acessível do botão de área inclui o contador — "Serviço 15
+ * pendências" —, e isso é correto: quem usa leitor de tela precisa saber que a
+ * área tem pendências **antes** de abri-la. Então o seletor casa pelo começo,
+ * não por igualdade.
+ */
+const porInicio = (texto) => new RegExp('^' + texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+
+async function abrirArea(page, nome) {
+  const botao = page.getByRole('button', { name: porInicio(nome) })
+  if ((await botao.getAttribute('aria-expanded')) === 'false') await botao.click()
+  await expect(botao).toHaveAttribute('aria-expanded', 'true')
+}
 
 async function abrirDialogo(page, { hash = '', nomeBotao }) {
   await abrir(page, { hash })
@@ -2341,6 +2592,7 @@ test('trocar a permissão de um perfil muda o que a interface mostra', async ({ 
   // supervisor. Sem recarregar a página — a base é de memória, e um `goto`
   // descartaria a alteração antes de ela ser observada.
   await seletor.selectOption('perf-admin')
+  await abrirArea(page, 'Administração')
   await menu.getByRole('link', { name: 'Perfis de acesso' }).click()
 
   await page.getByRole('list', { name: 'Perfis de acesso' }).getByRole('button', { name: /Supervisor de Manutenção \(derivado\)/ }).click()
@@ -2355,6 +2607,9 @@ test('trocar a permissão de um perfil muda o que a interface mostra', async ({ 
   // E o efeito aparece na navegação: `financeiro:painel_executivo` abre a tela
   // de Resultado, que o perfil de suporte não abria um instante atrás.
   await seletor.selectOption('perf-suporte')
+  // A área precisa ser aberta: o acordeão deixa fechado o que não é a tela
+  // atual, e o que se afirma aqui é sobre permissão, não sobre o acordeão.
+  await abrirArea(page, 'Financeiro')
   await expect(menu.getByRole('link', { name: /Resultado/ })).toBeVisible()
 })
 
@@ -2570,7 +2825,8 @@ test('entrar assume o perfil da conta, e não o do último que usou o navegador'
   // Administrador vê Usuários; um técnico de suporte, não. Se o perfil ficasse
   // preso ao anterior, entrar como técnico mostraria o menu do administrador —
   // e a demonstração passaria a mentir sobre o que cada perfil enxerga.
-  const menu = page.getByRole('navigation')
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+  await abrirArea(page, 'Administração')
   await expect(menu.getByRole('link', { name: /Usuários/ })).toBeVisible()
 
   const email = await emailComSituacao(page, 'Ativo')
@@ -2582,6 +2838,8 @@ test('entrar assume o perfil da conta, e não o do último que usou o navegador'
   await page.getByRole('button', { name: 'Entrar' }).click()
 
   await expect(page.getByRole('heading', { level: 1, name: 'O que exige ação hoje' })).toBeVisible()
+  // A área inteira some: o técnico não tem nenhum item de Administração.
+  await expect(page.getByRole('button', { name: porInicio('Administração') })).toHaveCount(0)
   await expect(menu.getByRole('link', { name: /Usuários/ })).toHaveCount(0)
 })
 

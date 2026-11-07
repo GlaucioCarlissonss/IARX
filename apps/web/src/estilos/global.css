@@ -427,6 +427,84 @@ svg {
   color: var(--cor-critico);
 }
 
+/* --------------------------------------------------------- áreas do menu --- */
+/*
+ * O botão de área tem a mesma métrica do item, de propósito.
+ *
+ * Diferenciá-lo por altura ou por recuo faria a lista parecer dois componentes
+ * empilhados. O que o distingue é o peso do texto e a seta — e, quando aberto,
+ * o fundo que agrupa os filhos sob ele.
+ */
+.nav__area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav__area__botao {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  min-height: 36px;
+  padding: 0 var(--e2);
+  border-radius: var(--raio-1);
+  color: var(--cor-text-primary);
+  font-size: var(--t-14);
+  font-weight: var(--peso-rotulo);
+  transition: background var(--transicao), color var(--transicao);
+}
+.nav__area__botao:hover {
+  background: var(--cor-surface-sunken);
+}
+.nav__area__botao[aria-expanded='true'] {
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+}
+.nav__area__seta {
+  margin-left: auto;
+  font-size: var(--t-12);
+  opacity: 0.7;
+}
+/* Com contador à esquerda, a seta perde o `margin-left: auto` para ele. */
+.nav__contador + .nav__area__seta {
+  margin-left: var(--e2);
+}
+.nav__area__itens {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--e2);
+}
+.nav__bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/*
+ * O recuo dos filhos é o que diz que são filhos.
+ *
+ * 18px é a largura do glifo do pai mais o espaço: o rótulo do filho alinha com
+ * o rótulo do pai, e a coluna de glifos fica reservada ao nível de cima. Sem
+ * isso, pai e filho leem como irmãos de pesos diferentes.
+ */
+.nav__area__itens .nav__item {
+  padding-left: calc(var(--e2) + 18px + var(--e3));
+}
+.nav__area__itens .nav__item .nav__glifo {
+  display: none;
+}
+.nav__area__itens .nav__grupo {
+  padding: var(--e3) var(--e2) var(--e1) calc(var(--e2) + 18px + var(--e3));
+}
+.nav__bloco:first-child .nav__grupo {
+  padding-top: var(--e2);
+}
+.nav__item--unico {
+  color: var(--cor-text-primary);
+  font-weight: var(--peso-rotulo);
+}
+
 /* ------------------------------------------------------------------ barra --- */
 /* Alinhamento da coluna de conteúdo.
    Barra, conteúdo e rodapé compartilham a mesma medida e a mesma margem. O
@@ -1305,25 +1383,32 @@ th.numerico {
 }
 
 @media (max-width: 1024px) {
-  .marca__texto,
-  .nav__item .nav__rotulo,
-  .nav__grupo {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  /*
+   * O rail estreita, e **não** colapsa para glifos.
+   *
+   * Ele colapsava: abaixo de 1024px o rótulo de cada item virava texto de
+   * leitor de tela e sobrava uma coluna de ícones. Com vinte itens era ruim; com
+   * o acordeão aberto em Financeiro ficavam dezesseis glifos sem rótulo — o
+   * mesmo defeito que a barra inferior do celular veio corrigir, reproduzido
+   * em notebook pequeno.
+   *
+   * 200px de rail deixam 824px de conteúdo num viewport de 1024, e o conteúdo
+   * já reflui — há verificação de refluxo a 320px em cada tela. Ícone sem
+   * rótulo não reflui: ou se sabe o que ele é, ou não se sabe.
+   */
+  .rail {
+    padding-inline: var(--e2);
   }
-  .nav__item {
-    justify-content: center;
-    min-height: 40px;
+  .app {
+    grid-template-columns: var(--largura-rail-compacto) 1fr;
   }
-  .nav__contador {
-    position: absolute;
-    margin: 0;
-    transform: translate(14px, -12px);
+  .nav__area__itens .nav__item {
+    padding-left: calc(var(--e2) + var(--e3));
   }
+  .nav__area__itens .nav__grupo {
+    padding-left: calc(var(--e2) + var(--e3));
+  }
+
   /* Busca e seletores mais estreitos para caberem em uma linha só: a barra em
      duas linhas rouba altura justamente onde ela é escassa. */
   .busca {
@@ -1337,60 +1422,37 @@ th.numerico {
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
-    /* Empilhado: rail, barra, conteúdo, rodapé. Quatro faixas, e o conteúdo
-       continua sendo a que absorve a sobra. */
-    grid-template-rows: auto auto 1fr auto;
+    /* Três faixas: barra, conteúdo, rodapé. O rail sai do fluxo — a navegação
+       passa a ser a barra inferior fixa. */
+    grid-template-rows: auto 1fr auto;
   }
+  /*
+   * O rail inteiro some abaixo de 760px.
+   *
+   * Ele virava uma faixa horizontal de glifos **sem rótulo**, com seis dos
+   * vinte destinos visíveis e os outros quatorze sem caminho nenhum: para
+   * chegar a Contas a receber no celular não havia caminho. A troca é pela
+   * barra inferior, com rótulo em cada destino e "Mais" abrindo a lista
+   * completa (Anexo Y §Y.3.1).
+   *
+   * `display: none` e não ocultação visual: o conteúdo está inteiro na barra
+   * inferior e na folha de "Mais", e deixá-lo aqui faria o leitor de tela
+   * anunciar a mesma navegação duas vezes.
+   */
   .rail {
-    grid-column: 1;
-    grid-row: 1;
-    align-self: stretch;
-    position: sticky;
-    top: 0;
-    /* O rail vira uma barra horizontal de ícones; 100vh de altura aqui cobriria
-       a tela inteira. */
-    height: auto;
-    z-index: 2;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--e3);
-    border-right: none;
-    border-bottom: 1px solid var(--cor-border);
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: var(--e2) var(--e3);
-  }
-  .rail .nav {
-    flex-direction: row;
-    gap: var(--e1);
-  }
-  /* Cada grupo da navegação é uma pilha vertical no rail lateral. Na faixa
-     horizontal do celular a pilha precisa virar linha também — sem isto os
-     três grupos continuam empilhando seus itens e a faixa fica com 199px de
-     altura, mais de um quarto da tela antes de qualquer conteúdo. */
-  .rail .nav > * {
-    display: flex;
-    flex-direction: row;
-    gap: var(--e1);
-  }
-  .nav__item {
-    min-width: var(--alvo-toque);
-    min-height: var(--alvo-toque);
-  }
-  /* A faixa horizontal rola em X, e rolagem em X força a rolagem em Y a deixar
-     de ser `visible` — o distintivo de pendências deslocado para fora do item
-     seria cortado pela borda superior. Menos deslocamento o mantém dentro. */
-  .nav__contador {
-    transform: translate(12px, -6px);
+    display: none;
   }
   .barra {
-    grid-row: 2;
+    grid-row: 1;
   }
   .conteudo {
-    grid-row: 3;
+    grid-row: 2;
+    /* Espaço para a barra inferior fixa não cobrir o fim do conteúdo. */
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px) + var(--e5));
   }
   .rodape {
-    grid-row: 4;
+    grid-row: 3;
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
   }
   .barra,
   .conteudo,
@@ -2825,5 +2887,178 @@ textarea {
   .filtros input {
     max-width: 100%;
     min-width: 0;
+  }
+}
+
+/* ------------------------------------------------- barra inferior (celular) --- */
+/*
+ * A navegação de celular (Anexo Y §Y.3.1).
+ *
+ * Quatro destinos nomeados mais "Mais". Quatro e não seis porque em 390px um
+ * alvo de toque confortável com rótulo legível ocupa ~78px — seis caberiam
+ * espremidos, e o rótulo é justamente o que faltava na versão anterior.
+ *
+ * Fixa, e não grudada por `sticky`: a barra precisa estar no lugar durante a
+ * rolagem com inércia do iOS, e `sticky` dentro de um contêiner que rola
+ * escorrega por um quadro em cada parada.
+ */
+.barra-inferior {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .barra-inferior {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 30;
+    background: var(--cor-bg);
+    border-top: 1px solid var(--cor-border);
+    padding: var(--e1) var(--e1) calc(var(--e1) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.barra-inferior__item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  /* O piso de toque é o do próprio item, não do ícone: um alvo de 44px com
+     rótulo de 11px é o que cabe em 390px sem o texto virar enfeite. */
+  min-height: var(--alvo-toque);
+  padding: var(--e1) 2px;
+  border-radius: var(--raio-1);
+  color: var(--cor-text-muted);
+  font-size: var(--t-11);
+  font-weight: var(--peso-rotulo);
+  text-align: center;
+  position: relative;
+}
+.barra-inferior__item:hover {
+  color: var(--cor-text-primary);
+}
+/*
+ * O destino atual ganha cor **e** peso **e** o ponto acima.
+ *
+ * Cor sozinha reprovaria WCAG 1.4.1 — e, mais prático que a norma: numa barra
+ * de cinco alvos pequenos, a diferença de matiz é o que menos se enxerga sob
+ * sol, que é onde o técnico de campo usa o aplicativo.
+ */
+.barra-inferior__item[aria-current='page'] {
+  color: var(--cor-primary);
+  font-weight: var(--peso-destaque);
+}
+.barra-inferior__item[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--cor-primary);
+}
+.barra-inferior__glifo {
+  font-size: var(--t-17);
+  line-height: 1;
+}
+.barra-inferior__rotulo {
+  line-height: 1.1;
+}
+.barra-inferior__ponto {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(6px);
+  font-family: var(--fonte-dado);
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--cor-critico);
+  color: var(--cor-text-on-accent);
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- folha --- */
+/*
+ * "Mais": a lista inteira, sem esconder nada atrás de rolagem horizontal.
+ *
+ * Folha e não diálogo modal: ela é um caminho, não uma decisão. Prender o foco
+ * e escurecer a tela para escolher um destino é cerimônia a mais no gesto mais
+ * frequente do aplicativo.
+ */
+.folha {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .folha {
+    display: block;
+    position: fixed;
+    inset-inline: 0;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    /*
+     * Ancorada embaixo e limitada por altura, em vez de esticada até um `top`
+     * fixo. A barra superior do celular não tem altura constante — ela quebra
+     * em duas linhas conforme o conteúdo —, e `top: var(--altura-barra)` fazia
+     * a folha cobrir a busca ou deixar uma faixa morta, conforme a tela.
+     */
+    max-height: min(70vh, 560px);
+    z-index: 29;
+    background: var(--cor-bg);
+    border-top: 1px solid var(--cor-border);
+    border-radius: var(--raio-3) var(--raio-3) 0 0;
+    box-shadow: 0 -8px 24px rgb(20 23 28 / 0.14);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--e4);
+  }
+}
+.folha__cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  margin-bottom: var(--e3);
+}
+.folha__titulo {
+  font-size: var(--t-15);
+  font-weight: var(--peso-destaque);
+  margin: 0;
+  margin-right: auto;
+}
+.folha__lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e4);
+}
+.folha__area {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.folha__area .nav__grupo {
+  padding: 0 var(--e2) var(--e1);
+}
+/* Na folha o alvo é de dedo, não de ponteiro. */
+.folha__area .nav__item {
+  min-height: var(--alvo-toque);
+}
+
+/* A marca aparece na barra superior só quando o rail não está lá. */
+.barra__marca {
+  display: none;
+}
+@media (max-width: 760px) {
+  .barra__marca {
+    display: grid;
+    place-items: center;
+    flex: none;
   }
 }

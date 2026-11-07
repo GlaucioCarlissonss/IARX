@@ -1,7 +1,10 @@
 # Anexo Y — Revisão de usabilidade e plano de unificação
 
-> **Estado: proposta, aguardando aprovação.** Nada deste anexo foi implementado.
+> **Estado: fase 1 entregue; fases 2 a 5 aguardando.**
 > O protótipo em imagem precede o código por decisão do cliente.
+>
+> Decisões tomadas em 07/11/2026: começar pela navegação; o seletor de perfil é
+> de demonstração; as visões salvas serão **compartilhadas no locatário**.
 
 ## Y.1 Como esta revisão foi feita
 
@@ -121,9 +124,9 @@ protótipo em imagem aprovado.
 
 | Fase | Entrega | Risco |
 | --- | --- | --- |
-| **1** | Navegação: acordeão de 6 áreas (desktop) e barra inferior rotulada (celular) | baixo — `lib/navegacao.ts` já é a fonte única; muda a apresentação |
+| **1** ✅ | Navegação: acordeão de 6 áreas (desktop) e barra inferior rotulada (celular) | entregue — ver §Y.6 |
 | **2** | Lista de trabalho: seleção múltipla, barra de lote, ações em `⋯`, rodapé de paginação. Primeiro no Parque, depois nas outras seis listas | médio — o componente `Tabela` é compartilhado |
-| **3** | Visões salvas e filtro na URL | médio — exige decidir se a visão é por usuário ou por locatário |
+| **3** | Visões salvas **compartilhadas no locatário** e filtro na URL | médio — decidido: compartilhadas. Exige tabela nova e permissão `visao:gerenciar` |
 | **4** | Cartões de KPI com variação e afordância de link; barra de topo com contexto | baixo |
 | **5** | Unificação dos formulários num descritor único | médio — 18 arquivos tocados de uma vez |
 
@@ -157,3 +160,68 @@ fase acrescenta casos antes do código:
    mais útil e exige permissão nova.
 3. **Ordem das fases.** A 1 é a de maior retorno por esforço; a 2 é a que mais
    muda o dia de quem opera.
+
+## Y.6 Fase 1 — o que foi entregue
+
+Comparativo em `docs/prototipos/fase-1-antes-depois.png`, capturado do build nas
+três larguras.
+
+### Desktop
+
+Seis áreas, só a da tela atual aberta. Financeiro, que sozinho tinha nove
+telas, ficou dividido em três blocos — Cobrança, Fiscal e Controladoria. O
+bloco é um rótulo, **não** um nível de clique: o destino continua a um clique
+assim que a área está aberta.
+
+A área da tela abre sozinha. Sem isso o acordeão seria submenu de verdade: quem
+chega por link — paleta de comandos, cartão do painel, migalha — veria o menu
+apontando para outro lugar.
+
+### Celular
+
+Barra inferior com quatro destinos nomeados e "Mais", que abre a lista inteira.
+O rail não é escondido visualmente: ele não é renderizado, para o leitor de
+tela não anunciar a mesma navegação duas vezes.
+
+### Notebook pequeno — um defeito que a fase descobriu
+
+O rail colapsava para uma coluna de glifos abaixo de 1024 px, com o rótulo
+virando texto de leitor de tela. Com vinte itens já era ruim; com o acordeão
+aberto em Financeiro ficavam dezesseis ícones sem nome — o mesmo defeito que a
+barra inferior veio corrigir, reproduzido em notebook.
+
+O colapso foi removido: o rail passa a 200 px **com rótulo**. Ícone sem rótulo
+não reflui; texto, sim.
+
+### Seletor de perfil
+
+Só em modo demonstração (`lib/demonstracao.ts`). Sem API configurada é
+demonstração — o artefato de arquivo único *é* a demonstração. Com API, some.
+`VITE_IARX_DEMO` e `window.__IARX_DEMO__` têm a última palavra nos dois
+sentidos.
+
+### Verificação
+
+Oito casos novos na suíte de acessibilidade, que passou de 231 para 239:
+
+- as seis áreas aparecem, e na raiz nenhuma vem aberta;
+- chegar numa tela abre a área dela;
+- **as dezenove telas do menu são alcançáveis em duas interações** — um clique
+  na área, um no destino. Se alguma exigisse um terceiro, o acordeão teria
+  virado submenu aninhado;
+- em 390 px todo destino é alcançável e cada atalho tem rótulo visível;
+- os cinco alvos da barra inferior respeitam o piso de toque de 44 px;
+- a folha de "Mais" fecha ao escolher um destino;
+- **nenhum item do menu fica sem rótulo visível em nenhuma largura** — é o
+  caso que impede o colapso em glifos de voltar;
+- o seletor de perfil some quando há API configurada.
+
+### O que a fase encontrou e não corrigiu
+
+"Notas fiscais" está em Financeiro/Fiscal, mas quem tem `nota_fiscal:ler` no
+perfil padrão é o **Supervisor de Manutenção** — a entrada fiscal de compra é
+o documento de recebimento, e quem recebe é a manutenção. No mercado esse
+documento costuma morar com suprimentos, não com o financeiro.
+
+Mover a tela é mudança de navegação e precisa de aprovação, então ficou como
+está. É pergunta para a próxima rodada.
