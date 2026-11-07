@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>IARX — protótipo da fase 2 · lista de trabalho</title>
+<style>
+:root{
+  --bg:#fff;--surface:#f4f6f9;--raised:#fff;--sunken:#eaeef3;--border:#c9d0da;--border-forte:#6f7885;
+  --tx:#14171c;--tx2:#535c6b;--tx3:#616a76;
+  --primary:#1f3a6e;--primary-hover:#162b52;--primary-sub-bg:#e9edf6;--primary-sub-fg:#1d3665;
+  --ok:#0a6b41;--ok-bg:#e4f4ec;--warn:#79500a;--warn-bg:#fdf3dd;--crit:#a2201a;--crit-bg:#fbeae8;
+  --inativo:#5b6472;--inativo-bg:#eef0f3;
+  --ui:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--surface);color:var(--tx);font-size:14px;
+  -webkit-font-smoothing:antialiased;padding:26px 28px 40px}
+
+.titulo-folha{font-size:20px;letter-spacing:-.016em;margin-bottom:3px}
+.titulo-folha small{display:block;font-size:13px;font-weight:400;color:var(--tx2);letter-spacing:0;margin-top:4px;max-width:900px}
+
+.quadro{margin-top:26px}
+.quadro>h2{font:700 11px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);
+  display:flex;align-items:baseline;gap:9px;margin-bottom:8px}
+.quadro>h2 .q{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:5px;
+  background:var(--primary);color:#fff;font:700 11px var(--mono);letter-spacing:0}
+.quadro>h2 .o{font-weight:600;font-size:12px;letter-spacing:0;text-transform:none;color:var(--tx2)}
+
+.card{background:var(--raised);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+/* o quadro C precisa deixar o menu escapar do cartão */
+.card--menu{overflow:visible}
+.card--menu table{border-bottom-left-radius:10px;border-bottom-right-radius:10px}
+
+/* ---- barra de ferramentas (repouso) ---- */
+.ferramentas{display:flex;gap:9px;align-items:center;padding:10px 13px;border-bottom:1px solid var(--border)}
+.campo{height:34px;border:1px solid var(--border);border-radius:8px;padding:0 10px;display:flex;align-items:center;
+  gap:7px;color:var(--tx3);font-size:13px;background:var(--bg);white-space:nowrap}
+.campo.largo{flex:1;max-width:300px}
+.campo b{color:var(--tx);font-weight:600}
+.campo .cv{color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+.contagem{margin-left:auto;font-size:12px;color:var(--tx3)}
+.contagem b{color:var(--tx);font-variant-numeric:tabular-nums}
+
+/* ---- barra de lote: SUBSTITUI a de ferramentas ---- */
+.lote{display:flex;gap:9px;align-items:center;padding:10px 13px;background:var(--primary-sub-bg);
+  border-bottom:1px solid #b9c6de;color:var(--primary-sub-fg)}
+.lote .n{font-weight:700;font-variant-numeric:tabular-nums}
+.lote .live{font:600 10px var(--mono);border:1px dashed #91a4c6;border-radius:5px;padding:1px 5px;color:#44588a}
+.lote .sep{width:1px;height:20px;background:#b9c6de}
+.lote .btn{height:32px;background:var(--bg)}
+.lote .btn.perigo{color:var(--crit);border-color:#e3b6b2}
+.lote .limpar{margin-left:auto;background:none;border:0;font:600 12px var(--ui);color:var(--primary-sub-fg);
+  text-decoration:underline;cursor:pointer}
+
+.btn{height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  font:600 13px var(--ui);color:var(--tx);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.peq{height:30px;padding:0 10px;font-size:12px;color:var(--tx2)}
+
+table{width:100%;border-collapse:collapse}
+th{font:600 11px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);text-align:left;
+  padding:9px 13px;border-bottom:1px solid var(--border);white-space:nowrap}
+th.num,td.num{text-align:right}
+td{padding:10px 13px;border-bottom:1px solid var(--sunken);font-size:13px;vertical-align:middle}
+tr.sel td{background:var(--primary-sub-bg)}
+tr.sel th{background:var(--primary-sub-bg)}
+.cx{width:17px;height:17px;border:1.5px solid var(--border-forte);border-radius:4px;display:inline-block;
+  vertical-align:-3px;background:var(--bg)}
+.cx.on{background:var(--primary);border-color:var(--primary);position:relative}
+.cx.on::after{content:'✓';position:absolute;inset:0;color:#fff;font:700 11px/14px var(--ui);text-align:center}
+.cx.meio{background:var(--primary);border-color:var(--primary);position:relative}
+.cx.meio::after{content:'';position:absolute;left:3px;right:3px;top:7px;height:2px;background:#fff;border-radius:1px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sub2{color:var(--tx3);font-size:12px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px}
+.tag::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-crit{background:var(--crit-bg);color:var(--crit)}
+.t-ok{background:var(--ok-bg);color:var(--ok)}
+.t-uso{background:var(--primary-sub-bg);color:var(--primary-sub-fg)}
+.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-off{background:var(--inativo-bg);color:var(--inativo)}
+
+.acao-linha{display:flex;gap:6px;justify-content:flex-end;align-items:center;position:relative}
+.ghost{height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--border);background:var(--bg);
+  font:600 12px var(--ui);color:var(--tx2);cursor:pointer}
+.mais{width:32px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--bg);
+  color:var(--tx2);cursor:pointer;font-size:15px;line-height:26px;text-align:center}
+.mais.aberto{background:var(--primary-sub-bg);border-color:#b9c6de;color:var(--primary-sub-fg)}
+
+/* menu ⋯ */
+.menu{position:absolute;right:0;top:34px;width:236px;background:var(--bg);border:1px solid var(--border);
+  border-radius:9px;box-shadow:0 12px 28px -10px rgba(20,23,28,.3);padding:5px;z-index:5;text-align:left}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;background:none;border:0;
+  border-radius:6px;font:500 13px var(--ui);color:var(--tx);cursor:pointer;text-align:left}
+.menu button .g{width:15px;color:var(--tx3);font-size:13px}
+.menu button.perigo{color:var(--crit)}
+.menu button.perigo .g{color:var(--crit)}
+.menu hr{border:0;border-top:1px solid var(--sunken);margin:5px 4px}
+.menu .rot{font:600 10px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);padding:6px 9px 3px}
+
+.rodape{display:flex;align-items:center;gap:12px;padding:10px 13px;border-top:1px solid var(--border);
+  font-size:12px;color:var(--tx3)}
+.rodape .btn{height:30px;font-size:12px}
+.rodape b{color:var(--tx);font-variant-numeric:tabular-nums}
+.rodape .dir{margin-left:auto;display:flex;gap:8px;align-items:center}
+.rodape select{height:30px;border:1px solid var(--border);border-radius:7px;background:var(--bg);
+  font:600 12px var(--ui);color:var(--tx2);padding:0 6px}
+
+/* confirmação */
+.sobre{position:relative;background:#10131a99;padding:22px;border-radius:10px}
+.dialogo{max-width:470px;margin:0 auto;background:var(--bg);border:1px solid var(--border);border-radius:11px;
+  box-shadow:0 18px 48px -12px rgba(20,23,28,.34);padding:18px 19px 16px}
+.dialogo h3{font-size:16px;letter-spacing:-.01em}
+.dialogo p{color:var(--tx2);font-size:13px;margin-top:8px;line-height:1.5}
+.dialogo .alvos{margin-top:11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);
+  padding:9px 11px;font-size:12px;color:var(--tx2);max-height:98px;overflow:hidden}
+.dialogo .alvos div{padding:2px 0}
+.dialogo .campo-txt{margin-top:12px}
+.dialogo label{display:block;font:600 12px var(--ui);margin-bottom:5px}
+.dialogo .inp{height:34px;border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  display:flex;align-items:center;padding:0 10px;color:var(--tx3);font-size:13px}
+.dialogo .pe{display:flex;gap:8px;justify-content:flex-end;margin-top:15px}
+
+/* resultado parcial */
+.resumo{display:flex;gap:0;border-bottom:1px solid var(--border)}
+.resumo div{flex:1;padding:12px 14px;border-right:1px solid var(--sunken)}
+.resumo div:last-child{border-right:0}
+.resumo .n{font:700 23px/1.1 var(--ui);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.resumo .r{font-size:12px;color:var(--tx2);margin-top:3px}
+.resumo .ok .n{color:var(--ok)}
+.resumo .nao .n{color:var(--crit)}
+.falha{padding:11px 14px;border-bottom:1px solid var(--sunken);display:flex;gap:11px;align-items:flex-start}
+.falha .p{font:700 13px var(--mono);min-width:58px}
+.falha .m{font-size:13px}
+.falha .m .cod{font:600 11px var(--mono);background:var(--crit-bg);color:var(--crit);border-radius:4px;
+  padding:1px 5px;margin-left:7px}
+.falha .m .d{color:var(--tx3);font-size:12px;margin-top:2px}
+
+/* celular */
+.par{display:grid;grid-template-columns:390px 390px;gap:22px}
+.tela{width:390px;height:700px;background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  overflow:hidden;position:relative;display:flex;flex-direction:column}
+.tela .t-topo{background:var(--bg);border-bottom:1px solid var(--border);padding:9px 12px;display:flex;
+  align-items:center;gap:9px}
+.tela .t-topo b{font-size:15px}
+.tela .t-corpo{flex:1;padding:11px 12px 0;overflow:hidden}
+.reg{background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 11px;margin-bottom:8px;
+  display:flex;gap:10px;align-items:flex-start}
+.reg.sel{border-color:#91a4c6;background:var(--primary-sub-bg)}
+.reg .corpo{flex:1;min-width:0}
+.reg .l1{display:flex;align-items:center;gap:8px}
+.reg .l1 b{font-family:var(--mono);font-size:13px}
+.reg .l2{font-size:13px;margin-top:4px}
+.reg .l3{color:var(--tx3);font-size:12px;margin-top:2px}
+.lote-cel{position:absolute;left:0;right:0;bottom:62px;background:var(--primary-sub-bg);border-top:1px solid #b9c6de;
+  padding:9px 12px;display:flex;gap:8px;align-items:center;color:var(--primary-sub-fg);z-index:3}
+.lote-cel .n{font-weight:700;font-size:13px}
+.lote-cel .btn{height:34px;font-size:12px;background:var(--bg)}
+.lote-cel .mais{height:34px;width:34px;line-height:30px}
+.inferior{position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(5,1fr);padding:6px 4px 8px;z-index:4}
+.inferior a{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;
+  color:var(--tx3);font-size:11px;font-weight:600;justify-content:center;min-height:44px}
+.inferior a .g{font-size:17px;line-height:1}
+.inferior a.sel{color:var(--primary)}
+
+.nota{margin-top:12px;background:var(--primary-sub-bg);border:1px solid #b9c6de;border-radius:9px;
+  padding:10px 13px;font-size:12.5px;color:var(--primary-sub-fg);line-height:1.55}
+.nota b{font-weight:700}
+.nota code{font-family:var(--mono);font-size:11.5px;background:#fff8;border-radius:3px;padding:0 3px}
+.aviso{margin-top:12px;background:var(--warn-bg);border:1px solid #e0c98c;border-radius:9px;
+  padding:10px 13px;font-size:12.5px;color:#5d3d08;line-height:1.55}
+</style>
+</head>
+<body>
+
+<h1 class="titulo-folha">Fase 2 — a lista de trabalho
+  <small>Parque instalado em 1440 px, nos quatro estados que a fase cria, e em 390 px. O que está desenhado
+  aqui usa somente rotas que já existem na API: <code>bloquear</code>, <code>desbloquear</code>,
+  <code>transferir</code> e <code>baixar</code>, cada uma por equipamento.</small>
+</h1>
+
+<!-- ============ A ============ -->
+<section class="quadro">
+  <h2><span class="q">A</span> Repouso <span class="o">— uma ação visível por linha, o resto em ⋯; paginação no rodapé</span></h2>
+  <div class="card">
+    <div class="ferramentas">
+      <div class="campo largo"><span>⌕</span> Patrimônio, série, modelo ou cliente</div>
+      <div class="campo"><span class="cv">Família</span> <b>Todas</b> ⌄</div>
+      <div class="campo"><span class="cv">Categoria</span> <b>Todas</b> ⌄</div>
+      <div class="campo"><span class="cv">Estado</span> <b>Todos</b> ⌄</div>
+      <span class="contagem"><b>438</b> registros</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:42px"><span class="cx"></span></th>
+          <th>Patrimônio</th><th>Modelo</th><th>Estado</th><th>Cliente e local</th>
+          <th class="num">Páginas no mês</th><th class="num">Margem 12 m</th><th style="width:108px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="cx"></span></td>
+          <td><b class="mono">10001</b><div class="sub2 mono">KYO-343545</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-crit">Bloqueado</span></td>
+          <td>Farmax<div class="sub2">Florianópolis</div></td>
+          <td class="num mono">12.480</td>
+          <td class="num mono">80,3%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="cx"></span></td>
+          <td><b class="mono">10003</b><div class="sub2 mono">KYO-418374</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-uso">Instalado no cliente</span></td>
+          <td>Boi Branco<div class="sub2">Belo Horizonte</div></td>
+          <td class="num mono">7.340</td>
+          <td class="num mono">72,8%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="cx"></span></td>
+          <td><b class="mono">10004</b><div class="sub2 mono">KYO-437038</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-ok">Disponível</span></td>
+          <td class="sub2">Filial Curitiba</td>
+          <td class="num mono">—</td>
+          <td class="num mono" style="color:#a2201a">−114,9%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="cx"></span></td>
+          <td><b class="mono">10006</b><div class="sub2 mono">KYO-550121</div></td>
+          <td>Kyocera ECOSYS M3145<div class="sub2">Impressora mono</div></td>
+          <td><span class="tag t-warn">Em manutenção</span></td>
+          <td class="sub2">Oficina — filial São Paulo</td>
+          <td class="num mono">—</td>
+          <td class="num mono">55,4%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rodape">
+      Exibindo <b>1–25</b> de <b>438</b>
+      <div class="dir">
+        <span>Por página</span>
+        <select><option>25</option></select>
+        <button class="btn" disabled style="opacity:.45">‹ Anterior</button>
+        <span>Página <b>1</b> de <b>18</b></span>
+        <button class="btn">Próxima ›</button>
+      </div>
+    </div>
+  </div>
+  <div class="nota"><b>O que muda em relação a hoje:</b> a coluna “Ações” deixa de carregar três botões por linha
+    (<i>Leitura</i>, <i>Chamado</i>, <i>Bloquear</i>) em 438 linhas. Fica <i>Abrir</i> — que hoje não existe, e é
+    a ação que quase todo clique quer — mais o menu <code>⋯</code>. O rodapé passa a ter os controles de página,
+    que hoje são anunciados no cabeçalho (“página 1 de 18”) e ficam fora da área visível.</div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="quadro">
+  <h2><span class="q">B</span> Com seleção <span class="o">— a barra de lote substitui a de ferramentas, não se soma a ela</span></h2>
+  <div class="card">
+    <div class="lote">
+      <span class="n">3 selecionados</span>
+      <span class="live">aria-live="polite"</span>
+      <span class="sep"></span>
+      <button class="btn">Bloquear</button>
+      <button class="btn">Desbloquear</button>
+      <button class="btn">Transferir de filial</button>
+      <button class="btn perigo">Baixar ativo</button>
+      <button class="limpar">limpar seleção</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:42px"><span class="cx meio"></span></th>
+          <th>Patrimônio</th><th>Modelo</th><th>Estado</th><th>Cliente e local</th>
+          <th class="num">Páginas no mês</th><th class="num">Margem 12 m</th><th style="width:108px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="sel">
+          <td><span class="cx on"></span></td>
+          <td><b class="mono">10001</b><div class="sub2 mono">KYO-343545</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-crit">Bloqueado</span></td>
+          <td>Farmax<div class="sub2">Florianópolis</div></td>
+          <td class="num mono">12.480</td>
+          <td class="num mono">80,3%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr class="sel">
+          <td><span class="cx on"></span></td>
+          <td><b class="mono">10003</b><div class="sub2 mono">KYO-418374</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-uso">Instalado no cliente</span></td>
+          <td>Boi Branco<div class="sub2">Belo Horizonte</div></td>
+          <td class="num mono">7.340</td>
+          <td class="num mono">72,8%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr class="sel">
+          <td><span class="cx on"></span></td>
+          <td><b class="mono">10004</b><div class="sub2 mono">KYO-437038</div></td>
+          <td>Kyocera TASKalfa 4054ci<div class="sub2">Multifuncional mono</div></td>
+          <td><span class="tag t-ok">Disponível</span></td>
+          <td class="sub2">Filial Curitiba</td>
+          <td class="num mono">—</td>
+          <td class="num mono" style="color:#a2201a">−114,9%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+        <tr>
+          <td><span class="cx"></span></td>
+          <td><b class="mono">10006</b><div class="sub2 mono">KYO-550121</div></td>
+          <td>Kyocera ECOSYS M3145<div class="sub2">Impressora mono</div></td>
+          <td><span class="tag t-warn">Em manutenção</span></td>
+          <td class="sub2">Oficina — filial São Paulo</td>
+          <td class="num mono">—</td>
+          <td class="num mono">55,4%</td>
+          <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rodape">
+      Exibindo <b>1–25</b> de <b>438</b> · <b>3</b> selecionados nesta página
+      <div class="dir">
+        <button class="btn" disabled style="opacity:.45">‹ Anterior</button>
+        <span>Página <b>1</b> de <b>18</b></span>
+        <button class="btn">Próxima ›</button>
+      </div>
+    </div>
+  </div>
+  <div class="nota"><b>Por que substituir e não somar:</b> somar faz a barra crescer para duas linhas e empurra a
+    tabela para baixo justamente quando o olho está nela. É o padrão do Gmail e do Polaris. A contagem fica em
+    região <code>aria-live</code> porque marcar uma caixa não move o foco — sem isso o leitor de tela não sabe
+    que algo mudou.<br>
+    <b>Seleção e paginação:</b> a seleção pertence à página exibida e some ao paginar, com a contagem
+    dizendo-o no rodapé. A alternativa — “selecionar os 438” — faria a ação em lote agir sobre registros que
+    ninguém viu.</div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="quadro">
+  <h2><span class="q">C</span> Menu ⋯ e confirmação <span class="o">— o que é irreversível pede confirmação e nomeia os alvos</span></h2>
+  <div class="par" style="grid-template-columns:1fr 1fr;align-items:start">
+
+    <div class="card card--menu" style="padding-bottom:210px">
+      <div class="ferramentas"><div class="campo largo"><span>⌕</span> Patrimônio, série, modelo ou cliente</div>
+        <span class="contagem"><b>438</b> registros</span></div>
+      <table>
+        <thead><tr><th style="width:42px"><span class="cx"></span></th><th>Patrimônio</th><th>Estado</th><th style="width:108px"></th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="cx"></span></td>
+            <td><b class="mono">10001</b><div class="sub2 mono">KYO-343545</div></td>
+            <td><span class="tag t-crit">Bloqueado</span></td>
+            <td><div class="acao-linha">
+              <button class="ghost">Abrir</button><button class="mais aberto">⋯</button>
+              <div class="menu">
+                <div class="rot">Equipamento 10001</div>
+                <button><span class="g">◔</span> Abrir chamado</button>
+                <button><span class="g">◱</span> Registrar leitura</button>
+                <button><span class="g">⇄</span> Transferir de filial</button>
+                <hr>
+                <button><span class="g">◧</span> Desbloquear</button>
+                <button><span class="g">▤</span> Ver movimentações</button>
+                <hr>
+                <button class="perigo"><span class="g">⊘</span> Baixar ativo…</button>
+              </div>
+            </div></td>
+          </tr>
+          <tr><td><span class="cx"></span></td><td><b class="mono">10003</b><div class="sub2 mono">KYO-418374</div></td>
+            <td><span class="tag t-uso">Instalado no cliente</span></td>
+            <td><div class="acao-linha"><button class="ghost">Abrir</button><button class="mais">⋯</button></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sobre">
+      <div class="dialogo">
+        <h3>Baixar 3 ativos?</h3>
+        <p>A baixa é definitiva: o equipamento sai do parque e não volta a ficar disponível.
+           O banco recusa a baixa de equipamento com item de contrato vigente ou ordem de serviço aberta —
+           os recusados aparecem na lista de resultado, e os demais são baixados.</p>
+        <div class="alvos">
+          <div><b class="mono">10001</b> · Kyocera TASKalfa 4054ci · Farmax</div>
+          <div><b class="mono">10003</b> · Kyocera TASKalfa 4054ci · Boi Branco</div>
+          <div><b class="mono">10004</b> · Kyocera TASKalfa 4054ci · Filial Curitiba</div>
+        </div>
+        <div class="campo-txt">
+          <label for="mot">Motivo da baixa <span style="font-weight:400;color:#616a76">(obrigatório)</span></label>
+          <div class="inp">ex.: fim de vida útil — laudo 2026-114</div>
+        </div>
+        <div class="pe">
+          <button class="btn">Cancelar</button>
+          <button class="btn pri" style="background:#a2201a;border-color:#a2201a">Baixar 3 ativos</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="nota"><b>Regra:</b> ação em lote reversível executa direto (bloquear, desbloquear); ação em lote
+    irreversível abre confirmação que <b>nomeia os alvos</b> e repete a contagem no botão. Contar no botão é o que
+    impede o erro clássico de confirmar um lote diferente do que se vê.
+    O texto do diálogo não inventa regra: ele diz o que a RN-007 já recusa no banco.</div>
+</section>
+
+<!-- ============ D ============ -->
+<section class="quadro">
+  <h2><span class="q">D</span> Resultado do lote <span class="o">— 3 chamadas à rota por equipamento; a recusa de uma não cancela as outras</span></h2>
+  <div class="card" style="max-width:860px">
+    <div class="resumo">
+      <div class="ok"><div class="n">2</div><div class="r">baixados</div></div>
+      <div class="nao"><div class="n">1</div><div class="r">recusado pelo banco</div></div>
+      <div><div class="n">0</div><div class="r">sem permissão</div></div>
+    </div>
+    <div class="falha">
+      <span class="p mono">10003</span>
+      <span class="m">Equipamento alocado em contrato — não é baixado.
+        <span class="cod">equipamento_alocado_nao_baixa</span>
+        <div class="d">Encerre os itens de contrato antes da baixa.</div>
+      </span>
+    </div>
+    <div class="rodape">
+      <button class="btn peq">Selecionar de novo só o recusado</button>
+      <div class="dir"><button class="btn">Fechar</button></div>
+    </div>
+  </div>
+  <div class="aviso"><b>Decisão de projeto que precisa do seu aval:</b> a API <b>não</b> tem rota de lote —
+    existe <code>POST /equipamentos/:id/baixar</code>, uma por equipamento. O lote do front faz N chamadas e
+    relata o resultado parcial, como acima. A alternativa seria criar rotas <code>/lote</code> no servidor,
+    que dariam tudo-ou-nada numa transação só, mas são rota nova, permissão nova e alçada nova por ação.
+    <b>Proponho começar sem rota nova</b> — o parcial é honesto e cada recusa já vem do banco com o nome da
+    regra. Se preferir tudo-ou-nada, isso vira trabalho de back-end antes da fase 2.</div>
+</section>
+
+<!-- ============ E ============ -->
+<section class="quadro">
+  <h2><span class="q">E</span> Em 390 px <span class="o">— a tabela de 7 colunas vira cartão; a barra de lote fica acima da barra inferior</span></h2>
+  <div class="par">
+
+    <div class="tela">
+      <div class="t-topo"><b>Parque</b>
+        <span style="margin-left:auto;font-size:12px;color:#616a76">438 registros</span></div>
+      <div class="t-corpo">
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10001</b><span class="tag t-crit" style="margin-left:auto">Bloqueado</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Farmax · Florianópolis · 12.480 pág.</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10003</b><span class="tag t-uso" style="margin-left:auto">Instalado</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Boi Branco · Belo Horizonte · 7.340 pág.</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10004</b><span class="tag t-ok" style="margin-left:auto">Disponível</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Filial Curitiba · sem leitura no mês</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10006</b><span class="tag t-warn" style="margin-left:auto">Manutenção</span></span>
+            <div class="l2">Kyocera ECOSYS M3145</div>
+            <div class="l3">Oficina — filial São Paulo</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div style="text-align:center;padding:8px 0 0">
+          <button class="btn" style="width:100%">Carregar mais 25</button>
+        </div>
+      </div>
+      <nav class="inferior">
+        <a href="#"><span class="g">◧</span> Painel</a>
+        <a href="#" class="sel"><span class="g">▤</span> Parque</a>
+        <a href="#"><span class="g">◔</span> Serviço</a>
+        <a href="#"><span class="g">◩</span> Finanças</a>
+        <a href="#"><span class="g">☰</span> Mais</a>
+      </nav>
+    </div>
+
+    <div class="tela">
+      <div class="t-topo"><b>Parque</b>
+        <span style="margin-left:auto;font-size:12px;color:#616a76">438 registros</span></div>
+      <div class="t-corpo">
+        <div class="reg sel">
+          <span class="cx on" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10001</b><span class="tag t-crit" style="margin-left:auto">Bloqueado</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Farmax · Florianópolis · 12.480 pág.</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg sel">
+          <span class="cx on" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10003</b><span class="tag t-uso" style="margin-left:auto">Instalado</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Boi Branco · Belo Horizonte · 7.340 pág.</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10004</b><span class="tag t-ok" style="margin-left:auto">Disponível</span></span>
+            <div class="l2">Kyocera TASKalfa 4054ci</div>
+            <div class="l3">Filial Curitiba · sem leitura no mês</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+        <div class="reg">
+          <span class="cx" style="margin-top:2px"></span>
+          <span class="corpo">
+            <span class="l1"><b>10006</b><span class="tag t-warn" style="margin-left:auto">Manutenção</span></span>
+            <div class="l2">Kyocera ECOSYS M3145</div>
+            <div class="l3">Oficina — filial São Paulo</div>
+          </span>
+          <button class="mais">⋯</button>
+        </div>
+      </div>
+      <div class="lote-cel">
+        <span class="n">2 selecionados</span>
+        <button class="btn" style="margin-left:auto">Bloquear</button>
+        <button class="mais">⋯</button>
+        <button class="btn" style="padding:0 10px">✕</button>
+      </div>
+      <nav class="inferior">
+        <a href="#"><span class="g">◧</span> Painel</a>
+        <a href="#" class="sel"><span class="g">▤</span> Parque</a>
+        <a href="#"><span class="g">◔</span> Serviço</a>
+        <a href="#"><span class="g">◩</span> Finanças</a>
+        <a href="#"><span class="g">☰</span> Mais</a>
+      </nav>
+    </div>
+  </div>
+  <div class="nota"><b>Em 390 px a paginação vira “Carregar mais”.</b> “Anterior/Próxima” com o polegar, numa
+    lista que se rola, perde o lugar a cada toque. A barra de lote senta <b>acima</b> da barra inferior em vez
+    de substituí-la: trocar a navegação por ações faria a única saída da tela sumir no meio de uma operação.
+    Só a ação mais usada fica visível; o resto vai para <code>⋯</code>, porque em 390 px não cabem quatro.</div>
+</section>
+
+</body>
+</html>

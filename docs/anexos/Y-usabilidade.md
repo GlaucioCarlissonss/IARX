@@ -225,3 +225,45 @@ documento costuma morar com suprimentos, não com o financeiro.
 
 Mover a tela é mudança de navegação e precisa de aprovação, então ficou como
 está. É pergunta para a próxima rodada.
+
+## Y.7 Fase 2 — protótipo aguardando aprovação
+
+Desenho em `docs/prototipos/d-fase-2-lista.html` e `.png`, em cinco quadros:
+repouso, com seleção, menu `⋯` com confirmação, resultado do lote e 390 px.
+
+### O que o desenho fixa
+
+- **Uma ação visível por linha** (`Abrir`) e o resto em `⋯`. Hoje são três
+  botões em 438 linhas, empurrando o dado para a direita.
+- **A barra de lote substitui a de ferramentas**, não se soma a ela. Somar
+  cresce para duas linhas e empurra a tabela justamente quando o olho está
+  nela.
+- **A seleção pertence à página exibida** e some ao paginar, com a contagem
+  dizendo-o no rodapé. "Selecionar os 438" agiria sobre registros que ninguém
+  viu.
+- **Rodapé de paginação** com os controles, hoje só anunciados no cabeçalho.
+- **Em 390 px**: cartão por registro em vez de tabela de sete colunas;
+  "Carregar mais" em vez de Anterior/Próxima; barra de lote **acima** da barra
+  inferior, nunca no lugar dela — trocar a navegação por ações faria a única
+  saída da tela sumir no meio de uma operação.
+
+### Ações em lote, e o limite que elas respeitam
+
+Só entram ações com rota que já existe, uma por equipamento:
+`bloquear`, `desbloquear`, `transferir`, `baixar`. Nada de "gerar etiquetas"
+ou "exportar", que seriam rota nova disfarçada de botão.
+
+### A decisão que falta
+
+**A API não tem rota de lote.** O lote do front faria N chamadas à rota por
+equipamento e relataria o resultado parcial — quantos passaram, quantos o
+banco recusou e com qual regra, já que cada recusa chega com o nome da
+*constraint*.
+
+A alternativa é criar rotas `/lote` no servidor: tudo-ou-nada numa transação
+só, mas rota nova, permissão nova e alçada nova por ação.
+
+A proposta é **começar sem rota nova**. O parcial é honesto, e a transação
+única esconderia que 14 das 15 preventivas podiam ter sido bloqueadas. Se a
+preferência for tudo-ou-nada, isso vira trabalho de back-end **antes** da
+fase 2.
