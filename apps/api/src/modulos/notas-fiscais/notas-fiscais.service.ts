@@ -3,7 +3,6 @@ import type {
   CancelarNota,
   CriarNotaFiscal,
   DefinirSeries,
-  Fornecedor,
   ListarNotasFiscais,
   NotaFiscal,
   NotaFiscalComItens,
@@ -59,9 +58,6 @@ export class NotasFiscaisService {
     })
   }
 
-  async fornecedores(): Promise<Fornecedor[]> {
-    return this.banco.emTransacao((db) => this.repo.fornecedores(db))
-  }
 
   /**
    * Lança a nota.

@@ -417,14 +417,6 @@ export class NotasFiscaisRepositorio {
     )
   }
 
-  async fornecedores(db: Executor): Promise<Fornecedor[]> {
-    return db.consultar<Fornecedor & Record<string, unknown>>(
-      `select id, documento, razao_social, nome_fantasia, uf, inscricao_estadual, ativo
-         from public.fornecedor
-        where deleted_at is null
-        order by razao_social`,
-    )
-  }
 
   async fornecedorPorId(db: Executor, id: string): Promise<Fornecedor | null> {
     return db.consultarUm<Fornecedor & Record<string, unknown>>(

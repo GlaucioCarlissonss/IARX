@@ -8,7 +8,6 @@ import type {
   OrdemServico,
   PausarOs,
   ReabrirOs,
-  Tecnico,
   TriarOs,
 } from '@iarx/contracts'
 import type { Executor } from '../../banco/banco.service.js'
@@ -70,15 +69,6 @@ type LinhaOs = OrdemServico & Record<string, unknown>
 
 @Injectable()
 export class ManutencaoRepositorio {
-  async tecnicos(db: Executor): Promise<Tecnico[]> {
-    return db.consultar<Tecnico & Record<string, unknown>>(
-      `select id, usuario_id, nome, matricula, filial_id, especialidades,
-              custo_hora::text as custo_hora, ativo
-         from public.tecnico
-        where deleted_at is null
-        order by ativo desc, nome`,
-    )
-  }
 
   async listar(db: Executor, filtro: ListarOs): Promise<{ linhas: OrdemServico[]; temMais: boolean }> {
     const clausulas = ['o.deleted_at is null']

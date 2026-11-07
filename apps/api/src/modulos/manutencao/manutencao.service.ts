@@ -9,7 +9,6 @@ import type {
   OrdemServico,
   PausarOs,
   ReabrirOs,
-  Tecnico,
   TriarOs,
 } from '@iarx/contracts'
 import { BancoService } from '../../banco/banco.service.js'
@@ -24,10 +23,6 @@ export class ManutencaoService {
     private readonly banco: BancoService,
     private readonly repo: ManutencaoRepositorio,
   ) {}
-
-  tecnicos(): Promise<Tecnico[]> {
-    return this.banco.emTransacao((db) => this.repo.tecnicos(db))
-  }
 
   async listar(filtro: ListarOs): Promise<Pagina<OrdemServico>> {
     return this.banco.emTransacao(async (db) => {

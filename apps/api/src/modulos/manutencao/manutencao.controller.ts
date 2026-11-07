@@ -31,12 +31,6 @@ import { ManutencaoService } from './manutencao.service.js'
 export class ManutencaoController {
   constructor(private readonly servico: ManutencaoService) {}
 
-  @Get('tecnicos')
-  @ExigePermissao('os:ler')
-  tecnicos() {
-    return this.servico.tecnicos()
-  }
-
   @Get('ordens-servico')
   @ExigePermissao('os:ler')
   listar(@Query(validar(ListarOs)) filtro: ListarOs) {

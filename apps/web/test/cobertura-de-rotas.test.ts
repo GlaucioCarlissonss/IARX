@@ -128,18 +128,12 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'medicao:consolidar': 'parte do fechamento de competência, sem ação própria ainda',
   'medicao:estimar': 'idem',
 
-  /* Peça: cadastro ainda não tem tela de edição. */
-  'peca:criar': 'cadastro de peça: tela pendente',
-  'peca:editar': 'idem',
 
   /* Técnico: cadastro pendente; a leitura entra por `os:ler`. */
-  'tecnico:gerenciar': 'cadastro de técnico: tela pendente',
 
   /* Comercial: edição de tabela pendente; a leitura já existe. */
   'comercial:gerenciar': 'edição de política comercial: tela pendente',
 
-  /* Catálogo: edição pendente; a leitura entra por `equipamento:ler`. */
-  'catalogo:gerenciar': 'edição de catálogo: tela pendente',
 
   /* Mapa: compartilhar filtro é recurso de colaboração, sem tela. */
   'mapa:filtro_compartilhar': 'compartilhamento de filtro: sem tela',
@@ -197,8 +191,6 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
     'exigida no corpo de POST /contratos/{id}/itens (RN-009), não por decorador de rota',
 
   /* Outras ações previstas e não construídas. */
-  'cliente:inativar': 'inativação de cliente: ação pendente',
-  'fornecedor:gerenciar': 'cadastro de fornecedor: tela pendente (a leitura existe)',
 }
 
 test('a massa é a esperada — o portão não pode passar vazio', () => {

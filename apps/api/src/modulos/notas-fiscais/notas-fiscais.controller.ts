@@ -1,7 +1,26 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common'
-import { CancelarNota, CriarNotaFiscal, DefinirSeries, ListarNotasFiscais } from '@iarx/contracts'
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common'
+import {
+  CancelarNota,
+  CriarNotaFiscal,
+  DefinirSeries,
+  Inativar,
+  ListarFornecedores,
+  ListarNotasFiscais,
+  SalvarFornecedor,
+} from '@iarx/contracts'
 import { ExigePermissao, Idempotente } from '../../comum/decoradores.js'
 import { validar } from '../../comum/zod.pipe.js'
+import { CadastrosService } from '../cadastros/cadastros.service.js'
 import { NotasFiscaisService } from './notas-fiscais.service.js'
 
 /** `NFC` — Entrada fiscal de compra (Anexo L, Módulo 1; Anexo N). */
@@ -91,14 +110,54 @@ export class NotasFiscaisController {
   }
 }
 
-/** `FOR` — Fornecedores, o cadastro de que a nota depende. */
+/**
+ * `FOR` — Fornecedores, o cadastro de que a nota depende.
+ *
+ * Um controlador por recurso. A primeira versão do cadastro criou um segundo
+ * `GET /fornecedores` noutro controlador, e o Nest resolve o caminho pelo
+ * primeiro registrado: a rota nova nunca era alcançada, e o filtro que ela
+ * trazia simplesmente não existia para quem chamava. Duas rotas com o mesmo
+ * caminho não dão erro — dão uma que ninguém usa.
+ *
+ * Ler é `fornecedor:ler` porque a entrada fiscal precisa escolher o
+ * fornecedor; escrever é `fornecedor:gerenciar`. São duas perguntas
+ * diferentes sobre a mesma tabela.
+ */
 @Controller('api/v1/fornecedores')
 export class FornecedoresController {
-  constructor(private readonly servico: NotasFiscaisService) {}
+  constructor(private readonly cadastros: CadastrosService) {}
 
   @Get()
   @ExigePermissao('fornecedor:ler')
-  listar() {
-    return this.servico.fornecedores()
+  listar(@Query(validar(ListarFornecedores)) filtro: ListarFornecedores) {
+    return this.cadastros.listarFornecedores(filtro)
+  }
+
+  @Post()
+  @HttpCode(201)
+  @ExigePermissao('fornecedor:gerenciar')
+  @Idempotente()
+  criar(@Body(validar(SalvarFornecedor)) corpo: SalvarFornecedor) {
+    return this.cadastros.salvarFornecedor(corpo)
+  }
+
+  @Patch(':id')
+  @ExigePermissao('fornecedor:gerenciar')
+  editar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(SalvarFornecedor)) corpo: SalvarFornecedor,
+  ) {
+    return this.cadastros.salvarFornecedor(corpo, id)
+  }
+
+  /** Sem `DELETE`: nota fiscal lançada aponta para o fornecedor (RN-019). */
+  @Post(':id/inativar')
+  @HttpCode(200)
+  @ExigePermissao('fornecedor:gerenciar')
+  inativar(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body(validar(Inativar)) corpo: Inativar,
+  ) {
+    return this.cadastros.inativar('fornecedor', id, corpo)
   }
 }

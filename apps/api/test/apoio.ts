@@ -34,6 +34,7 @@ export const FILIAL_A = '11111111-1111-4111-8111-1111111111f1'
 export const FILIAL_A2 = '11111111-1111-4111-8111-1111111111f2' // mesma empresa, destino de transferência
 export const MODELO_A = '11111111-1111-4111-8111-1111111111d1'
 export const CATEGORIA_A = '11111111-1111-4111-8111-1111111111c1'
+export const FABRICANTE_A = '11111111-1111-4111-8111-1111111111b1'
 export const NOTA_PENDENTE = '11111111-1111-4111-8111-11111111e001' // 1/12345, item 2 sem séries
 export const NOTA_ITEM_1 = '11111111-1111-4111-8111-11111111e101' // 3 unidades, já identificadas
 export const NOTA_ITEM_2 = '11111111-1111-4111-8111-11111111e102' // 2 unidades, nenhuma
