@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>IARX — protótipo da fase 3 · visões salvas</title>
+<style>
+:root{
+  --bg:#fff;--surface:#f4f6f9;--raised:#fff;--sunken:#eaeef3;--border:#c9d0da;--border-forte:#6f7885;
+  --tx:#14171c;--tx2:#535c6b;--tx3:#616a76;
+  --primary:#1f3a6e;--primary-hover:#162b52;--primary-sub-bg:#e9edf6;--primary-sub-fg:#1d3665;
+  --ok:#0a6b41;--ok-bg:#e4f4ec;--warn:#79500a;--warn-bg:#fdf3dd;--crit:#a2201a;--crit-bg:#fbeae8;
+  --inativo:#5b6472;--inativo-bg:#eef0f3;
+  --ui:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--surface);color:var(--tx);font-size:14px;
+  -webkit-font-smoothing:antialiased;padding:26px 28px 40px}
+.titulo-folha{font-size:20px;letter-spacing:-.016em}
+.titulo-folha small{display:block;font-size:13px;font-weight:400;color:var(--tx2);margin-top:5px;max-width:1000px;line-height:1.5}
+.quadro{margin-top:26px}
+.quadro>h2{font:700 11px var(--ui);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);
+  display:flex;align-items:baseline;gap:9px;margin-bottom:8px}
+.quadro>h2 .q{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:5px;
+  background:var(--primary);color:#fff;font:700 11px var(--mono)}
+.quadro>h2 .o{font-weight:600;font-size:12px;letter-spacing:0;text-transform:none;color:var(--tx2)}
+.card{background:var(--raised);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+
+/* faixa de visões */
+.visoes{display:flex;gap:7px;align-items:center;padding:11px 13px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.chip{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--border);background:var(--bg);
+  font:600 12px var(--ui);color:var(--tx2);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.chip.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.chip .c{font:700 11px var(--mono);opacity:.8}
+.chip .eq{font-size:11px;opacity:.75}
+.chip.add{border-style:dashed;color:var(--tx3)}
+.chip .x{opacity:.7;font-size:13px}
+.sep-v{width:1px;height:22px;background:var(--border);margin:0 3px}
+.rot-v{font:600 10px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-right:2px}
+
+.ferramentas{display:flex;gap:9px;align-items:center;padding:10px 13px;border-bottom:1px solid var(--border)}
+.campo{height:34px;border:1px solid var(--border);border-radius:8px;padding:0 10px;display:flex;align-items:center;
+  gap:7px;color:var(--tx3);font-size:13px;background:var(--bg);white-space:nowrap}
+.campo.largo{flex:1;max-width:280px}
+.campo b{color:var(--tx);font-weight:600}
+.campo .cv{color:var(--tx3);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+.campo.ativo{border-color:var(--primary);background:var(--primary-sub-bg);color:var(--primary-sub-fg)}
+.campo.ativo b{color:var(--primary-sub-fg)}
+.contagem{margin-left:auto;font-size:12px;color:var(--tx3)}
+.contagem b{color:var(--tx)}
+.alterado{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:12px;color:var(--warn)}
+.btn{height:34px;padding:0 13px;border-radius:8px;border:1px solid var(--border);background:var(--bg);
+  font:600 12px var(--ui);color:var(--tx);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:var(--primary);border-color:var(--primary);color:#fff}
+
+table{width:100%;border-collapse:collapse}
+th{font:600 11px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);text-align:left;
+  padding:9px 13px;border-bottom:1px solid var(--border);white-space:nowrap}
+th.num,td.num{text-align:right}
+td{padding:10px 13px;border-bottom:1px solid var(--sunken);font-size:13px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sub2{color:var(--tx3);font-size:12px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px}
+.tag::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-crit{background:var(--crit-bg);color:var(--crit)}
+.t-warn{background:var(--warn-bg);color:var(--warn)}
+.ghost{height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--border);background:var(--bg);
+  font:600 12px var(--ui);color:var(--tx2)}
+.mais{width:32px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--bg);
+  color:var(--tx2);font-size:15px;line-height:26px;text-align:center}
+.acao-linha{display:flex;gap:6px;justify-content:flex-end}
+
+.url{margin:0;padding:9px 13px;background:var(--sunken);border-bottom:1px solid var(--border);
+  font:500 12px var(--mono);color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.url b{color:var(--primary-sub-fg)}
+
+.par{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+
+/* diálogo */
+.sobre{background:#10131a99;padding:22px;border-radius:10px}
+.dialogo{max-width:480px;margin:0 auto;background:var(--bg);border:1px solid var(--border);border-radius:11px;
+  box-shadow:0 18px 48px -12px rgba(20,23,28,.34);padding:18px 19px 16px}
+.dialogo h3{font-size:16px;letter-spacing:-.01em}
+.dialogo p.d{color:var(--tx2);font-size:13px;margin-top:7px;line-height:1.5}
+.campo-txt{margin-top:13px}
+label{display:block;font:600 12px var(--ui);margin-bottom:5px}
+label .op{font-weight:400;color:var(--tx3)}
+.inp{height:36px;border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  display:flex;align-items:center;padding:0 10px;color:var(--tx);font-size:13px}
+.inp.vazio{color:var(--tx3)}
+.radios{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.radio{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--border);border-radius:9px;padding:9px 11px}
+.radio.on{border-color:var(--primary);background:var(--primary-sub-bg)}
+.radio i{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-forte);margin-top:2px;flex:none;position:relative}
+.radio.on i{border-color:var(--primary)}
+.radio.on i::after{content:'';position:absolute;inset:3px;border-radius:50%;background:var(--primary)}
+.radio.off{opacity:.55}
+.radio b{font-size:13px;display:block}
+.radio span{font-size:12px;color:var(--tx3);display:block;margin-top:2px;line-height:1.45}
+.capturado{margin-top:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);padding:10px 11px}
+.capturado .t{font:600 11px var(--ui);letter-spacing:.07em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px}
+.capturado .pills{display:flex;gap:6px;flex-wrap:wrap}
+.capturado .p{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 7px;
+  font:600 11px var(--ui);color:var(--tx2)}
+.pe{display:flex;gap:8px;justify-content:flex-end;margin-top:15px}
+
+/* menu da visão */
+.menu{width:252px;background:var(--bg);border:1px solid var(--border);border-radius:9px;
+  box-shadow:0 12px 28px -10px rgba(20,23,28,.3);padding:5px}
+.menu .rot{font:600 10px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);padding:6px 9px 3px}
+.menu button{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;background:none;border:0;
+  border-radius:6px;font:500 13px var(--ui);color:var(--tx);text-align:left}
+.menu button .g{width:15px;color:var(--tx3)}
+.menu button.perigo{color:var(--crit)}
+.menu hr{border:0;border-top:1px solid var(--sunken);margin:5px 4px}
+
+/* modelagem */
+.modelo{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.bloco{background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.bloco h3{font:700 12px var(--ui);letter-spacing:.04em;margin-bottom:9px}
+.bloco code{font-family:var(--mono);font-size:12px;background:var(--sunken);border-radius:4px;padding:1px 5px}
+.bloco table{width:100%;margin-top:4px}
+.bloco th{text-transform:none;letter-spacing:0;font-size:11px;padding:5px 0;border-bottom:1px solid var(--border)}
+.bloco td{padding:5px 0;border-bottom:1px solid var(--sunken);font-size:12px;vertical-align:top}
+.bloco td:first-child{font-family:var(--mono);white-space:nowrap;padding-right:12px;width:1%}
+.bloco ul{margin:6px 0 0 16px;font-size:12.5px;color:var(--tx2);line-height:1.6}
+
+.nota{margin-top:12px;background:var(--primary-sub-bg);border:1px solid #b9c6de;border-radius:9px;
+  padding:10px 13px;font-size:12.5px;color:var(--primary-sub-fg);line-height:1.55}
+.aviso{margin-top:12px;background:var(--warn-bg);border:1px solid #e0c98c;border-radius:9px;
+  padding:10px 13px;font-size:12.5px;color:#5d3d08;line-height:1.55}
+.nota code,.aviso code{font-family:var(--mono);font-size:11.5px}
+</style>
+</head>
+<body>
+
+<h1 class="titulo-folha">Fase 3 — visões salvas e o filtro na URL
+  <small>O achado Y.3.5: quem cuida de preventiva vencida refaz o mesmo filtro toda manhã, e o filtro não
+  sobrevive à navegação. Desenhado sobre o Parque; vale para as oito listas.</small>
+</h1>
+
+<!-- ============ A ============ -->
+<section class="quadro">
+  <h2><span class="q">A</span> A faixa de visões <span class="o">— o recorte vira um clique, e o endereço da página é o recorte</span></h2>
+  <div class="card">
+    <p class="url">iarx.app/<b>#/parque?visao=preventiva-vencida</b> &nbsp;·&nbsp; o link abre a lista já filtrada, em qualquer máquina</p>
+    <div class="visoes">
+      <span class="rot-v">Visões</span>
+      <button class="chip">Todos <span class="c">438</span></button>
+      <button class="chip on">Preventiva vencida <span class="c">14</span> <span class="eq">⚑</span></button>
+      <button class="chip">Margem negativa <span class="eq">⚑</span></button>
+      <span class="sep-v"></span>
+      <button class="chip">Minha ronda de SP</button>
+      <button class="chip add">＋ Salvar esta visão</button>
+    </div>
+    <div class="ferramentas">
+      <div class="campo largo"><span>⌕</span> Patrimônio, série, modelo ou cliente</div>
+      <div class="campo"><span class="cv">Família</span> <b>Todas</b> ⌄</div>
+      <div class="campo ativo"><span class="cv">Estado</span> <b>Em manutenção</b> ⌄</div>
+      <div class="campo ativo"><span class="cv">Preventiva</span> <b>Vencida</b> ⌄</div>
+      <span class="contagem"><b>14</b> registros</span>
+    </div>
+    <table>
+      <thead><tr><th style="width:42px"></th><th>Patrimônio</th><th>Modelo</th><th>Estado</th><th>Cliente e local</th><th class="num">Última preventiva</th><th style="width:108px"></th></tr></thead>
+      <tbody>
+        <tr><td></td><td><b class="mono">10001</b><div class="sub2 mono">KYO-343545</div></td>
+          <td>Kyocera TASKalfa 4054ci</td><td><span class="tag t-crit">Bloqueado</span></td>
+          <td>Farmax<div class="sub2">Florianópolis</div></td><td class="num mono">há 7 meses</td>
+          <td><div class="acao-linha"><button class="ghost">Chamado</button><button class="mais">⋯</button></div></td></tr>
+        <tr><td></td><td><b class="mono">10002</b><div class="sub2 mono">KYO-999790</div></td>
+          <td>Kyocera TASKalfa 4054ci</td><td><span class="tag t-crit">Bloqueado</span></td>
+          <td>Balanço Certo<div class="sub2">Cuiabá</div></td><td class="num mono">há 9 meses</td>
+          <td><div class="acao-linha"><button class="ghost">Chamado</button><button class="mais">⋯</button></div></td></tr>
+        <tr><td></td><td><b class="mono">10047</b><div class="sub2 mono">KYO-118902</div></td>
+          <td>Kyocera TASKalfa 3554ci</td><td><span class="tag t-warn">Em manutenção</span></td>
+          <td>Hospital São Bartolomeu<div class="sub2">Campinas</div></td><td class="num mono">há 11 meses</td>
+          <td><div class="acao-linha"><button class="ghost">Chamado</button><button class="mais">⋯</button></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota"><b>⚑ marca a visão da equipe</b>, visível para todo o locatário; as sem bandeira são
+    pessoais. O <b>contador só aparece na visão ativa e nas que já foram abertas nesta sessão</b> — contar
+    todas a cada carregamento pediria uma consulta por visão, e a faixa ficaria mais cara que a lista.
+    <br><b>O filtro passa a morar na URL em todas as listas</b> (hoje só o Parque faz isso): sem endereço, a
+    visão não tem o que guardar, e colar um link para um colega continua levando à lista inteira.</div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="quadro">
+  <h2><span class="q">B</span> Salvar <span class="o">— o que é capturado fica à vista, e o alcance é uma escolha explícita</span></h2>
+  <div class="par">
+    <div class="sobre">
+      <div class="dialogo">
+        <h3>Salvar esta visão</h3>
+        <p class="d">A visão guarda os filtros, a ordenação e as colunas — não os registros. Ela mostra o que
+          estiver valendo quando for aberta.</p>
+
+        <div class="campo-txt">
+          <label for="n">Nome</label>
+          <div class="inp">Preventiva vencida</div>
+        </div>
+
+        <div class="campo-txt">
+          <label>Quem enxerga</label>
+          <div class="radios">
+            <div class="radio on"><i></i><span><b>Só eu</b>
+              <span>Fica na sua lista. Ninguém mais vê.</span></span></div>
+            <div class="radio"><i></i><span><b>Toda a operação ⚑</b>
+              <span>Aparece para quem abre esta tela, com o seu nome ao lado. Exige <code>visao:compartilhar</code>.</span></span></div>
+          </div>
+        </div>
+
+        <div class="capturado">
+          <div class="t">O que esta visão guarda</div>
+          <div class="pills">
+            <span class="p">Estado: Em manutenção</span>
+            <span class="p">Preventiva: Vencida</span>
+            <span class="p">Ordem: última preventiva ↑</span>
+            <span class="p">Filial: a do usuário</span>
+          </div>
+        </div>
+
+        <div class="pe">
+          <button class="btn">Cancelar</button>
+          <button class="btn pri">Salvar visão</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="visoes">
+          <span class="rot-v">Visões</span>
+          <button class="chip">Todos</button>
+          <button class="chip on">Preventiva vencida <span class="c">14</span> <span class="eq">⚑</span></button>
+          <button class="chip">Margem negativa <span class="eq">⚑</span></button>
+          <button class="chip add">＋ Salvar esta visão</button>
+        </div>
+        <div class="ferramentas">
+          <div class="campo largo"><span>⌕</span> Patrimônio, série…</div>
+          <div class="campo ativo"><span class="cv">Estado</span> <b>Disponível</b> ⌄</div>
+          <div class="alterado">
+            <span>● filtros alterados</span>
+            <button class="btn">Atualizar a visão</button>
+            <button class="btn">Descartar</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Patrimônio</th><th>Estado</th><th>Cliente e local</th></tr></thead>
+          <tbody>
+            <tr><td><b class="mono">10004</b></td><td>Disponível</td><td class="sub2">Filial Curitiba</td></tr>
+            <tr><td><b class="mono">10008</b></td><td>Disponível</td><td class="sub2">Filial São Paulo</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="nota"><b>Mexer no filtro com uma visão aberta não a altera.</b> A barra passa a dizer
+        “filtros alterados”, com <i>Atualizar a visão</i> e <i>Descartar</i>. Salvar em silêncio mudaria,
+        para todo o locatário, o recorte que outra pessoa usa de manhã — e ninguém saberia por quê.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section class="quadro">
+  <h2><span class="q">C</span> Administrar uma visão <span class="o">— no próprio chip, e com a permissão à mostra</span></h2>
+  <div class="par" style="grid-template-columns:300px 1fr;align-items:start">
+    <div class="menu">
+      <div class="rot">Preventiva vencida ⚑</div>
+      <button><span class="g">↻</span> Atualizar com os filtros atuais</button>
+      <button><span class="g">✎</span> Renomear</button>
+      <button><span class="g">⚑</span> Deixar de compartilhar</button>
+      <hr>
+      <button><span class="g">⎘</span> Duplicar como minha</button>
+      <button><span class="g">⌁</span> Copiar o link</button>
+      <hr>
+      <button class="perigo"><span class="g">⊗</span> Excluir visão</button>
+    </div>
+    <div>
+      <div class="aviso"><b>Quem pode o quê, e por que não é só uma permissão:</b>
+        <ul style="margin:7px 0 0 16px;line-height:1.65">
+          <li><b>Visão pessoal</b> — qualquer um que abre a tela cria, renomeia e exclui a sua. Não há
+            permissão nova: a linha é dela, e o RLS já separa por usuário. Sem isto, o achado Y.3.5 continuaria
+            de pé para quem mais sofre com ele — quem opera, não quem administra.</li>
+          <li><b>Visão da equipe</b> — exige <code>visao:compartilhar</code>, porque publicar um recorte para
+            todo o locatário é um ato com alcance. Editar ou excluir a visão da equipe que outra pessoa criou
+            exige a mesma permissão.</li>
+          <li><b>Ver</b> — não tem permissão própria. Quem abre a tela vê as visões dela. Uma permissão de
+            leitura à parte criaria o estado absurdo de ver a aba e não o conteúdo.</li>
+        </ul>
+      </div>
+      <div class="nota"><b>Duplicar como minha</b> é a saída de quem não pode editar a da equipe e quer
+        ajustá-la. Sem essa saída, a única alternativa seria pedir a alguém — e o recorte morre aí.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ D ============ -->
+<section class="quadro">
+  <h2><span class="q">D</span> A modelagem, antes do módulo <span class="o">— migração 0038</span></h2>
+  <div class="modelo">
+    <div class="bloco">
+      <h3><code>public.visao_salva</code></h3>
+      <table>
+        <tr><th>coluna</th><th>o que é</th></tr>
+        <tr><td>id</td><td>uuid</td></tr>
+        <tr><td>tenant_id</td><td>locatário — RLS, como em toda tabela</td></tr>
+        <tr><td>tela</td><td>enum <code>app.tela_com_visao</code>: as oito listas. Texto livre deixaria visão órfã de tela renomeada</td></tr>
+        <tr><td>nome</td><td>texto, 1–60</td></tr>
+        <tr><td>consulta</td><td><code>jsonb</code> — os parâmetros da URL. <code>text</code> viraria string opaca que ninguém consulta</td></tr>
+        <tr><td>compartilhada</td><td>boolean. Falso = pessoal</td></tr>
+        <tr><td>dono_id</td><td>quem criou. Nunca nulo, inclusive nas compartilhadas: é o nome ao lado do ⚑</td></tr>
+        <tr><td>ordem</td><td>inteiro, posição na faixa</td></tr>
+      </table>
+      <ul>
+        <li><b>Índice único parcial</b> por <code>(tenant_id, tela, lower(nome))</code> onde
+          <code>compartilhada</code> — duas visões da equipe com o mesmo nome são indistinguíveis no chip.</li>
+        <li>E outro por <code>(tenant_id, tela, dono_id, lower(nome))</code> onde <b>não</b> compartilhada.</li>
+        <li><code>CHECK</code> em <code>jsonb_typeof(consulta) = 'object'</code>.</li>
+      </ul>
+    </div>
+    <div class="bloco">
+      <h3>RLS e permissão</h3>
+      <ul>
+        <li><b>Leitura:</b> <code>compartilhada</code> <i>ou</i> <code>dono_id = app.usuario_atual()</code>.
+          A visão pessoal de alguém não aparece para ninguém, nem para o administrador — e isso é propriedade
+          do RLS, não da interface.</li>
+        <li><b>Escrita pessoal:</b> <code>dono_id = app.usuario_atual()</code> e
+          <code>compartilhada = false</code>.</li>
+        <li><b>Escrita compartilhada:</b> exige a permissão <code>visao:compartilhar</code>, conferida no
+          servidor — o front não basta.</li>
+        <li>Gatilho que <b>recusa transformar pessoal em compartilhada</b> sem a permissão, em vez de deixar
+          o <code>UPDATE</code> passar e a política só filtrar a leitura depois.</li>
+      </ul>
+      <h3 style="margin-top:14px">Rotas</h3>
+      <table>
+        <tr><td>GET</td><td><code>/visoes?tela=parque</code> · <code>visao:ler</code> implícita na tela</td></tr>
+        <tr><td>POST</td><td><code>/visoes</code></td></tr>
+        <tr><td>PATCH</td><td><code>/visoes/:id</code></td></tr>
+        <tr><td>DELETE</td><td><code>/visoes/:id</code></td></tr>
+        <tr><td>POST</td><td><code>/visoes/:id/duplicar</code></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="aviso"><b>O que decide o tamanho da fase:</b> o filtro de <b>sete das oito listas</b> ainda é
+    estado local do React — só o Parque guarda na URL. Sem o filtro na URL não há o que salvar, então a fase 3
+    é, em boa parte, mover esse estado nas sete telas. É trabalho repetitivo e de baixo risco, mas é ele que
+    domina o esforço — não a tabela.</div>
+</section>
+
+<!-- ============ E ============ -->
+<section class="quadro">
+  <h2><span class="q">E</span> Em 390 px <span class="o">— a faixa rola na horizontal; a visão ativa entra à vista</span></h2>
+  <div style="width:390px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--bg)">
+    <div style="padding:9px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px">
+      <b style="font-size:15px">Parque</b>
+      <span style="margin-left:auto;font-size:12px;color:var(--tx3)">14 registros</span>
+    </div>
+    <div class="visoes" style="flex-wrap:nowrap;overflow:hidden;padding:10px 12px">
+      <button class="chip on" style="flex:none">Preventiva vencida <span class="c">14</span> <span class="eq">⚑</span></button>
+      <button class="chip" style="flex:none">Todos</button>
+      <button class="chip" style="flex:none">Margem…</button>
+    </div>
+    <div style="padding:11px 12px">
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 11px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px"><b class="mono" style="font-size:13px">10001</b>
+          <span class="tag t-crit" style="margin-left:auto">Bloqueado</span></div>
+        <div style="font-size:13px;margin-top:4px">Kyocera TASKalfa 4054ci</div>
+        <div class="sub2" style="margin-top:2px">Farmax · preventiva há 7 meses</div>
+      </div>
+      <div style="background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 11px">
+        <div style="display:flex;align-items:center;gap:8px"><b class="mono" style="font-size:13px">10002</b>
+          <span class="tag t-crit" style="margin-left:auto">Bloqueado</span></div>
+        <div style="font-size:13px;margin-top:4px">Kyocera TASKalfa 4054ci</div>
+        <div class="sub2" style="margin-top:2px">Balanço Certo · preventiva há 9 meses</div>
+      </div>
+    </div>
+  </div>
+  <div class="nota"><b>Em celular a visão é o filtro.</b> Quem está em campo não monta recorte na mão — abre o
+    que já existe. A faixa rola na horizontal, com a ativa trazida à vista no carregamento, e os seletores de
+    filtro ficam atrás de um botão <i>Filtros</i>, como já ficam hoje.</div>
+</section>
+
+<section class="quadro">
+  <h2><span class="q">?</span> O que preciso que você decida</h2>
+  <div class="bloco" style="max-width:1000px">
+    <ul style="margin-left:16px;line-height:1.75;font-size:13px">
+      <li><b>Pessoal + compartilhada, ou só compartilhada?</b> Você decidiu “compartilhadas no locatário”. O
+        desenho acima acrescenta a <b>pessoal</b>, porque sem ela quem sofre com o achado Y.3.5 — o técnico, o
+        cobrador — depende de alguém com permissão para resolver o próprio dia. <b>Proponho as duas.</b></li>
+      <li><b>Visão da equipe nasce de quem?</b> Proponho: qualquer um com <code>visao:compartilhar</code>, e
+        esta permissão entra nos perfis de <b>supervisão</b> e <b>administração</b> — não no de técnico.</li>
+      <li><b>Visões de fábrica.</b> Posso entregar a tabela vazia, ou semeada com recortes que o próprio
+        sistema já calcula em outros lugares (“Preventiva vencida”, “Margem negativa”, “Sem leitura no mês”).
+        Semear ajuda no primeiro dia e é <b>dado de negócio que eu estaria inventando</b> — então só faço se
+        você disser quais.</li>
+    </ul>
+  </div>
+</section>
+
+</body>
+</html>

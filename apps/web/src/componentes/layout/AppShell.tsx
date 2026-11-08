@@ -104,16 +104,36 @@ export function AppShell() {
   const demo = emDemonstracao(enderecoDaApi())
 
   /*
-   * A área aberta segue a tela, e o usuário pode abrir outra.
+   * Quais áreas estão abertas — **várias ao mesmo tempo**.
    *
-   * `null` significa "siga a tela"; um id significa "o usuário escolheu este".
-   * Guardar só o id escolhido faria a navegação por link — paleta de comandos,
-   * cartão do painel, migalha — deixar o menu apontando para outro lugar.
+   * A primeira versão guardava uma só: abrir Financeiro fechava Parque. Quem
+   * trabalha com duas áreas ao mesmo tempo — e é o caso de quase todo mundo
+   * aqui, entre o parque e o chamado — reabria a mesma seção a cada ida e
+   * volta. Sanfona não é rádio: cada seção abre e fecha por conta própria, e o
+   * que você abriu continua aberto.
+   *
+   * A área da tela atual entra sozinha, e **nunca sai por navegação**: quem
+   * chega por link — paleta de comandos, cartão do painel, migalha — precisa
+   * ver no menu onde está. Fechar continua sendo decisão de quem clica.
    */
-  const [areaEscolhida, setAreaEscolhida] = useState<string | null>(null)
   const areaDaTela = areaDe(local.pathname)
-  const areaAberta = areaEscolhida ?? areaDaTela ?? areas[0]!.id
-  useEffect(() => setAreaEscolhida(null), [local.pathname])
+  const [abertas, setAbertas] = useState<ReadonlySet<string>>(
+    () => new Set(areaDaTela ? [areaDaTela] : []),
+  )
+
+  useEffect(() => {
+    if (!areaDaTela) return
+    setAbertas((atuais) => (atuais.has(areaDaTela) ? atuais : new Set([...atuais, areaDaTela])))
+  }, [areaDaTela])
+
+  function alternarArea(id: string) {
+    setAbertas((atuais) => {
+      const nova = new Set(atuais)
+      if (nova.has(id)) nova.delete(id)
+      else nova.add(id)
+      return nova
+    })
+  }
 
   const porArea = useMemo(() => {
     const mapa = new Map<string, ItemNavegacao[]>()
@@ -206,7 +226,7 @@ export function AppShell() {
                 return link(itens[0]!, 'nav__item nav__item--unico')
               }
 
-              const aberta = areaAberta === area.id
+              const aberta = abertas.has(area.id)
               const n = pendenciasDaArea(area.id)
               return (
                 <div key={area.id} className="nav__area">
@@ -215,7 +235,7 @@ export function AppShell() {
                     className="nav__area__botao"
                     aria-expanded={aberta}
                     aria-controls={`area-${area.id}`}
-                    onClick={() => setAreaEscolhida(aberta ? '' : area.id)}
+                    onClick={() => alternarArea(area.id)}
                   >
                     <span className="nav__glifo" aria-hidden="true">
                       {area.glifo}
@@ -227,8 +247,18 @@ export function AppShell() {
                         <span className="so-leitor"> pendências</span>
                       </span>
                     )}
+                    {/*
+                      Uma seta só, que gira.
+
+                      Trocar o glifo — `›` fechado, `⌄` aberto — obriga a ler
+                      dois símbolos diferentes e compará-los de memória com o
+                      estado que se espera. A mesma seta girando mostra o
+                      estado **e** a transição: o movimento é a explicação.
+                      Quem desligou animação no sistema vê a seta já girada,
+                      sem movimento, e o significado não se perde.
+                    */}
                     <span className="nav__area__seta" aria-hidden="true">
-                      {aberta ? '⌄' : '›'}
+                      ▾
                     </span>
                   </button>
 

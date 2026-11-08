@@ -461,10 +461,29 @@ svg {
   background: var(--cor-primary-subtle-bg);
   color: var(--cor-primary-subtle-fg);
 }
+/*
+ * A seta da sanfona: uma só, que gira.
+ *
+ * `inline-block` é condição para `transform` ter efeito num `<span>`, e o
+ * `transform-origin` central evita que a seta "ande" ao girar. A transição
+ * entra no bloco de movimento reduzido lá em cima, que zera toda animação —
+ * aí a seta aparece já na posição certa, sem movimento, e o estado continua
+ * legível.
+ */
 .nav__area__seta {
   margin-left: auto;
   font-size: var(--t-12);
-  opacity: 0.7;
+  line-height: 1;
+  opacity: 0.75;
+  display: inline-block;
+  transform-origin: 50% 50%;
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+.nav__area__botao[aria-expanded='false'] .nav__area__seta {
+  transform: rotate(-90deg);
+}
+.nav__area__botao:hover .nav__area__seta {
+  opacity: 1;
 }
 /* Com contador à esquerda, a seta perde o `margin-left: auto` para ele. */
 .nav__contador + .nav__area__seta {

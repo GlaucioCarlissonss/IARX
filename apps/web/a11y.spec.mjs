@@ -597,6 +597,79 @@ test('chegar numa tela abre a área dela sozinha', async ({ page }) => {
   )
 })
 
+test('a sanfona abre várias áreas: abrir uma não fecha a outra', async ({ page }) => {
+  await abrir(page)
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+
+  /*
+   * Sanfona não é rádio.
+   *
+   * A primeira versão guardava uma área só, e abrir Financeiro fechava Parque:
+   * quem trabalha entre o parque e o chamado reabria a mesma seção a cada ida
+   * e volta. Cada seção abre e fecha por conta própria.
+   */
+  await abrirArea(page, 'Parque')
+  await abrirArea(page, 'Financeiro')
+
+  await expect(menu.getByRole('button', { name: porInicio('Parque') })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(menu.getByRole('link', { name: 'Parque instalado' })).toBeVisible()
+  await expect(menu.getByRole('link', { name: 'Contas a receber' })).toBeVisible()
+
+  // E fechar fecha só a que foi clicada.
+  await menu.getByRole('button', { name: porInicio('Financeiro') }).click()
+  await expect(menu.getByRole('button', { name: porInicio('Financeiro') })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await expect(menu.getByRole('button', { name: porInicio('Parque') })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+})
+
+test('a seta da sanfona gira, e diz o estado sem depender de cor nem de texto', async ({ page }) => {
+  await abrir(page)
+  const botao = page
+    .getByRole('navigation', { name: 'Navegação principal' })
+    .getByRole('button', { name: porInicio('Comercial') })
+
+  const giro = () =>
+    botao.locator('.nav__area__seta').evaluate((el) => getComputedStyle(el).transform)
+
+  // Fechada: a mesma seta, girada um quarto de volta.
+  await expect(botao).toHaveAttribute('aria-expanded', 'false')
+  const fechada = await giro()
+  expect(fechada, 'a seta fechada precisa estar girada').not.toBe('none')
+
+  await botao.click()
+  await expect(botao).toHaveAttribute('aria-expanded', 'true')
+  await page.waitForTimeout(260)
+  const aberta = await giro()
+  expect(aberta, 'a seta aberta precisa voltar à posição neutra').not.toBe(fechada)
+})
+
+test('a área da tela abre sozinha e navegar não fecha o que o usuário abriu', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+  const menu = page.getByRole('navigation', { name: 'Navegação principal' })
+
+  await abrirArea(page, 'Comercial')
+  await menu.getByRole('link', { name: 'Contratos' }).click()
+
+  // Chegou em Comercial, e Parque — aberta por ser a área de onde se veio —
+  // continua aberta. Navegar não desfaz o que a pessoa abriu.
+  await expect(menu.getByRole('button', { name: porInicio('Comercial') })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+  await expect(menu.getByRole('button', { name: porInicio('Parque') })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  )
+})
+
 test('toda tela do menu é alcançável pelo menu, em duas interações', async ({ page }) => {
   await abrir(page)
   const menu = page.getByRole('navigation', { name: 'Navegação principal' })

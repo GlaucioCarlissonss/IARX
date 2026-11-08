@@ -126,7 +126,7 @@ protótipo em imagem aprovado.
 | --- | --- | --- |
 | **1** ✅ | Navegação: acordeão de 6 áreas (desktop) e barra inferior rotulada (celular) | entregue — ver §Y.6 |
 | **2** ✅ | Lista de trabalho: seleção múltipla, barra de lote, ações em `⋯`, rodapé de paginação. Primeiro no Parque, depois nas outras seis listas | entregue — ver §Y.7 |
-| **3** | Visões salvas **compartilhadas no locatário** e filtro na URL | médio — decidido: compartilhadas. Exige tabela nova e permissão `visao:gerenciar` |
+| **3** | Visões salvas e filtro na URL | protótipo em `docs/prototipos/e-fase-3-visoes.png`, aguardando aprovação |
 | **4** | Cartões de KPI com variação e afordância de link; barra de topo com contexto | baixo |
 | **5** | Unificação dos formulários num descritor único | médio — 18 arquivos tocados de uma vez |
 
@@ -225,6 +225,26 @@ documento costuma morar com suprimentos, não com o financeiro.
 
 Mover a tela é mudança de navegação e precisa de aprovação, então ficou como
 está. É pergunta para a próxima rodada.
+
+## Y.6.1 Correção do menu: a sanfona abre várias áreas
+
+A fase 1 entregou o acordeão guardando **uma** área aberta: abrir Financeiro
+fechava Parque. Quem trabalha entre o parque e o chamado reabria a mesma seção
+a cada ida e volta — sanfona que se comporta como rádio.
+
+Corrigido: cada área abre e fecha por conta própria. A área da tela atual entra
+sozinha e **não sai por navegação**, porque quem chega por link precisa ver no
+menu onde está; fechar continua sendo decisão de quem clica.
+
+A seta deixou de trocar de símbolo (`›` fechado, `⌄` aberto) e passou a ser
+**uma só que gira**. Dois símbolos obrigam a comparar de memória com o estado
+esperado; a mesma seta girando mostra o estado e a transição. Com movimento
+reduzido ligado no sistema ela aparece já na posição certa, sem animação, e o
+significado não se perde.
+
+Três casos novos: abrir uma não fecha a outra; a seta gira e diz o estado sem
+depender de cor nem de texto; navegar não desfaz o que a pessoa abriu.
+Comparativo em `docs/prototipos/menu-sanfona.png`.
 
 ## Y.7 Fase 2 — a lista de trabalho
 
