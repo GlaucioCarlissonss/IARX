@@ -471,6 +471,49 @@ const POR_CONSTRAINT: Record<string, () => ErroDominio> = {
     new ErroDominio('IDEMPOTENCIA_EM_ANDAMENTO', 'Requisição idêntica em processamento', {
       detail: 'Outra requisição com a mesma Idempotency-Key ainda está sendo processada.',
     }),
+
+  /* Visões salvas — 0038. O gatilho é a segunda tranca; a primeira é
+     @ExigePermissao. Chegar aqui significa que a chamada veio por outro
+     caminho, e a mensagem precisa dizer o que fazer em vez de só recusar. */
+  visao_compartilhar_sem_permissao: () =>
+    new ErroDominio('SEM_PERMISSAO', 'Publicar uma visão exige permissão', {
+      detail:
+        'Publicar um recorte para o locatário inteiro é ato com alcance. Salve como visão pessoal, ou peça a permissão ao administrador.',
+      errors: [{ field: 'compartilhada', code: 'SEM_VISAO_COMPARTILHAR' }],
+      acoes: [{ code: 'SALVAR_COMO_PESSOAL', descricao: 'Salvar como visão pessoal' }],
+    }),
+
+  visao_alheia_sem_permissao: () =>
+    new ErroDominio('SEM_PERMISSAO', 'Esta visão é da equipe', {
+      detail:
+        'Alterar o recorte que a operação inteira usa tem o alcance de publicar. Duplique como sua para ajustá-lo sem mexer no da equipe.',
+      errors: [{ field: 'id', code: 'VISAO_DE_OUTRA_PESSOA' }],
+      acoes: [{ code: 'DUPLICAR_COMO_MINHA', descricao: 'Duplicar como minha' }],
+    }),
+
+  visao_salva_equipe_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Já existe uma visão da equipe com este nome', {
+      detail: 'Dois recortes com o mesmo rótulo são indistinguíveis na faixa de visões.',
+      errors: [{ field: 'nome', code: 'NOME_EM_USO' }],
+    }),
+
+  visao_salva_pessoal_uk: () =>
+    new ErroDominio('RECURSO_DUPLICADO', 'Você já tem uma visão com este nome', {
+      detail: 'O nome é único entre as suas visões desta tela.',
+      errors: [{ field: 'nome', code: 'NOME_EM_USO' }],
+    }),
+
+  visao_salva_consulta_e_objeto: () =>
+    new ErroDominio('PAYLOAD_INVALIDO', 'Consulta inválida', {
+      detail: 'A consulta de uma visão é um objeto de parâmetros.',
+      errors: [{ field: 'consulta', code: 'NAO_E_OBJETO' }],
+    }),
+
+  visao_salva_nome_tamanho: () =>
+    new ErroDominio('PAYLOAD_INVALIDO', 'Nome inválido', {
+      detail: 'O nome da visão tem de 1 a 60 caracteres.',
+      errors: [{ field: 'nome', code: 'TAMANHO' }],
+    }),
 }
 
 export function traduzirErroPg(e: unknown): ErroDominio | null {

@@ -627,8 +627,36 @@ export interface BaseDados {
   recorrencias: Recorrencia[]
   lancamentosFuturos: LancamentoFuturo[]
   cenariosCaixa: CenarioCaixa[]
+  visoes: VisaoSalva[]
   indicadores: Indicadores
 }
+
+/**
+ * Visão salva de lista — Anexo Y §Y.3.5.
+ *
+ * Espelha `public.visao_salva` da 0038. Nasce vazia na base de demonstração:
+ * semear recortes prontos seria inventar regra de negócio — quais recortes
+ * importam é decisão de quem opera, não de quem construiu a tela.
+ */
+export interface VisaoSalva {
+  id: string
+  tela: TelaComVisao
+  nome: string
+  consulta: Record<string, string>
+  compartilhada: boolean
+  donoId: string
+  criadaEm: string
+}
+
+export type TelaComVisao =
+  | 'parque'
+  | 'chamados'
+  | 'contratos'
+  | 'clientes'
+  | 'estoque'
+  | 'notas_fiscais'
+  | 'contas_receber'
+  | 'contas_pagar'
 
 /* ----------------------------------------------- base do financeiro */
 

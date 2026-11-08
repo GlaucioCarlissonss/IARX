@@ -2609,6 +2609,9 @@ export function gerarBase(semente = 20260730): BaseDados {
     recorrencias,
     lancamentosFuturos,
     cenariosCaixa,
+    /* Nasce vazia: semear recortes prontos seria inventar regra de negócio —
+       quais recortes importam é decisão de quem opera (Anexo Y §Y.7). */
+    visoes: [],
     indicadores,
   }
 }

@@ -46,6 +46,8 @@ import type {
   RateioReceber,
   StatusReceber,
   TituloReceber,
+  TelaComVisao,
+  VisaoSalva,
 } from './tipos'
 
 /**
@@ -5009,3 +5011,194 @@ function somarMesesIso(data: string, meses: number): string {
 
 const moedaSimples = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+/* ========================================================================== */
+/* Visões salvas de lista — Anexo Y §Y.3.5                                    */
+/* ========================================================================== */
+
+/**
+ * As três regras moram aqui porque esta base não tem banco atrás — na
+ * instalação real quem recusa é o gatilho da 0038, com os mesmos nomes de
+ * regra. O nome em comum é o que mantém a mensagem igual nos dois caminhos.
+ */
+function visaoVisivel(v: VisaoSalva, usuarioId: string): boolean {
+  return v.compartilhada || v.donoId === usuarioId
+}
+
+export function listarVisoes(
+  base: BaseDados,
+  tela: TelaComVisao,
+  usuarioId: string,
+): Resultado<VisaoSalva[]> {
+  const lista = base.visoes
+    .filter((v) => v.tela === tela && visaoVisivel(v, usuarioId))
+    // Compartilhadas primeiro: o que a equipe combinou vem antes do que cada
+    // um guardou para si, e a faixa é lida da esquerda para a direita.
+    .sort((a, b) =>
+      a.compartilhada === b.compartilhada
+        ? a.nome.localeCompare(b.nome, 'pt-BR')
+        : a.compartilhada
+          ? -1
+          : 1,
+    )
+  return sucesso(lista)
+}
+
+export interface DadosVisao {
+  tela: TelaComVisao
+  nome: string
+  consulta: Record<string, string>
+  compartilhada: boolean
+}
+
+function nomeEmUso(
+  base: BaseDados,
+  tela: TelaComVisao,
+  nome: string,
+  compartilhada: boolean,
+  donoId: string,
+  excetoId?: string,
+): boolean {
+  const alvo = nome.trim().toLowerCase()
+  return base.visoes.some(
+    (v) =>
+      v.id !== excetoId &&
+      v.tela === tela &&
+      v.nome.trim().toLowerCase() === alvo &&
+      v.compartilhada === compartilhada &&
+      // Entre as pessoais, o nome é de quem o deu: impedir que duas pessoas
+      // chamem a sua de "Minha ronda" tomaria do segundo um nome que ele nem
+      // sabe que existe.
+      (compartilhada || v.donoId === donoId),
+  )
+}
+
+export function criarVisao(
+  base: BaseDados,
+  dados: DadosVisao,
+  usuarioId: string,
+  podeCompartilhar: boolean,
+): Resultado<VisaoSalva> {
+  const nome = dados.nome.trim()
+  if (nome.length < 1 || nome.length > 60) {
+    return falha('PAYLOAD_INVALIDO', 'O nome da visão tem de 1 a 60 caracteres.', { campo: 'nome' })
+  }
+  if (dados.compartilhada && !podeCompartilhar) {
+    return falha(
+      'visao_compartilhar_sem_permissao',
+      'Publicar um recorte para o locatário inteiro exige a permissão de compartilhar visões.',
+      { campo: 'compartilhada', acoes: ['Salvar como visão pessoal'] },
+    )
+  }
+  if (nomeEmUso(base, dados.tela, nome, dados.compartilhada, usuarioId)) {
+    return falha(
+      'RECURSO_DUPLICADO',
+      dados.compartilhada
+        ? 'Já existe uma visão da equipe com este nome nesta tela.'
+        : 'Você já tem uma visão com este nome nesta tela.',
+      { campo: 'nome' },
+    )
+  }
+
+  const visao: VisaoSalva = {
+    id: novoId('vis'),
+    tela: dados.tela,
+    nome,
+    consulta: { ...dados.consulta },
+    compartilhada: dados.compartilhada,
+    donoId: usuarioId,
+    criadaEm: HOJE.toISOString().slice(0, 10),
+  }
+  base.visoes.push(visao)
+  return sucesso(visao)
+}
+
+export function editarVisao(
+  base: BaseDados,
+  id: string,
+  dados: Partial<Pick<DadosVisao, 'nome' | 'consulta' | 'compartilhada'>>,
+  usuarioId: string,
+  podeCompartilhar: boolean,
+): Resultado<VisaoSalva> {
+  const v = base.visoes.find((x) => x.id === id && visaoVisivel(x, usuarioId))
+  if (!v) return falha('NAO_ENCONTRADO', 'Visão não encontrada.')
+
+  // Mexer no recorte que a operação inteira usa tem o alcance de publicar.
+  if (v.compartilhada && v.donoId !== usuarioId && !podeCompartilhar) {
+    return falha(
+      'visao_alheia_sem_permissao',
+      'Esta visão é da equipe. Duplique como sua para ajustá-la sem mexer no recorte dos outros.',
+      { acoes: ['Duplicar como minha'] },
+    )
+  }
+  if (dados.compartilhada && !v.compartilhada && !podeCompartilhar) {
+    return falha(
+      'visao_compartilhar_sem_permissao',
+      'Publicar um recorte para o locatário inteiro exige a permissão de compartilhar visões.',
+      { campo: 'compartilhada', acoes: ['Manter como visão pessoal'] },
+    )
+  }
+
+  const nome = (dados.nome ?? v.nome).trim()
+  const compartilhada = dados.compartilhada ?? v.compartilhada
+  if (nome.length < 1 || nome.length > 60) {
+    return falha('PAYLOAD_INVALIDO', 'O nome da visão tem de 1 a 60 caracteres.', { campo: 'nome' })
+  }
+  if (nomeEmUso(base, v.tela, nome, compartilhada, v.donoId, v.id)) {
+    return falha('RECURSO_DUPLICADO', 'Já existe uma visão com este nome nesta tela.', { campo: 'nome' })
+  }
+
+  v.nome = nome
+  v.compartilhada = compartilhada
+  if (dados.consulta) v.consulta = { ...dados.consulta }
+  return sucesso(v)
+}
+
+export function excluirVisao(
+  base: BaseDados,
+  id: string,
+  usuarioId: string,
+  podeCompartilhar: boolean,
+): Resultado<{ id: string }> {
+  const i = base.visoes.findIndex((x) => x.id === id && visaoVisivel(x, usuarioId))
+  if (i < 0) return falha('NAO_ENCONTRADO', 'Visão não encontrada.')
+
+  const v = base.visoes[i]!
+  if (v.compartilhada && v.donoId !== usuarioId && !podeCompartilhar) {
+    return falha(
+      'visao_alheia_sem_permissao',
+      'Excluir um recorte que a operação inteira usa exige a permissão de compartilhar visões.',
+    )
+  }
+  /* Exclusão de verdade, e não `deleted_at`: uma visão é preferência de quem a
+     criou. Guardar o recorte apagado não serve a ninguém e ainda ocuparia o
+     nome, impedindo que a visão nova use o mesmo rótulo. */
+  base.visoes.splice(i, 1)
+  return sucesso({ id })
+}
+
+const SUFIXO_COPIA = ' (minha)'
+
+export function duplicarVisao(
+  base: BaseDados,
+  id: string,
+  usuarioId: string,
+  nomeEscolhido?: string,
+): Resultado<VisaoSalva> {
+  const origem = base.visoes.find((x) => x.id === id && visaoVisivel(x, usuarioId))
+  if (!origem) return falha('NAO_ENCONTRADO', 'Visão não encontrada.')
+
+  /* A cópia nasce pessoal, sempre, inclusive para quem pode publicar:
+     duplicar é querer uma variação própria. Publicar a variação é um ato a
+     mais, e visível. */
+  const base_ = origem.nome.endsWith(SUFIXO_COPIA)
+    ? origem.nome
+    : `${origem.nome.slice(0, 60 - SUFIXO_COPIA.length).trimEnd()}${SUFIXO_COPIA}`
+
+  return criarVisao(
+    base,
+    { tela: origem.tela, nome: nomeEscolhido ?? base_, consulta: origem.consulta, compartilhada: false },
+    usuarioId,
+    false,
+  )
+}

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { api } from '../dados/api'
 import { linhasClientes } from '../dados/consultas'
 import type { LinhaCliente } from '../dados/consultas'
@@ -8,6 +7,8 @@ import { inteiro, moeda, moedaCompacta, percentual } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
@@ -39,6 +40,8 @@ const CREDITO = {
  * linha. É a visão que responde "qual cliente vale, qual dá trabalho e qual
  * está devendo" sem precisar cruzar três telas.
  */
+const PADROES = { q: '', recorte: '' }
+
 export function Clientes() {
   /*
    * O escritor da URL existe por causa de "limpar filtros": estas telas só
@@ -46,24 +49,11 @@ export function Clientes() {
    * URL faria o filtro voltar no primeiro recarregamento — desfeito na tela
    * e intacto no endereço.
    */
-  const [params, setParams] = useSearchParams()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.clientes(), [])
-  const [texto, setTexto] = useState(params.get('q') ?? '')
-  const [recorte, setRecorte] = useState('')
 
-  /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
-   *
-   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
-   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
-   */
-  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setRecorte('')
-    setParams(new URLSearchParams(), { replace: true })
-  }
+  /* O recorte inteiro na URL, inclusive a busca (Anexo Y §Y.3.5). */
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, recorte } = filtro.valores
   const [aberto, setAberto] = useState<Aberto>(null)
   const { pode } = useSessao()
 
@@ -304,19 +294,21 @@ export function Clientes() {
       </div>
 
       <Cartao>
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <FaixaVisoes tela="clientes" filtro={filtro} contagem={filtradas.length} />
+
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Cliente, CNPJ ou segmento"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: Farmax ou Saúde"
             />
           </div>
           <Selecao
             rotulo="Recorte"
             value={recorte}
-            onChange={(e) => setRecorte(e.target.value)}
+            onChange={(e) => filtro.definir('recorte', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todos' },
               { valor: 'inadimplentes', texto: 'Com valor vencido' },
@@ -341,10 +333,7 @@ export function Clientes() {
               titulo: 'Nenhum cliente com esses filtros',
               acao: (
                 <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setRecorte('')
-                  }}
+                  onClick={filtro.limpar}
                 >
                   Limpar filtros
                 </Botao>

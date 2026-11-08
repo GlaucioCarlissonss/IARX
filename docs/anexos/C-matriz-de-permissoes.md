@@ -224,6 +224,8 @@ Legenda: **✔** concedida · **◐** concedida com alçada/condição · **○*
 | `financeiro:painel_executivo` | ✔ | ✔ | ◐⁸ | — | — | — | — | ✔ | ○ |
 | `financeiro:rentabilidade_ler` | ✔ | ✔ | ◐⁸ | — | — | — | — | ✔ | — |
 | `financeiro:exportar` | ✔ | ✔ | — | — | — | — | — | ✔ | — |
+| `visao:ler` / `visao:gerenciar` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ○⁹ |
+| `visao:compartilhar` | ✔ | ✔ | ✔ | — | ✔ | ✔ | — | ✔ | — |
 | `mapa:ler` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ○¹ | — | ○ |
 | `relatorio:ler` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ○ | ✔ | ○ |
 | `usuario:gerenciar` / `perfil:gerenciar` | ✔ | ○ | — | — | — | — | — | — | — |
@@ -242,6 +244,9 @@ Legenda: **✔** concedida · **◐** concedida com alçada/condição · **○*
 6. Supervisor não aprova inventário que ele mesmo contou (`RN-027`).
 7. Analista financeiro não aprova pagamento de fornecedor que ele mesmo cadastrou (`RN-027`).
 8. Restrito ao escopo da filial/região do usuário.
+9. Consulta é somente leitura: abre as visões da equipe, não cria as próprias.
+   Uma visão salva é um registro, e um perfil que não grava registro nenhum não
+   abre exceção para este.
 
 ---
 

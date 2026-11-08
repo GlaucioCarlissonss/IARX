@@ -203,6 +203,35 @@ export const PERMISSOES = [
   'comercial:ler',
   'comercial:gerenciar',
 
+  /*
+   * Visões salvas de lista — Anexo Y §Y.3.5.
+   *
+   * Três, e a divisão não é arbitrária: cada uma mede um alcance diferente.
+   *
+   *  · `visao:ler` — ver a faixa. Existe porque RN-026 nega por omissão e
+   *    **toda rota declara uma permissão**; o guarda recusa rota sem
+   *    declaração antes de olhar o token. O desenho original não tinha esta
+   *    permissão, e estava errado: não há "rota sem permissão" nesta base.
+   *    Vai junto de qualquer `:ler` de lista nos perfis — uma faixa visível
+   *    sem conteúdo seria o absurdo que a ausência tentava evitar;
+   *
+   *  · `visao:gerenciar` — criar, renomear e excluir **as suas**. Larga de
+   *    propósito: quem opera precisa guardar o próprio recorte sem depender de
+   *    ninguém, que é o achado Y.3.5 inteiro;
+   *
+   *  · `visao:compartilhar` — publicar para o locatário, e mexer no que outra
+   *    pessoa publicou. É a única com alcance além de quem clica, e é a única
+   *    que o banco confere por gatilho (0038), pelo perfil e não pelo token.
+   *
+   * Nenhuma delas se confunde com `mapa:filtro_compartilhar`, logo abaixo: o
+   * filtro do mapa é recorte geográfico e camadas — estado de viewport —, não
+   * a consulta de uma lista. Quando o mapa ganhar visões, elas moram na mesma
+   * tabela com `tela = 'mapa'`, e é aí que a permissão antiga se aposenta.
+   */
+  'visao:ler',
+  'visao:gerenciar',
+  'visao:compartilhar',
+
   // Mapa, relatórios e administração
   'mapa:ler',
   'mapa:filtro_compartilhar',

@@ -14,6 +14,8 @@ import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { FormEstoque } from '../componentes/formularios/FormEstoque'
 import { FormPolitica } from '../componentes/formularios/FormPolitica'
 import type { Peca } from '../dados/tipos'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 
 type Aberto = { tipo: 'movimentar'; peca: Peca } | { tipo: 'politica'; peca: Peca } | null
 
@@ -30,25 +32,21 @@ const SITUACAO: Record<LinhaPeca['situacao'], { rotulo: string; sev: 'disponivel
  * A ordenação padrão é por impacto, não alfabética: peça que trava chamado
  * aberto aparece primeiro, porque é ela que custa SLA agora.
  */
+const PADROES = { q: '', recorte: '' }
+
 export function Estoque() {
   const { pode } = useSessao()
   const { avisar } = useToast()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.pecas(), [])
-  const [texto, setTexto] = useState('')
-  const [filtro, setFiltro] = useState('')
-
   /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   * O recorte na URL (Anexo Y §Y.3.5).
    *
-   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
-   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   * Esta tela nem semeava da URL: o recorte era estado local puro, perdido a
+   * cada navegação e impossível de compartilhar por link. `recorte` em vez de
+   * `filtro` porque `filtro` agora é o objeto do hook.
    */
-  const filtrosAtivos = (texto.trim() ? 1 : 0) + (filtro ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setFiltro('')
-  }
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, recorte } = filtro.valores
   const [aberto, setAberto] = useState<Aberto>(null)
 
   const linhas = useMemo(() => (dado ? linhasEstoque() : []), [dado])
@@ -56,9 +54,9 @@ export function Estoque() {
   const filtradas = useMemo(() => {
     const t = texto.trim().toLowerCase()
     return linhas.filter((l) => {
-      if (filtro === 'reposicao' && l.situacao === 'NORMAL') return false
-      if (filtro === 'travando' && l.osImpactadas === 0) return false
-      if (filtro && ['CONSUMIVEL', 'COMPONENTE', 'ACESSORIO'].includes(filtro) && l.peca.categoria !== filtro) return false
+      if (recorte === 'reposicao' && l.situacao === 'NORMAL') return false
+      if (recorte === 'travando' && l.osImpactadas === 0) return false
+      if (['CONSUMIVEL', 'COMPONENTE', 'ACESSORIO'].includes(recorte) && l.peca.categoria !== recorte) return false
       if (t) {
         const alvo = `${l.peca.codigo} ${l.peca.descricao} ${l.peca.fornecedor}`.toLowerCase()
         if (!alvo.includes(t)) return false
@@ -249,19 +247,21 @@ export function Estoque() {
       </div>
 
       <Cartao>
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <FaixaVisoes tela="estoque" filtro={filtro} contagem={filtradas.length} />
+
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Código, descrição ou fornecedor"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: toner ou Kyocera"
             />
           </div>
           <Selecao
             rotulo="Recorte"
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
+            value={recorte}
+            onChange={(e) => filtro.definir('recorte', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todos os itens' },
               { valor: 'reposicao', texto: 'Precisam de reposição' },
@@ -288,10 +288,7 @@ export function Estoque() {
               titulo: 'Nenhuma peça com esses filtros',
               acao: (
                 <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setFiltro('')
-                  }}
+                  onClick={filtro.limpar}
                 >
                   Limpar filtros
                 </Botao>

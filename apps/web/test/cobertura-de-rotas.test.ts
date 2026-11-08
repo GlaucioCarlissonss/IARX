@@ -139,6 +139,21 @@ const SEM_ROTA_JUSTIFICADA: Record<string, string> = {
   'mapa:filtro_compartilhar': 'compartilhamento de filtro: sem tela',
 
   /*
+   * Não tem rota porque **não governa uma rota**, e isso é desenho, não
+   * pendência.
+   *
+   * Criar uma visão pessoal e publicar uma para a operação inteira entram pelo
+   * mesmo `POST /visoes`; só o valor de `compartilhada` no corpo distingue as
+   * duas. Declarar a permissão na rota tiraria de quem opera a capacidade de
+   * salvar o próprio recorte — o problema que a fase 3 existe para resolver.
+   *
+   * Quem confere é o gatilho da 0038, que vê o corpo. É a mesma divisão das
+   * alçadas: a permissão da rota responde "pode fazer isto?", o banco responde
+   * "até onde?".
+   */
+  'visao:compartilhar': 'regra de corpo, não de rota: conferida no gatilho da 0038 (ver POST /visoes)',
+
+  /*
    * Como `contrato:desconto_conceder`: conferida no corpo, não no decorador.
    *
    * `os:custo_aprovar` é exigida em `validar` quando o custo apurado passa do

@@ -58,6 +58,7 @@ export const PERFIS: Perfil[] = [
     id: 'diretoria',
     nome: 'Diretor',
     permissoes: [
+      'visao:ler', 'visao:gerenciar', 'visao:compartilhar',
       'cliente:ler', 'cliente:credito_definir',
       'contrato:ler', 'contrato:aprovar', 'contrato:suspender', 'contrato:retomar',
       'contrato:renovar', 'contrato:encerrar', 'contrato:cancelar', 'contrato:distratar',
@@ -95,6 +96,7 @@ export const PERFIS: Perfil[] = [
     id: 'gestor-filial',
     nome: 'Gestor de Filial',
     permissoes: [
+      'visao:ler', 'visao:gerenciar', 'visao:compartilhar',
       'cliente:ler', 'cliente:criar', 'cliente:editar', 'cliente:inativar',
       'cliente:credito_definir',
       'local_operacao:gerenciar',
@@ -134,6 +136,7 @@ export const PERFIS: Perfil[] = [
     id: 'operacao',
     nome: 'Operador Administrativo',
     permissoes: [
+      'visao:ler', 'visao:gerenciar',
       'cliente:ler', 'cliente:criar', 'cliente:editar',
       'local_operacao:gerenciar',
       'contrato:ler', 'contrato:criar', 'contrato:editar', 'contrato:ativar',
@@ -164,6 +167,7 @@ export const PERFIS: Perfil[] = [
     id: 'logistica',
     nome: 'Coordenador de Logística',
     permissoes: [
+      'visao:ler', 'visao:gerenciar', 'visao:compartilhar',
       'cliente:ler',
       'contrato:ler', 'contrato:item_alocar', 'contrato:item_substituir',
       'contrato:item_encerrar',
@@ -183,6 +187,7 @@ export const PERFIS: Perfil[] = [
     id: 'manutencao',
     nome: 'Supervisor de Manutenção',
     permissoes: [
+      'visao:ler', 'visao:gerenciar', 'visao:compartilhar',
       'cliente:ler',
       'contrato:ler',
       'equipamento:ler', 'equipamento:criar', 'equipamento:editar', 'equipamento:movimentar',
@@ -208,6 +213,7 @@ export const PERFIS: Perfil[] = [
     id: 'tecnico',
     nome: 'Técnico de Manutenção',
     permissoes: [
+      'visao:ler', 'visao:gerenciar',
       'contrato:ler',
       'equipamento:ler', 'equipamento:movimentar', 'equipamento:bloquear',
       'equipamento:leitura_registrar',
@@ -223,6 +229,7 @@ export const PERFIS: Perfil[] = [
     id: 'financeiro',
     nome: 'Analista Financeiro',
     permissoes: [
+      'visao:ler', 'visao:gerenciar', 'visao:compartilhar',
       'cliente:ler', 'cliente:criar', 'cliente:editar', 'cliente:credito_definir',
       'contrato:ler', 'contrato:desconto_conceder', 'contrato:reajuste_aprovar',
       'equipamento:ler', 'equipamento:patrimonial_editar', 'equipamento:leitura_estornar',
@@ -257,6 +264,7 @@ export const PERFIS: Perfil[] = [
     id: 'consulta',
     nome: 'Consulta',
     permissoes: [
+      'visao:ler',
       'cliente:ler',
       'contrato:ler',
       'equipamento:ler',

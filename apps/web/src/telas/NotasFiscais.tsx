@@ -20,6 +20,8 @@ import { FormIntegrarNota } from '../componentes/formularios/FormIntegrarNota'
 import { FormAnexos } from '../componentes/formularios/FormAnexos'
 import type { Severidade } from '../componentes/ui/primitivos'
 import type { NfStatus, NotaFiscal, NotaFiscalItem } from '../dados/tipos'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 
 /**
  * Entrada fiscal de compra.
@@ -53,25 +55,21 @@ type Aberto =
   | { tipo: 'anexos'; nota: NotaFiscal }
   | null
 
+const PADROES = { q: '', recorte: '' }
+
 export function NotasFiscais() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.notasFiscais(), [])
-  const [texto, setTexto] = useState('')
-  const [filtro, setFiltro] = useState('')
-
   /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   * O recorte na URL (Anexo Y §Y.3.5).
    *
-   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
-   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   * Esta tela nem semeava da URL: o recorte era estado local puro, perdido a
+   * cada navegação e impossível de compartilhar por link. `recorte` em vez de
+   * `filtro` porque `filtro` agora é o objeto do hook.
    */
-  const filtrosAtivos = (texto.trim() ? 1 : 0) + (filtro ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setFiltro('')
-  }
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, recorte } = filtro.valores
   const [aberto, setAberto] = useState<Aberto>(null)
 
   const fornecedores = api.baseSincrona().fornecedores
@@ -86,8 +84,8 @@ export function NotasFiscais() {
   const filtradas = useMemo(() => {
     const t = texto.trim().toLowerCase()
     return notas.filter((n) => {
-      if (filtro === 'pendentes' && n.status === 'INTEGRADA') return false
-      if (filtro && filtro !== 'pendentes' && n.status !== filtro) return false
+      if (recorte === 'pendentes' && n.status === 'INTEGRADA') return false
+      if (recorte && recorte !== 'pendentes' && n.status !== recorte) return false
       if (t) {
         const fornecedor = fornecedores.find((f) => f.id === n.fornecedorId)
         const alvo = `${n.serie}/${n.numero} ${n.chaveAcesso ?? ''} ${fornecedor?.razaoSocial ?? ''} ${fornecedor?.cnpj ?? ''}`
@@ -320,19 +318,21 @@ export function NotasFiscais() {
       </div>
 
       <Cartao>
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <FaixaVisoes tela="notas_fiscais" filtro={filtro} contagem={filtradas.length} />
+
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Número, chave ou fornecedor"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: 41205 ou Printech"
             />
           </div>
           <Selecao
             rotulo="Recorte"
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
+            value={recorte}
+            onChange={(e) => filtro.definir('recorte', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todas as notas' },
               { valor: 'pendentes', texto: 'Ainda não integradas' },
@@ -359,10 +359,7 @@ export function NotasFiscais() {
               titulo: 'Nenhuma nota com esses filtros',
               acao: (
                 <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setFiltro('')
-                  }}
+                  onClick={filtro.limpar}
                 >
                   Limpar filtros
                 </Botao>

@@ -33,6 +33,9 @@ import { EstoqueService } from './modulos/estoque/estoque.service.js'
 import { AdministracaoController } from './modulos/administracao/administracao.controller.js'
 import { AdministracaoService } from './modulos/administracao/administracao.service.js'
 import { CadastrosController } from './modulos/cadastros/cadastros.controller.js'
+import { VisoesController } from './modulos/visoes/visoes.controller.js'
+import { VisoesService } from './modulos/visoes/visoes.service.js'
+import { VisoesRepositorio } from './modulos/visoes/visoes.repositorio.js'
 import { CadastrosService } from './modulos/cadastros/cadastros.service.js'
 import { ComprasController } from './modulos/estoque/compras.controller.js'
 import { ComprasRepositorio } from './modulos/estoque/compras.repositorio.js'
@@ -152,6 +155,7 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     ComprasController,
     AdministracaoController,
     CadastrosController,
+    VisoesController,
     AnexoController,
     MapaController,
     ResultadoController,
@@ -205,6 +209,8 @@ import { SaudeController } from './modulos/saude/saude.controller.js'
     ComprasRepositorio,
     AdministracaoService,
     CadastrosService,
+    VisoesService,
+    VisoesRepositorio,
     AnexoService,
     AnexoRepositorio,
     MapaService,

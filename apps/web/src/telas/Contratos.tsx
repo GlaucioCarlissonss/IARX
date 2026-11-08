@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { api } from '../dados/api'
 import { filialPorId } from '../dados/catalogo'
 import { HOJE } from '../dados/gerar'
@@ -9,6 +8,8 @@ import { data, moeda, moedaCompacta } from '../lib/formato'
 import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import type { Coluna } from '../componentes/ui/Tabela'
 import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
@@ -64,6 +65,8 @@ interface LinhaContrato {
  * O recorte que importa não é "todos os contratos", é "os que exigem decisão":
  * vencendo, vencidos em campo, em renovação. O filtro padrão reflete isso.
  */
+const PADROES = { q: '', situacao: '' }
+
 export function Contratos() {
   /*
    * O escritor da URL existe por causa de "limpar filtros": estas telas só
@@ -71,25 +74,12 @@ export function Contratos() {
    * URL faria o filtro voltar no primeiro recarregamento — desfeito na tela
    * e intacto no endereço.
    */
-  const [params, setParams] = useSearchParams()
   const { pode, filialId } = useSessao()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.contratos(), [])
-  const [texto, setTexto] = useState(params.get('q') ?? '')
-  const [recorte, setRecorte] = useState(params.get('situacao') ?? '')
 
-  /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
-   *
-   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
-   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
-   */
-  const filtrosAtivos = (texto.trim() ? 1 : 0) + (recorte ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setRecorte('')
-    setParams(new URLSearchParams(), { replace: true })
-  }
+  /* O recorte inteiro na URL, inclusive a busca (Anexo Y §Y.3.5). */
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, situacao: recorte } = filtro.valores
   const [aberto, setAberto] = useState<Aberto>(null)
 
   const base = api.baseSincrona()
@@ -312,7 +302,7 @@ export function Contratos() {
               A cobrança segue ativa, mas sem amparo contratual. Renovar ou programar retirada resolve.
             </p>
             <p style={{ marginTop: 'var(--e3)' }}>
-              <Botao pequeno onClick={() => setRecorte('vencidos')}>
+              <Botao pequeno onClick={() => filtro.definir('situacao', 'vencidos')}>
                 Ver apenas esses contratos
               </Botao>
             </p>
@@ -321,19 +311,21 @@ export function Contratos() {
       )}
 
       <Cartao>
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <FaixaVisoes tela="contratos" filtro={filtro} contagem={filtradas.length} />
+
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Número do contrato ou cliente"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: SP-2025 ou Andirá"
             />
           </div>
           <Selecao
             rotulo="Recorte"
             value={recorte}
-            onChange={(e) => setRecorte(e.target.value)}
+            onChange={(e) => filtro.definir('situacao', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todos' },
               { valor: 'vencendo', texto: 'Vencem em 90 dias' },
@@ -359,14 +351,7 @@ export function Contratos() {
             vazio={{
               titulo: 'Nenhum contrato com esses filtros',
               acao: (
-                <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setRecorte('')
-                  }}
-                >
-                  Limpar filtros
-                </Botao>
+                <Botao onClick={filtro.limpar}>Limpar filtros</Botao>
               ),
             }}
           />

@@ -32,6 +32,8 @@ import {
   ResumoErros,
 } from '../componentes/ui/formulario'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
@@ -105,35 +107,22 @@ const ROTULO_FORMA: Record<FormaPagamento, string> = {
 /** Em aberto: o que ainda representa saída de caixa. */
 const EM_ABERTO: StatusPagar[] = ['PENDENTE', 'EM_APROVACAO', 'APROVADO', 'AGENDADO', 'PAGO_PARCIAL', 'EM_DISPUTA']
 
+const PADROES = { q: '', status: 'todos', classe: 'todas', fila: '', atraso: '' }
+
 export function ContasPagar() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
   const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.titulosPagar(), [])
   const [aberto, setAberto] = useState<Aberto>(null)
   const [erro, setErro] = useState<string | null>(null)
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | StatusPagar>('todos')
-  const [filtroClasse, setFiltroClasse] = useState<'todas' | ClassificacaoPagar>('todas')
-  const [somenteFila, setSomenteFila] = useState(false)
-  const [somenteAtraso, setSomenteAtraso] = useState(false)
-  const [busca, setBusca] = useState('')
-
-  /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
-   *
-   * Esta faixa tem cinco controles: desfazê-los um a um exige lembrar de cada
-   * um, e é a tela em que mais se perde a conta do que ainda está restringindo.
-   */
-  const filtrosAtivos =
-    (busca.trim() ? 1 : 0) + (filtroStatus !== 'todos' ? 1 : 0) + (filtroClasse !== 'todas' ? 1 : 0) +
-    (somenteFila ? 1 : 0) + (somenteAtraso ? 1 : 0)
-
-  function limparFiltros() {
-    setBusca('')
-    setFiltroStatus('todos')
-    setFiltroClasse('todas')
-    setSomenteFila(false)
-    setSomenteAtraso(false)
-  }
+  /* Os cinco controles na URL, como em contas a receber (Anexo Y §Y.3.5). */
+  const filtro = useFiltroNaUrl(PADROES)
+  const busca = filtro.valores.q
+  const filtroStatus = filtro.valores.status as 'todos' | StatusPagar
+  const filtroClasse = filtro.valores.classe as 'todas' | ClassificacaoPagar
+  const somenteFila = filtro.valores.fila === '1'
+  const somenteAtraso = filtro.valores.atraso === '1'
+  const setSomenteFila = (v: boolean) => filtro.definir('fila', v ? '1' : '')
 
   const base = api.baseSincrona()
   const titulos = dado ?? []
@@ -416,6 +405,8 @@ export function ContasPagar() {
           ) : null
         }
       >
+        <FaixaVisoes tela="contas_pagar" filtro={filtro} contagem={visiveis.length} />
+
         {alvosAprovacao.length > 0 || lote.progresso ? (
           <BarraLote
             quantidade={alvosAprovacao.length}
@@ -434,18 +425,18 @@ export function ContasPagar() {
                 e uma só para vinte títulos diferentes não explica nenhum. */}
           </BarraLote>
         ) : (
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <Entrada
             rotulo="Buscar por descrição, fornecedor ou contrato"
             rotuloOculto
             placeholder="Buscar título…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => filtro.definir('q', e.target.value)}
           />
           <Selecao
             rotulo="Situação"
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value as 'todos' | StatusPagar)}
+            onChange={(e) => filtro.definir('status', e.target.value)}
             opcoes={[
               { valor: 'todos', texto: 'Todas as situações' },
               ...(Object.keys(ROTULO_STATUS) as StatusPagar[]).map((s) => ({
@@ -457,7 +448,7 @@ export function ContasPagar() {
           <Selecao
             rotulo="Classificação"
             value={filtroClasse}
-            onChange={(e) => setFiltroClasse(e.target.value as 'todas' | ClassificacaoPagar)}
+            onChange={(e) => filtro.definir('classe', e.target.value)}
             opcoes={[
               { valor: 'todas', texto: 'Todas as classificações' },
               ...(Object.keys(ROTULO_CLASSIFICACAO) as ClassificacaoPagar[]).map((c) => ({
@@ -470,7 +461,7 @@ export function ContasPagar() {
             <input
               type="checkbox"
               checked={somenteAtraso}
-              onChange={(e) => setSomenteAtraso(e.target.checked)}
+              onChange={(e) => filtro.definir('atraso', e.target.checked ? '1' : '')}
             />
             Só os vencidos em aberto
           </label>

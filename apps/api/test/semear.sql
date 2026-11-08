@@ -604,3 +604,29 @@ select '11111111-1111-4111-8111-111111111111', u.id, p.id, u.escopo::app.escopo_
 insert into public.usuario_local_cliente (tenant_id, usuario_id, local_operacao_id) values
   ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-1111111190c2',
    '11111111-1111-4111-8111-11111111b101');
+
+-- -----------------------------------------------------------------------------
+-- Quem pode publicar visão (0038)
+--
+-- A permissão `visao:compartilhar` é conferida pelo **gatilho**, que lê os
+-- perfis — não o token. É deliberado: um token vale até expirar, e uma
+-- permissão revogada há cinco minutos ainda está dentro dele. A consequência
+-- para os testes é que não basta assinar um token com a permissão; o usuário
+-- precisa de perfil que a tenha, como teria em produção.
+--
+-- O Administrador Alfa (USUARIO_A) **não** ganha a permissão: o caso que
+-- interessa é o da permissão, não o do cargo. Dá-la a quem administra faria o
+-- teste passar por ele ser administrador, e a regra deixaria de ser exercida.
+-- -----------------------------------------------------------------------------
+insert into public.perfil (id, tenant_id, nome, tipo, is_sistema, permissoes) values
+  ('11111111-1111-4111-8111-1111111150a5', '11111111-1111-4111-8111-111111111111',
+   'Supervisão com visões', 'INTERNO', false,
+   array['equipamento:ler', 'os:ler', 'visao:ler', 'visao:gerenciar', 'visao:compartilhar']);
+
+insert into public.usuario (id, tenant_id, nome, email) values
+  ('11111111-1111-4111-8111-111111110014', '11111111-1111-4111-8111-111111111111',
+   'Supervisora Alfa', 'supervisora@alfa.local');
+
+insert into public.usuario_perfil (tenant_id, usuario_id, perfil_id, escopo_tipo) values
+  ('11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111110014',
+   '11111111-1111-4111-8111-1111111150a5', 'TENANT');

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { api } from '../dados/api'
 import { linhasChamados } from '../dados/consultas'
 import type { LinhaChamado } from '../dados/consultas'
@@ -15,6 +14,8 @@ import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
 import { useLote } from '../lib/useLote'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import { FormAbrirChamado } from '../componentes/formularios/FormAbrirChamado'
 import { FormAtribuirTecnico } from '../componentes/formularios/FormAtribuirTecnico'
 import { FormConcluirChamado } from '../componentes/formularios/FormConcluirChamado'
@@ -48,6 +49,8 @@ const STATUS_ROTULO: Record<string, { rotulo: string; sev: 'disponivel' | 'uso' 
  * supervisor é "o que estoura primeiro", e a resposta precisa estar na primeira
  * linha sem ele ter que ordenar.
  */
+const PADROES = { q: '', prioridade: '', status: '' }
+
 export function Chamados() {
   /*
    * O escritor da URL existe por causa de "limpar filtros": estas telas só
@@ -55,27 +58,19 @@ export function Chamados() {
    * URL faria o filtro voltar no primeiro recarregamento — desfeito na tela
    * e intacto no endereço.
    */
-  const [params, setParams] = useSearchParams()
   const { pode } = useSessao()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.ordens(), [])
-  const [texto, setTexto] = useState(params.get('q') ?? '')
-  const [prioridade, setPrioridade] = useState('')
-  const [status, setStatus] = useState('')
 
   /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   * O recorte inteiro na URL (Anexo Y §Y.3.5).
    *
-   * Sem a saída, quem estreita a lista e não acha nada desfaz um por um,
-   * lembrando de cada um — e o que costuma acontecer é recarregar a página.
+   * Prioridade e situação eram estado local: o link colado levava à fila
+   * inteira, voltar da tela do chamado desfazia o recorte, e não havia o que
+   * salvar como visão. O `limpar` e a contagem de filtros ativos passam a sair
+   * do hook, em vez de serem recontados à mão a cada filtro novo.
    */
-  const filtrosAtivos = (texto.trim() ? 1 : 0) + (prioridade ? 1 : 0) + (status ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setPrioridade('')
-    setStatus('')
-    setParams(new URLSearchParams(), { replace: true })
-  }
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, prioridade, status } = filtro.valores
   const [aberto, setAberto] = useState<Aberto>(null)
   const lote = useLote(() => recarregar())
   const [tecnicoLote, setTecnicoLote] = useState('')
@@ -272,6 +267,8 @@ export function Chamados() {
       </div>
 
       <Cartao>
+        <FaixaVisoes tela="chamados" filtro={filtro} contagem={filtradas.length} />
+
         {/* Com seleção, a barra de lote ocupa o lugar da de filtros (Anexo Y §Y.3.4). */}
         {alvos.length > 0 || lote.progresso ? (
           <BarraLote
@@ -287,19 +284,19 @@ export function Chamados() {
             )}
           </BarraLote>
         ) : (
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Chamado, patrimônio, cliente ou sintoma"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: OS-4812 ou atolamento"
             />
           </div>
           <Selecao
             rotulo="Prioridade"
             value={prioridade}
-            onChange={(e) => setPrioridade(e.target.value)}
+            onChange={(e) => filtro.definir('prioridade', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todas' },
               { valor: 'CRITICA', texto: 'Crítica' },
@@ -311,7 +308,7 @@ export function Chamados() {
           <Selecao
             rotulo="Situação"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => filtro.definir('status', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todas as abertas' },
               ...['ABERTA', 'TRIAGEM', 'AGENDADA', 'EM_EXECUCAO', 'AGUARDANDO_PECA', 'CONCLUIDA'].map((s) => ({
@@ -351,15 +348,7 @@ export function Chamados() {
               titulo: 'Nenhum chamado com esses filtros',
               texto: 'A fila pode estar realmente vazia — o que é uma boa notícia.',
               acao: (
-                <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setPrioridade('')
-                    setStatus('')
-                  }}
-                >
-                  Limpar filtros
-                </Botao>
+                <Botao onClick={filtro.limpar}>Limpar filtros</Botao>
               ),
             }}
           />

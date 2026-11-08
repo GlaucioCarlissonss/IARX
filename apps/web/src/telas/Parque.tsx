@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { api } from '../dados/api'
 import { linhasParque } from '../dados/consultas'
 import type { LinhaParque } from '../dados/consultas'
@@ -15,6 +14,8 @@ import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
 import { useLote } from '../lib/useLote'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import type { Resultado } from '../dados/comandos'
 import type { Equipamento, EquipamentoStatus } from '../dados/tipos'
 import { FormEquipamento } from '../componentes/formularios/FormEquipamento'
@@ -53,11 +54,18 @@ const ESTADO: Record<EquipamentoStatus, { rotulo: string; sev: 'disponivel' | 'u
  * O filtro vive na URL: a visão é compartilhável por link, e os cartões do
  * painel do dia chegam aqui já filtrados em vez de exigir refiltragem manual.
  */
+/**
+ * O recorte desta tela, com os padrões.
+ *
+ * Fora do componente porque o hook o usa como dependência: declarado dentro,
+ * seria um objeto novo a cada render e todo `useMemo` que depende dele
+ * recalcularia sem nada ter mudado.
+ */
+const PADROES = { q: '', estado: '', categoria: '', familia: '', bloqueado: '' }
+
 export function Parque() {
-  const [params, setParams] = useSearchParams()
   const { filialId, pode } = useSessao()
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.equipamentos(), [])
-  const [texto, setTexto] = useState(params.get('q') ?? '')
   const [aberto, setAberto] = useState<Aberto>(null)
 
   /*
@@ -69,33 +77,19 @@ export function Parque() {
   const lote = useLote(() => recarregar())
   const [motivo, setMotivo] = useState('')
 
-  const estado = params.get('estado') ?? ''
-  const categoria = params.get('categoria') ?? ''
-  const familia = params.get('familia') ?? ''
+  /*
+   * O filtro inteiro na URL, inclusive a busca por texto (Anexo Y §Y.3.5).
+   *
+   * A busca era estado local e ficava de fora do recorte — o link colado para
+   * um colega levava à lista com os seletores certos e o termo perdido, e a
+   * visão salva guardaria meio recorte. `Busca` já espera o fim da digitação
+   * antes de avisar, então pôr o termo na URL não a deixa lenta.
+   */
+  const filtro = useFiltroNaUrl(PADROES)
+  const { q: texto, estado, categoria, familia } = filtro.valores
   // Filtro pelo sinalizador de bloqueio, independente do estado operacional:
   // um ativo instalado no cliente pode estar bloqueado para nova alocação.
-  const soBloqueados = params.get('bloqueado') === '1'
-
-  function definir(chave: string, valor: string) {
-    const p = new URLSearchParams(params)
-    if (valor) p.set(chave, valor)
-    else p.delete(chave)
-    setParams(p, { replace: true })
-  }
-
-  /*
-   * Os filtros desta tela vivem na URL — o que torna um recorte compartilhável
-   * por link — então limpar é esvaziar a consulta, e a contagem sai dela. A
-   * busca por texto é estado local e entra na conta à parte.
-   */
-  const filtrosAtivos = ['estado', 'categoria', 'familia', 'bloqueado'].filter((c) =>
-    params.get(c),
-  ).length + (texto.trim() ? 1 : 0)
-
-  function limparFiltros() {
-    setTexto('')
-    setParams(new URLSearchParams(), { replace: true })
-  }
+  const soBloqueados = filtro.valores.bloqueado === '1'
 
   const linhas = useMemo(() => (dado ? linhasParque() : []), [dado])
 
@@ -294,7 +288,7 @@ export function Parque() {
     estado && { chave: 'estado', texto: `Estado: ${ESTADO[estado as EquipamentoStatus]?.rotulo ?? estado}` },
     categoria && { chave: 'categoria', texto: `Categoria: ${CATEGORIAS.find((c) => c.codigo === categoria)?.nome}` },
     familia && { chave: 'familia', texto: `Família: ${familia === 'IMPRESSAO' ? 'Impressão' : familia === 'COMPUTACAO' ? 'Computação' : 'Contingência'}` },
-  ].filter(Boolean) as { chave: string; texto: string }[]
+  ].filter(Boolean) as { chave: keyof typeof PADROES; texto: string }[]
 
   /*
    * Falha de carga é dita, e não disfarçada de lista vazia.
@@ -326,6 +320,13 @@ export function Parque() {
       </div>
 
       <Cartao>
+        {/*
+          A faixa de visões fica acima da barra de filtros: um recorte nomeado
+          é mais rápido que remontar o filtro, e o que é mais rápido fica mais
+          à mão (Anexo Y §Y.3.5).
+        */}
+        <FaixaVisoes tela="parque" filtro={filtro} contagem={filtradas.length} />
+
         {/*
           Com seleção, a barra de lote **ocupa o lugar** da de filtros
           (Anexo Y §Y.3.4). Somar as duas cresceria a barra para duas linhas e
@@ -366,19 +367,19 @@ export function Parque() {
             )}
           </BarraLote>
         ) : (
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <div className="campo-busca">
             <Busca
               rotulo="Patrimônio, série, modelo ou cliente"
               valor={texto}
-              aoMudar={setTexto}
+              aoMudar={(v) => filtro.definir('q', v)}
               exemplo="ex.: 10042 ou Farmax"
             />
           </div>
           <Selecao
             rotulo="Família"
             value={familia}
-            onChange={(e) => definir('familia', e.target.value)}
+            onChange={(e) => filtro.definir('familia', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todas' },
               { valor: 'IMPRESSAO', texto: 'Impressão' },
@@ -389,13 +390,13 @@ export function Parque() {
           <Selecao
             rotulo="Categoria"
             value={categoria}
-            onChange={(e) => definir('categoria', e.target.value)}
+            onChange={(e) => filtro.definir('categoria', e.target.value)}
             opcoes={[{ valor: '', texto: 'Todas' }, ...CATEGORIAS.map((c) => ({ valor: c.codigo, texto: c.nome }))]}
           />
           <Selecao
             rotulo="Estado"
             value={estado}
-            onChange={(e) => definir('estado', e.target.value)}
+            onChange={(e) => filtro.definir('estado', e.target.value)}
             opcoes={[
               { valor: '', texto: 'Todos' },
               ...(Object.keys(ESTADO) as EquipamentoStatus[]).map((k) => ({ valor: k, texto: ESTADO[k].rotulo })),
@@ -407,7 +408,7 @@ export function Parque() {
         {fichas.length > 0 && (
           <div className="fichas">
             {fichas.map((f) => (
-              <button key={f.chave} className="ficha" onClick={() => definir(f.chave, '')}>
+              <button key={f.chave} className="ficha" onClick={() => filtro.definir(f.chave, '')}>
                 {f.texto}
                 <span className="ficha__x" aria-hidden="true">
                   ×
@@ -415,7 +416,7 @@ export function Parque() {
                 <span className="so-leitor">remover filtro</span>
               </button>
             ))}
-            <button className="btn btn--sutil btn--pequeno" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+            <button className="btn btn--sutil btn--pequeno" onClick={filtro.limpar}>
               Limpar todos
             </button>
           </div>
@@ -453,14 +454,7 @@ export function Parque() {
               titulo: 'Nenhum equipamento com esses filtros',
               texto: 'Ajuste os critérios ou limpe os filtros para ver o parque completo.',
               acao: (
-                <Botao
-                  onClick={() => {
-                    setTexto('')
-                    setParams(new URLSearchParams(), { replace: true })
-                  }}
-                >
-                  Limpar filtros
-                </Botao>
+                <Botao onClick={filtro.limpar}>Limpar filtros</Botao>
               ),
             }}
           />

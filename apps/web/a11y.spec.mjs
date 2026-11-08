@@ -4497,3 +4497,131 @@ test('nenhuma lista do sistema voltou a ter três botões por linha', async ({ p
     }
   }
 })
+
+/* ========================================================================
+ * Fase 3 do Anexo Y — visões salvas e o filtro na URL
+ * ====================================================================== */
+
+/** Abre o Parque e deixa um recorte valendo, que é o que se salva. */
+async function parqueComRecorte(page) {
+  await abrir(page, { hash: '#/parque' })
+  await page.getByLabel('Estado').selectOption('EM_MANUTENCAO')
+  await expect(page).toHaveURL(/estado=EM_MANUTENCAO/)
+}
+
+test('o filtro vive na URL em todas as listas, e sobrevive a recarregar', async ({ page }) => {
+  /*
+   * Sete das oito listas guardavam o recorte em estado local: o link colado
+   * levava à lista inteira, e voltar da tela de um registro desfazia o
+   * filtro. Sem endereço não há o que salvar — a visão salva depende disto.
+   */
+  for (const [hash, rotulo, valor, parametro] of [
+    ['#/chamados', 'Prioridade', 'CRITICA', /prioridade=CRITICA/],
+    ['#/contratos', 'Recorte', 'vencidos', /situacao=vencidos/],
+    ['#/estoque', 'Recorte', 'reposicao', /recorte=reposicao/],
+    ['#/contas-receber', 'Situação', 'APROVADO', /status=APROVADO/],
+  ]) {
+    await abrir(page, { hash })
+    await page.getByLabel(rotulo).selectOption(valor)
+    await expect(page, `${hash}: o recorte precisa ir para a URL`).toHaveURL(parametro)
+
+    // E volta igual ao recarregar: é o que um link colado faz.
+    await page.reload()
+    await assentar(page)
+    await expect(page.getByLabel(rotulo)).toHaveValue(valor)
+  }
+})
+
+test('salvar uma visão exige nome e diz o que está guardando', async ({ page }) => {
+  await parqueComRecorte(page)
+
+  await page.getByRole('button', { name: /Salvar esta visão/ }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+
+  // Sem nome não salva: uma visão sem nome é um chip sem rótulo.
+  await expect(dialogo.getByRole('button', { name: 'Salvar visão' })).toBeDisabled()
+
+  // O que a visão guarda fica à vista — é como se percebe que entrou um
+  // filtro que não se queria.
+  await expect(dialogo).toContainText('estado')
+
+  const v = await violacoes(page)
+  expect(v, `diálogo de salvar visão:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('a visão salva vira um chip que reaplica o recorte', async ({ page }) => {
+  await parqueComRecorte(page)
+  await page.getByRole('button', { name: /Salvar esta visão/ }).click()
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Nome' }).fill('Em manutenção')
+  await page.getByRole('dialog').getByRole('button', { name: 'Salvar visão' }).click()
+
+  const chip = page.getByRole('button', { name: /^Em manutenção/ })
+  await expect(chip).toBeVisible()
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+
+  // Voltar para "Todos" limpa o recorte, e o chip deixa de estar pressionado.
+  await page.getByRole('button', { name: 'Todos', exact: true }).click()
+  await expect(page).not.toHaveURL(/estado=/)
+  await expect(chip).toHaveAttribute('aria-pressed', 'false')
+
+  // E clicar no chip reaplica — que é a razão de a visão existir.
+  await chip.click()
+  await expect(page).toHaveURL(/estado=EM_MANUTENCAO/)
+})
+
+test('mexer no filtro com uma visão aberta não a altera em silêncio', async ({ page }) => {
+  await parqueComRecorte(page)
+  await page.getByRole('button', { name: /Salvar esta visão/ }).click()
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Nome' }).fill('Recorte vivo')
+  await page.getByRole('dialog').getByRole('button', { name: 'Salvar visão' }).click()
+  await expect(page.getByRole('button', { name: /^Recorte vivo/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await page.getByLabel('Estado').selectOption('DISPONIVEL')
+
+  /*
+   * Salvar em silêncio mudaria, para quem compartilha a visão, o recorte que
+   * outra pessoa usa de manhã — e ninguém saberia por quê.
+   */
+  await expect(page.getByText('filtros alterados')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Atualizar “Recorte vivo”/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Descartar' }).click()
+  await expect(page).toHaveURL(/estado=EM_MANUTENCAO/)
+})
+
+test('a visão da equipe exige permissão, e a recusa oferece a saída', async ({ page }) => {
+  await parqueComRecorte(page)
+  await page.getByRole('button', { name: /Salvar esta visão/ }).click()
+  const dialogo = page.getByRole('dialog')
+
+  // O Administrador da demonstração tem a permissão: as duas opções abrem.
+  await expect(dialogo.getByRole('radio', { name: /Toda a operação/ })).toBeEnabled()
+
+  // O Técnico não tem: a opção aparece desabilitada, com o motivo à vista —
+  // em vez de sumir e deixar quem procura concluir que o sistema não faz.
+  await dialogo.getByRole('button', { name: 'Cancelar' }).click()
+  await page.getByLabel('Perfil de acesso (demonstração)').selectOption({ label: 'Técnico de Manutenção' })
+  await assentar(page)
+
+  await page.getByLabel('Estado').selectOption('EM_MANUTENCAO')
+  await page.getByRole('button', { name: /Salvar esta visão/ }).click()
+  const d2 = page.getByRole('dialog')
+  await expect(d2.getByRole('radio', { name: /Toda a operação/ })).toBeDisabled()
+  await expect(d2).toContainText(/exige permissão/i)
+})
+
+test('a faixa de visões reflui em 320px sem rolagem lateral da página', async ({ page }) => {
+  await abrir(page, { hash: '#/parque?estado=EM_MANUTENCAO', largura: 320, altura: 720 })
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a faixa de visões não pode empurrar a página').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px com faixa de visões:\n  ${descrever(v)}`).toEqual([])
+})

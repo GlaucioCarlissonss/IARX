@@ -1,6 +1,6 @@
 # Anexo Y — Revisão de usabilidade e plano de unificação
 
-> **Estado: fases 1 e 2 entregues; fases 3 a 5 aguardando.**
+> **Estado: fases 1 a 3 entregues; fases 4 e 5 aguardando.**
 > O protótipo em imagem precede o código por decisão do cliente.
 >
 > Decisões tomadas em 07/11/2026: começar pela navegação; o seletor de perfil é
@@ -126,7 +126,7 @@ protótipo em imagem aprovado.
 | --- | --- | --- |
 | **1** ✅ | Navegação: acordeão de 6 áreas (desktop) e barra inferior rotulada (celular) | entregue — ver §Y.6 |
 | **2** ✅ | Lista de trabalho: seleção múltipla, barra de lote, ações em `⋯`, rodapé de paginação. Primeiro no Parque, depois nas outras seis listas | entregue — ver §Y.7 |
-| **3** | Visões salvas e filtro na URL | protótipo em `docs/prototipos/e-fase-3-visoes.png`, aguardando aprovação |
+| **3** ✅ | Visões salvas e filtro na URL | entregue — ver §Y.8 |
 | **4** | Cartões de KPI com variação e afordância de link; barra de topo com contexto | baixo |
 | **5** | Unificação dos formulários num descritor único | médio — 18 arquivos tocados de uma vez |
 
@@ -363,3 +363,84 @@ Treze casos novos na suíte de acessibilidade, incluindo:
 - a lista reflui em 320 px **com** a barra de lote aberta;
 - e um caso que percorre **as oito listas** conferindo que nenhuma voltou a ter
   três botões por linha.
+
+
+## Y.8 Fase 3 — visões salvas e o filtro na URL
+
+Protótipo aprovado em `docs/prototipos/e-fase-3-visoes.png`.
+
+### O que foi entregue
+
+| Peça | Onde |
+| --- | --- |
+| Tabela, RLS e o gatilho que autoriza publicar | `0038_visao_salva.sql` |
+| Dez casos de invariante | `packages/db/tests/30_visao_salva.sql` |
+| Contrato e vocabulário de telas | `packages/contracts/src/visoes.ts` |
+| Rotas | `apps/api/src/modulos/visoes/` |
+| O filtro na URL, uma vez só | `apps/web/src/lib/useFiltroNaUrl.ts` |
+| A faixa de visões | `apps/web/src/componentes/ui/FaixaVisoes.tsx` |
+
+**As oito listas** passaram a guardar o recorte inteiro na URL — inclusive a
+busca por texto, que era estado local e ficava de fora. Antes só o Parque fazia
+isso, e à mão.
+
+### As decisões que o protótipo deixou abertas, e como ficaram
+
+1. **Pessoal e compartilhada, as duas.** A decisão anterior era "compartilhadas
+   no locatário", e sozinha deixaria de fora quem tem o problema: quem opera
+   resolveria o próprio dia pedindo a alguém com permissão.
+2. **`visao:compartilhar` em supervisão e coordenação** — Diretor, Gestor de
+   Filial, Coordenador de Logística, Supervisor de Manutenção e Analista
+   Financeiro. Não no Técnico, nem no Operador Administrativo.
+3. **Nenhuma visão de fábrica.** A tabela nasce vazia. Semear recortes seria
+   inventar regra de negócio, e quais recortes importam é decisão de quem opera.
+
+### Três permissões, e por que não uma
+
+O primeiro desenho não declarava permissão nenhuma nestas rotas — a ideia era
+que `visao:compartilhar` governasse o corpo, não o caminho. **A suíte reprovou,
+e com razão:** RN-026 nega por omissão, e o guarda recusa rota sem permissão
+declarada antes de olhar o token. Não existe "rota sem permissão" nesta base.
+
+Ficaram três, cada uma medindo um alcance:
+
+- `visao:ler` — ver a faixa. Vai junto de qualquer `:ler` de lista;
+- `visao:gerenciar` — criar, renomear e excluir **as suas**. Larga de propósito;
+- `visao:compartilhar` — publicar para o locatário, e mexer no que outra pessoa
+  publicou. É a única que o banco confere por gatilho, e a única sem rota: ela
+  governa o **corpo**, e está registrada em `SEM_ROTA_JUSTIFICADA` dizendo isso.
+
+### Permissão conferida pelo perfil, não pelo token
+
+O gatilho da 0038 lê `usuario_perfil`/`perfil`. Um token vale até expirar, e uma
+permissão revogada há cinco minutos ainda está dentro dele — ler o perfil faz a
+revogação valer na hora. A exclusão no serviço foi alinhada à mesma fonte
+(`podeCompartilhar`), para não haver duas verdades sobre a mesma permissão.
+
+### O que a faixa não faz, de propósito
+
+- **Não conta todas as visões.** Só a ativa mostra contagem. Contar todas a cada
+  carregamento pediria uma consulta por visão, e a faixa ficaria mais cara que a
+  lista que ela recorta.
+- **Não salva em silêncio.** Mexer no filtro com uma visão aberta mostra
+  "filtros alterados", com *Atualizar* e *Descartar*. Salvar sozinho mudaria,
+  para todo o locatário, o recorte que outra pessoa usa de manhã.
+- **Não guarda qual visão está ativa.** É derivado do recorte. Um estado à parte
+  divergiria da lista no primeiro link colado ou botão Voltar.
+
+### Uma lacuna que a captura de tela revelou
+
+Com uma visão aberta e o filtro alterado havia só *Atualizar* e *Descartar* —
+e o caminho mais comum depois de abrir uma visão é estreitá-la: "preventiva
+vencida, mas só Curitiba". Sem uma terceira saída, quem faz isso só pode
+sobrescrever o recorte da equipe ou jogar fora o próprio ajuste. Entrou
+**Salvar como nova**. O defeito não apareceu em nenhum teste; apareceu ao
+tentar fotografar a tela.
+
+### Verificação
+
+Dez casos de banco, dezesseis de API e seis de acessibilidade. Entre eles: a
+visão pessoal não aparece nem para quem administra; promover a própria visão a
+compartilhada passa pela mesma tranca que publicar; o mesmo nome convive entre
+telas e entre pessoas, mas não entre as compartilhadas de uma tela; e o filtro
+sobrevive a recarregar em quatro listas diferentes.

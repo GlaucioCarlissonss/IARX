@@ -76,6 +76,7 @@ const MODULO_DO_RECURSO: Record<string, string> = {
   despesa: 'financeiro',
   conta_bancaria: 'financeiro',
   financeiro: 'financeiro',
+  visao: 'analise',
   mapa: 'analise',
   relatorio: 'analise',
   usuario: 'administracao',
@@ -130,6 +131,7 @@ const NOME_RECURSO: Record<string, string> = {
   despesa: 'Despesas e orçamento',
   conta_bancaria: 'Contas bancárias',
   financeiro: 'Painéis financeiros',
+  visao: 'Visões salvas de lista',
   mapa: 'Mapa de distribuição',
   relatorio: 'Relatórios',
   usuario: 'Usuários',
@@ -157,6 +159,9 @@ const ROTULO_ACAO: Record<string, string> = {
   editar: 'Editar',
   inativar: 'Inativar',
   gerenciar: 'Gerenciar',
+  /* "Compartilhar" e não "Publicar": o verbo precisa dizer para quem, e na
+     tela de perfis quem lê é quem concede — não quem opera. */
+  compartilhar: 'Compartilhar com a equipe',
   importar: 'Importar',
   exportar: 'Exportar',
   aprovar: 'Aprovar',

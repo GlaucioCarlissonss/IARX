@@ -3414,3 +3414,132 @@ textarea {
     width: min(260px, calc(100vw - 32px));
   }
 }
+
+/* ------------------------------------------------------- faixa de visões --- */
+/*
+ * Anexo Y §Y.3.5. A faixa fica acima da barra de filtros: o recorte nomeado é
+ * mais rápido que remontar o filtro, e o que é mais rápido fica mais à mão.
+ *
+ * Rola na horizontal em vez de quebrar em duas linhas. Quebrar empurraria a
+ * tabela para baixo a cada visão nova — o mesmo defeito que fez a barra de
+ * lote substituir a de filtros em vez de somar-se a ela.
+ */
+.faixa-visoes {
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: var(--e1);
+}
+.faixa-visoes__rotulo {
+  font-size: var(--t-11);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cor-text-muted);
+  flex: none;
+}
+.chip-visao__par {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.chip-visao {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--alvo-toque-min);
+  padding: 0 var(--e3);
+  border-radius: 999px;
+  border: 1px solid var(--cor-border);
+  background: var(--cor-surface-raised);
+  color: var(--cor-text-secondary);
+  font-size: var(--t-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip-visao:hover {
+  border-color: var(--cor-border-strong);
+  color: var(--cor-text-primary);
+}
+.chip-visao--ativa {
+  background: var(--cor-primary);
+  border-color: var(--cor-primary);
+  color: var(--cor-text-on-accent);
+}
+.chip-visao--ativa:hover {
+  color: var(--cor-text-on-accent);
+}
+.chip-visao--nova {
+  border-style: dashed;
+  color: var(--cor-text-muted);
+}
+.chip-visao__flama {
+  opacity: 0.8;
+}
+.chip-visao__n {
+  font-size: var(--t-11);
+  opacity: 0.85;
+}
+/* O ponto diz "esta visão está aberta, mas o filtro já não é o dela". */
+.chip-visao__ponto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cor-atencao-mark);
+}
+.faixa-visoes__alterada {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  flex: none;
+}
+.faixa-visoes__aviso {
+  font-size: var(--t-12);
+  font-weight: 600;
+  color: var(--cor-atencao);
+}
+
+/* Escolha de alcance ao salvar: radio com explicação, não só rótulo. */
+.escolha-alcance {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.escolha-alcance legend {
+  font-size: var(--t-12);
+  font-weight: 600;
+  margin-bottom: var(--e2);
+}
+.escolha-alcance__opcao {
+  display: flex;
+  gap: var(--e2);
+  align-items: flex-start;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  padding: var(--e2) var(--e3);
+  margin-bottom: var(--e2);
+  cursor: pointer;
+}
+.escolha-alcance__opcao:has(input:checked) {
+  border-color: var(--cor-primary);
+  background: var(--cor-primary-subtle-bg);
+}
+.escolha-alcance__opcao:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.escolha-alcance__opcao input {
+  margin-top: 3px;
+  accent-color: var(--cor-primary);
+}
+.escolha-alcance__opcao > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-13);
+}

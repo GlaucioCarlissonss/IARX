@@ -36,6 +36,8 @@ import {
   ResumoErros,
 } from '../componentes/ui/formulario'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
+import { useFiltroNaUrl } from '../lib/useFiltroNaUrl'
+import { FaixaVisoes } from '../componentes/ui/FaixaVisoes'
 import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
 import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
@@ -105,35 +107,33 @@ const ROTULO_ORIGEM: Record<OrigemReceber, string> = {
   AVULSO: 'Avulso',
 }
 
+const PADROES = { q: '', status: 'todos', origem: 'todas', fila: '', atraso: '' }
+
 export function ContasReceber() {
   const { pode, usuario } = useSessao()
   const { avisar } = useToast()
   const { situacao, dado, erro: erroConsulta, recarregar } = useConsulta(() => api.titulosReceber(), [])
   const [aberto, setAberto] = useState<Aberto>(null)
   const [erro, setErro] = useState<string | null>(null)
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | StatusReceber>('todos')
-  const [filtroOrigem, setFiltroOrigem] = useState<'todas' | OrigemReceber>('todas')
-  const [somenteFila, setSomenteFila] = useState(false)
-  const [somenteAtraso, setSomenteAtraso] = useState(false)
-  const [busca, setBusca] = useState('')
-
   /*
-   * Quantos filtros estão valendo, e como desfazê-los de uma vez.
+   * Os cinco controles desta faixa, na URL (Anexo Y §Y.3.5).
    *
-   * Esta faixa tem cinco controles: desfazê-los um a um exige lembrar de cada
-   * um, e é a tela em que mais se perde a conta do que ainda está restringindo.
+   * É a tela em que mais se perde a conta do que ainda está restringindo — e
+   * era também a que menos sobrevivia à navegação: abrir o detalhe de uma
+   * cobrança e voltar devolvia a lista inteira. A contagem de filtros ativos
+   * sai do hook, em vez de ser somada à mão a cada controle novo.
+   *
+   * Os alternadores guardam `'1'` na URL, e não `true`: parâmetro de URL é
+   * texto, e um `'false'` que vira `true` em JavaScript é o tipo de erro que
+   * aparece só quando alguém cola um link.
    */
-  const filtrosAtivos =
-    (busca.trim() ? 1 : 0) + (filtroStatus !== 'todos' ? 1 : 0) + (filtroOrigem !== 'todas' ? 1 : 0) +
-    (somenteFila ? 1 : 0) + (somenteAtraso ? 1 : 0)
-
-  function limparFiltros() {
-    setBusca('')
-    setFiltroStatus('todos')
-    setFiltroOrigem('todas')
-    setSomenteFila(false)
-    setSomenteAtraso(false)
-  }
+  const filtro = useFiltroNaUrl(PADROES)
+  const busca = filtro.valores.q
+  const filtroStatus = filtro.valores.status as 'todos' | StatusReceber
+  const filtroOrigem = filtro.valores.origem as 'todas' | OrigemReceber
+  const somenteFila = filtro.valores.fila === '1'
+  const somenteAtraso = filtro.valores.atraso === '1'
+  const setSomenteFila = (v: boolean) => filtro.definir('fila', v ? '1' : '')
 
   const base = api.baseSincrona()
   const titulos = dado ?? []
@@ -462,6 +462,8 @@ export function ContasReceber() {
           ) : null
         }
       >
+        <FaixaVisoes tela="contas_receber" filtro={filtro} contagem={visiveis.length} />
+
         {/*
           A barra de lote ocupa o lugar da de filtros enquanto há seleção
           (Anexo Y §Y.3.4). Aprovar vinte cobranças eram vinte idas e voltas.
@@ -489,18 +491,18 @@ export function ContasReceber() {
             */}
           </BarraLote>
         ) : (
-        <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
+        <Filtros ativos={filtro.ativos} aoLimpar={filtro.limpar}>
           <Entrada
             rotulo="Buscar por número, cliente ou descrição"
             rotuloOculto
             placeholder="Buscar cobrança…"
             value={busca}
-            onChange={(e) => setBusca(e.target.value)}
+            onChange={(e) => filtro.definir('q', e.target.value)}
           />
           <Selecao
             rotulo="Situação"
             value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value as 'todos' | StatusReceber)}
+            onChange={(e) => filtro.definir('status', e.target.value)}
             opcoes={[
               { valor: 'todos', texto: 'Todas as situações' },
               ...(Object.keys(ROTULO_STATUS_RECEBER) as StatusReceber[]).map((s) => ({
@@ -512,7 +514,7 @@ export function ContasReceber() {
           <Selecao
             rotulo="Origem"
             value={filtroOrigem}
-            onChange={(e) => setFiltroOrigem(e.target.value as 'todas' | OrigemReceber)}
+            onChange={(e) => filtro.definir('origem', e.target.value)}
             opcoes={[
               { valor: 'todas', texto: 'Contratual e avulso' },
               { valor: 'CONTRATUAL', texto: 'Contratual (gerada do contrato)' },
@@ -523,7 +525,7 @@ export function ContasReceber() {
             <input
               type="checkbox"
               checked={somenteAtraso}
-              onChange={(e) => setSomenteAtraso(e.target.checked)}
+              onChange={(e) => filtro.definir('atraso', e.target.checked ? '1' : '')}
             />
             Só as vencidas em aberto
           </label>

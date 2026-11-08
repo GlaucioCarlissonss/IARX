@@ -3,7 +3,7 @@ import * as portal from './portal'
 import type { EscopoDoPortal } from './portal'
 import * as cmd from './comandos'
 import type { Resultado } from './comandos'
-import type { BaseDados, EntidadeAnexo } from './tipos'
+import type { BaseDados, EntidadeAnexo, TelaComVisao } from './tipos'
 import { ErroApi } from './http'
 
 /*
@@ -276,6 +276,32 @@ export const api = {
   bloquearEquipamento: (id: string, motivo: string) => executar(() => cmd.bloquearEquipamento(BASE, id, motivo)),
   desbloquearEquipamento: (id: string) => executar(() => cmd.desbloquearEquipamento(BASE, id)),
   baixarEquipamento: (id: string, motivo: string) => executar(() => cmd.baixarEquipamento(BASE, id, motivo)),
+
+  /*
+   * Visões salvas (Anexo Y §Y.3.5).
+   *
+   * `usuarioId` e `podeCompartilhar` vêm de fora porque esta fachada não
+   * conhece a sessão — quem a conhece é a tela. Numa instalação real os dois
+   * saem do token e do perfil, e é o gatilho da 0038 que decide; aqui a
+   * decisão é a mesma, com os mesmos nomes de regra.
+   */
+  visoes: (tela: TelaComVisao, usuarioId: string) =>
+    responder(() => {
+      const r = cmd.listarVisoes(BASE, tela, usuarioId)
+      return r.ok ? r.valor : []
+    }),
+  criarVisao: (dados: cmd.DadosVisao, usuarioId: string, podeCompartilhar: boolean) =>
+    executar(() => cmd.criarVisao(BASE, dados, usuarioId, podeCompartilhar)),
+  editarVisao: (
+    id: string,
+    dados: Partial<Pick<cmd.DadosVisao, 'nome' | 'consulta' | 'compartilhada'>>,
+    usuarioId: string,
+    podeCompartilhar: boolean,
+  ) => executar(() => cmd.editarVisao(BASE, id, dados, usuarioId, podeCompartilhar)),
+  excluirVisao: (id: string, usuarioId: string, podeCompartilhar: boolean) =>
+    executar(() => cmd.excluirVisao(BASE, id, usuarioId, podeCompartilhar)),
+  duplicarVisao: (id: string, usuarioId: string, nome?: string) =>
+    executar(() => cmd.duplicarVisao(BASE, id, usuarioId, nome)),
   registrarLeitura: (id: string, d: cmd.DadosLeitura) => executar(() => cmd.registrarLeitura(BASE, id, d)),
 
   movimentarEstoque: (pecaId: string, d: cmd.DadosMovimento) => executar(() => cmd.movimentarEstoque(BASE, pecaId, d)),
