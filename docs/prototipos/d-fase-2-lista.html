@@ -177,8 +177,10 @@ tr.sel th{background:var(--primary-sub-bg)}
 
 <h1 class="titulo-folha">Fase 2 — a lista de trabalho
   <small>Parque instalado em 1440 px, nos quatro estados que a fase cria, e em 390 px. O que está desenhado
-  aqui usa somente rotas que já existem na API: <code>bloquear</code>, <code>desbloquear</code>,
-  <code>transferir</code> e <code>baixar</code>, cada uma por equipamento.</small>
+  aqui usa somente rotas que já existem na API, uma por equipamento.
+  <b>Entregue:</b> o lote ficou com <code>bloquear</code>, <code>desbloquear</code> e <code>baixar</code>.
+  <code>transferir</code> não entrou — a transferência tem aceite no destino, é fluxo de dois passos e
+  ainda não tem tela; entrar como botão de lote prometeria um ato que o sistema não consuma sozinho.</small>
 </h1>
 
 <!-- ============ A ============ -->
@@ -272,7 +274,6 @@ tr.sel th{background:var(--primary-sub-bg)}
       <span class="sep"></span>
       <button class="btn">Bloquear</button>
       <button class="btn">Desbloquear</button>
-      <button class="btn">Transferir de filial</button>
       <button class="btn perigo">Baixar ativo</button>
       <button class="limpar">limpar seleção</button>
     </div>

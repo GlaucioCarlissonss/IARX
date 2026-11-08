@@ -32,6 +32,10 @@ import {
   ResumoErros,
 } from '../componentes/ui/formulario'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
+import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
+import { useLote } from '../lib/useLote'
 import type {
   ClassificacaoPagar,
   FormaPagamento,
@@ -70,6 +74,7 @@ type Aberto =
   | { tipo: 'cancelar'; titulo: TituloPagar }
   | { tipo: 'estornar'; titulo: TituloPagar; pagamento: PagamentoPagar }
   | { tipo: 'delegacoes' }
+  | { tipo: 'aprovar-lote'; alvos: TituloPagar[] }
   | null
 
 const SEVERIDADE: Record<StatusPagar, Severidade> = {
@@ -148,6 +153,14 @@ export function ContasPagar() {
 
   const fila = useMemo(() => filaDeAprovacao(base, usuario.id), [base, usuario.id, titulos])
   const idsFila = useMemo(() => new Set(fila.map((t) => t.id)), [fila])
+
+  const lote = useLote(() => recarregar())
+  /* Os alvos saem da fila, não da seleção crua: entre marcar e clicar, outro
+     aprovador pode ter decidido, e o id selecionado já não esperar decisão. */
+  const alvosAprovacao = useMemo(
+    () => fila.filter((t) => lote.selecionados.has(t.id)),
+    [fila, lote.selecionados],
+  )
 
   const emAtraso = obrigacoes.filter((t) => EM_ABERTO.includes(t.status) && t.dataVencimento < hoje)
   const proximos = obrigacoes.filter(
@@ -256,40 +269,52 @@ export function ContasPagar() {
         )
       },
     },
+    /* Uma primária, que muda com o estado do título, e o `⋯` (Anexo Y §Y.3.3). */
     {
       chave: 'acoes',
       titulo: 'Ações',
       celula: (t) => {
         const pendente = nivelPendente(t)
-        const naMinhaFila = idsFila.has(t.id)
+        const naMinhaFila = idsFila.has(t.id) && pendente && pode('pagar:aprovar')
+        const aPagarAgora =
+          ['APROVADO', 'AGENDADO', 'PAGO_PARCIAL'].includes(t.status) && pode('pagar:baixar')
+
+        /* "Ver detalhes" só no menu quando não é a primária. */
+        const acoes: AcaoMenu[] = (naMinhaFila || aPagarAgora)
+          ? [{ rotulo: 'Ver detalhes', glifo: '◌', aoEscolher: () => setAberto({ tipo: 'detalhe', titulo: t }) }]
+          : []
+        if (t.status === 'PENDENTE' && t.criadoPor === usuario.id && pode('pagar:criar')) {
+          acoes.push({
+            rotulo: 'Reenviar para aprovação',
+            glifo: '↻',
+            separar: true,
+            aoEscolher: () =>
+              agir(() => api.reenviarTituloPagar(t.id, usuario.id), 'Reenviado para aprovação'),
+          })
+        }
+
+        const primaria = naMinhaFila ? (
+          <Botao
+            pequeno
+            variante="primario"
+            onClick={() => setAberto({ tipo: 'decidir', titulo: t, nivel: pendente.nivel })}
+          >
+            Decidir<span className="so-leitor"> nível {pendente.nivel} de {t.descricao}</span>
+          </Botao>
+        ) : aPagarAgora ? (
+          <Botao pequeno onClick={() => setAberto({ tipo: 'pagar', titulo: t })}>
+            Pagar<span className="so-leitor"> {t.descricao}</span>
+          </Botao>
+        ) : (
+          <Botao pequeno variante="sutil" onClick={() => setAberto({ tipo: 'detalhe', titulo: t })}>
+            Detalhes<span className="so-leitor"> de {t.descricao}</span>
+          </Botao>
+        )
+
         return (
-          <span className="linha g2 linha--acoes">
-            <Botao pequeno variante="sutil" onClick={() => setAberto({ tipo: 'detalhe', titulo: t })}>
-              Detalhes<span className="so-leitor"> de {t.descricao}</span>
-            </Botao>
-            {naMinhaFila && pendente && pode('pagar:aprovar') && (
-              <Botao
-                pequeno
-                variante="primario"
-                onClick={() => setAberto({ tipo: 'decidir', titulo: t, nivel: pendente.nivel })}
-              >
-                Decidir<span className="so-leitor"> nível {pendente.nivel} de {t.descricao}</span>
-              </Botao>
-            )}
-            {t.status === 'PENDENTE' && t.criadoPor === usuario.id && pode('pagar:criar') && (
-              <Botao
-                pequeno
-                onClick={() => agir(() => api.reenviarTituloPagar(t.id, usuario.id), 'Reenviado para aprovação')}
-              >
-                Reenviar<span className="so-leitor"> {t.descricao}</span>
-              </Botao>
-            )}
-            {['APROVADO', 'AGENDADO', 'PAGO_PARCIAL'].includes(t.status) && pode('pagar:baixar') && (
-              <Botao pequeno onClick={() => setAberto({ tipo: 'pagar', titulo: t })}>
-                Pagar<span className="so-leitor"> {t.descricao}</span>
-              </Botao>
-            )}
-          </span>
+          <AcoesDaLinha primaria={primaria}>
+            <MenuAcoes rotuloAlvo={`de ${t.descricao}`} titulo={t.descricao} acoes={acoes} />
+          </AcoesDaLinha>
         )
       },
     },
@@ -391,6 +416,24 @@ export function ContasPagar() {
           ) : null
         }
       >
+        {alvosAprovacao.length > 0 || lote.progresso ? (
+          <BarraLote
+            quantidade={alvosAprovacao.length}
+            substantivo={['título', 'títulos']}
+            aoLimpar={lote.limpar}
+            progresso={lote.progresso}
+          >
+            <Botao
+              pequeno
+              variante="primario"
+              onClick={() => setAberto({ tipo: 'aprovar-lote', alvos: alvosAprovacao })}
+            >
+              Aprovar
+            </Botao>
+            {/* Rejeitar continua linha a linha: a rejeição exige justificativa,
+                e uma só para vinte títulos diferentes não explica nenhum. */}
+          </BarraLote>
+        ) : (
         <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <Entrada
             rotulo="Buscar por descrição, fornecedor ou contrato"
@@ -432,6 +475,7 @@ export function ContasPagar() {
             Só os vencidos em aberto
           </label>
         </Filtros>
+        )}
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando títulos">
@@ -444,6 +488,19 @@ export function ContasPagar() {
             itens={visiveis}
             chaveDe={(t) => t.id}
             ordemInicial={{ chave: 'vencimento', direcao: 'asc' }}
+            /* Caixas só na fila: na lista completa não há verbo comum a um
+               título pago, um cancelado e um pendente. */
+            selecao={
+              somenteFila && pode('pagar:aprovar')
+                ? {
+                    selecionados: lote.selecionados,
+                    aoMudar: lote.definirSelecao,
+                    rotuloDe: (t) => `título ${t.descricao}`,
+                    impedimentoDe: (t) =>
+                      idsFila.has(t.id) ? undefined : 'não está na sua fila de aprovação',
+                  }
+                : undefined
+            }
             vazio={{
               titulo: somenteFila ? 'Nada esperando a sua decisão' : 'Nenhum título com estes filtros',
               texto: somenteFila
@@ -557,6 +614,46 @@ export function ContasPagar() {
               texto: 'O valor voltou para a conta e o título reabriu.',
             })
           }}
+        />
+      )}
+
+      {aberto?.tipo === 'aprovar-lote' && (
+        <ConfirmaLote
+          tom="normal"
+          titulo={`Aprovar ${aberto.alvos.length} títulos?`}
+          explicacao="Cada título é decidido no seu próprio nível, um a um. O servidor recusa o que a regra não permite — quem lançou o título não o aprova, e nível fora da sua alçada não decide —, e os recusados aparecem no relatório."
+          alvos={aberto.alvos.map((t) => ({
+            id: t.id,
+            rotulo: `${t.descricao} · ${moeda(t.valorAjustado ?? t.valorOriginal)}`,
+          }))}
+          rotuloConfirmar={`Aprovar ${aberto.alvos.length}`}
+          aoFechar={() => setAberto(null)}
+          aoConfirmar={() => {
+            const lista = aberto.alvos
+            setAberto(null)
+            void lote.rodar(
+              lista.map((t) => ({ id: t.id, rotulo: t.descricao })),
+              (id) => {
+                const alvo = lista.find((t) => t.id === id)!
+                const nivel = nivelPendente(alvo)?.nivel ?? 0
+                return api.decidirAprovacao(id, nivel, usuario.id, {
+                  decisao: 'APROVADO',
+                  justificativa: '',
+                })
+              },
+              { titulo: 'Aprovação em lote', verbo: 'aprovados' },
+            )
+          }}
+        />
+      )}
+
+      {lote.relatorio && (
+        <ResultadoDoLote
+          titulo={lote.relatorio.titulo}
+          verbo={lote.relatorio.verbo}
+          resultado={lote.relatorio.dados}
+          aoFechar={lote.fecharRelatorio}
+          aoSelecionarFalhas={lote.definirSelecao}
         />
       )}
 

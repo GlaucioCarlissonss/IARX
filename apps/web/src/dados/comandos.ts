@@ -1561,6 +1561,66 @@ export function desbloquearEquipamento(base: BaseDados, id: string): Resultado<E
   return sucesso(eq)
 }
 
+/**
+ * Baixa patrimonial (RN-007).
+ *
+ * As duas pré-condições são as do gatilho `app.validar_equipamento_transicao`
+ * da migração 0031, com os mesmos nomes de regra — `equipamento_alocado_nao_baixa`
+ * e `equipamento_com_os_nao_baixa`. Aqui elas são reimplementadas porque esta
+ * base não tem banco atrás; o nome de regra em comum é o que mantém a mensagem
+ * da tela igual nos dois caminhos, e é por ele que se percebe se uma das duas
+ * cópias mudou sozinha.
+ *
+ * Baixar um ativo alocado deixaria uma máquina na mesa de alguém — com o
+ * cliente pagando por um equipamento que o sistema passa a dizer que não
+ * existe.
+ */
+export function baixarEquipamento(base: BaseDados, id: string, motivo: string): Resultado<Equipamento> {
+  const eq = base.equipamentos.find((e) => e.id === id)
+  if (!eq) return falha('NAO_ENCONTRADO', 'Equipamento não encontrado.')
+
+  if (eq.status === 'BAIXADO') {
+    return falha('TRANSICAO_INVALIDA', 'Ativo já baixado.', {
+      acoes: ['A baixa é definitiva; não há o que baixar duas vezes.'],
+    })
+  }
+
+  if (motivo.trim().length < 10) {
+    return falha('REGRA_DE_NEGOCIO', 'A baixa exige motivo com pelo menos 10 caracteres.', {
+      campo: 'motivo',
+    })
+  }
+
+  const vigentes = base.contratos
+    .flatMap((c) => c.itens)
+    .filter((i) => i.equipamentoId === id && ['RESERVADO', 'ATIVO', 'SUSPENSO'].includes(i.status)).length
+  if (vigentes > 0) {
+    return falha(
+      'equipamento_alocado_nao_baixa',
+      `Equipamento com ${vigentes} alocação(ões) vigente(s) não é baixado.`,
+      { acoes: ['Encerre os itens de contrato antes da baixa.'] },
+    )
+  }
+
+  const abertas = base.ordens.filter(
+    (o) => o.equipamentoId === id && o.status !== 'VALIDADA' && o.status !== 'CANCELADA',
+  ).length
+  if (abertas > 0) {
+    return falha(
+      'equipamento_com_os_nao_baixa',
+      `Equipamento com ${abertas} ordem(ns) de serviço aberta(s) não é baixado.`,
+      { acoes: ['Conclua ou cancele as ordens antes da baixa.'] },
+    )
+  }
+
+  eq.status = 'BAIXADO'
+  eq.motivoIndisponibilidade = motivo.trim()
+  eq.clienteId = null
+  eq.localId = null
+  eq.contratoId = null
+  return sucesso(eq)
+}
+
 export interface DadosLeitura {
   competencia: string
   mono: number

@@ -10,6 +10,8 @@ import { Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Metrica, Seleca
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { Dialogo } from '../componentes/ui/Dialogo'
 import { Rolagem } from '../componentes/ui/Rolagem'
 import { FormNotaFiscal } from '../componentes/formularios/FormNotaFiscal'
@@ -206,12 +208,32 @@ export function NotasFiscais() {
     {
       chave: 'acoes',
       titulo: 'Ações',
-      celula: (n) => (
-        <div className="linha g2 envolver">
-          <Botao pequeno onClick={() => setAberto({ tipo: 'detalhe', nota: n })}>
-            Abrir<span className="so-leitor"> nota {n.serie}/{n.numero}</span>
-          </Botao>
-          {pode('nota_fiscal:conferir') && n.status === 'PENDENTE_CONFERENCIA' && (
+      celula: (n) => {
+        const paraConferir = pode('nota_fiscal:conferir') && n.status === 'PENDENTE_CONFERENCIA'
+        const paraIntegrar = pode('nota_fiscal:integrar') && n.status === 'CONFERIDA'
+
+        /*
+         * "Abrir" só entra no menu quando **não** é a primária: repetir o
+         * mesmo verbo nos dois lugares é o jeito mais rápido de ensinar que o
+         * `⋯` não vale a pena abrir.
+         */
+        const acoes: AcaoMenu[] =
+          paraConferir || paraIntegrar
+            ? [
+                {
+                  rotulo: 'Abrir a nota',
+                  glifo: '◌',
+                  aoEscolher: () => setAberto({ tipo: 'detalhe', nota: n }),
+                },
+              ]
+            : []
+
+        /*
+         * A primária segue a fase da nota: conferir, depois integrar. É a
+         * mesma lógica das filas financeiras — o botão da linha é o passo que
+         * aquele registro está esperando, e não um verbo fixo.
+         */
+        const primaria = paraConferir ? (
             <Botao
               pequeno
               variante="primario"
@@ -221,14 +243,26 @@ export function NotasFiscais() {
             >
               Conferir<span className="so-leitor"> nota {n.serie}/{n.numero}</span>
             </Botao>
-          )}
-          {pode('nota_fiscal:integrar') && n.status === 'CONFERIDA' && (
+        ) : paraIntegrar ? (
             <Botao pequeno variante="primario" onClick={() => setAberto({ tipo: 'integrar', nota: n })}>
               Integrar<span className="so-leitor"> nota {n.serie}/{n.numero} ao patrimônio</span>
             </Botao>
-          )}
-        </div>
-      ),
+          ) : (
+            <Botao pequeno onClick={() => setAberto({ tipo: 'detalhe', nota: n })}>
+              Abrir<span className="so-leitor"> nota {n.serie}/{n.numero}</span>
+            </Botao>
+          )
+
+        return (
+          <AcoesDaLinha primaria={primaria}>
+            <MenuAcoes
+              rotuloAlvo={`da nota ${n.serie}/${n.numero}`}
+              titulo={`Nota ${n.serie}/${n.numero}`}
+              acoes={acoes}
+            />
+          </AcoesDaLinha>
+        )
+      },
     },
   ]
 

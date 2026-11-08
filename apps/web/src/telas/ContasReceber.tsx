@@ -36,6 +36,10 @@ import {
   ResumoErros,
 } from '../componentes/ui/formulario'
 import { Tabela, type Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
+import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
+import { useLote } from '../lib/useLote'
 import type {
   FormaRecebimento,
   OrigemReceber,
@@ -75,6 +79,7 @@ type Aberto =
   | { tipo: 'baixar'; titulo: TituloReceber }
   | { tipo: 'cancelar'; titulo: TituloReceber }
   | { tipo: 'fechar' }
+  | { tipo: 'aprovar-lote'; alvos: TituloReceber[] }
   | null
 
 const SEVERIDADE: Record<StatusReceber, Severidade> = {
@@ -144,6 +149,19 @@ export function ContasReceber() {
 
   const fila = useMemo(() => filaDeEmissao(base, usuario.id), [base, usuario.id, titulos])
   const idsFila = useMemo(() => new Set(fila.map((t) => t.id)), [fila])
+
+  const lote = useLote(() => recarregar())
+
+  /*
+   * Os alvos saem da fila, e não da seleção crua: um id selecionado pode ter
+   * saído da fila entre a marcação e o clique — outro aprovador decidiu, ou a
+   * recarga trouxe o título já aprovado — e mandar aprovar o que já não espera
+   * decisão produziria N recusas que a tela podia ter evitado.
+   */
+  const alvosAprovacao = useMemo(
+    () => fila.filter((t) => lote.selecionados.has(t.id)),
+    [fila, lote.selecionados],
+  )
 
   const atrasados = cobrancas.filter((t) => emAtraso(t))
   const aReceber = cobrancas.filter((t) => t.status === 'APROVADO' || t.status === 'RECEBIDO_PARCIAL')
@@ -267,45 +285,67 @@ export function ContasReceber() {
         )
       },
     },
+    /*
+     * Uma primária e o `⋯` (Anexo Y §Y.3.3).
+     *
+     * Aqui a primária **muda com o estado** da cobrança, e isso é deliberado:
+     * o que a linha pede é diferente em cada fase — decidir na fila, receber
+     * quando aprovada, reenviar quando voltou. Manter um botão fixo obrigaria
+     * a abrir o menu justamente na ação que é a razão de a linha estar ali.
+     */
     {
       chave: 'acoes',
       titulo: 'Ações',
       celula: (t) => {
         const pendente = nivelPendenteReceber(t)
+        const naFila = idsFila.has(t.id) && pendente && pode('receber:aprovar')
+        const aReceberAgora = ['APROVADO', 'RECEBIDO_PARCIAL'].includes(t.status) && pode('receber:baixar')
+
+        /* "Ver detalhes" só no menu quando não é a primária — repetir o
+           mesmo verbo nos dois lugares ensina que o `⋯` não vale abrir. */
+        const acoes: AcaoMenu[] = (naFila || aReceberAgora)
+          ? [{ rotulo: 'Ver detalhes', glifo: '◌', aoEscolher: () => setAberto({ tipo: 'detalhe', titulo: t }) }]
+          : []
+        if (t.status === 'PENDENTE' && t.criadoPor === usuario.id && pode('receber:criar')) {
+          acoes.push({
+            rotulo: 'Reenviar para aprovação',
+            glifo: '↻',
+            separar: true,
+            aoEscolher: () =>
+              agir(() => api.reenviarTituloReceber(t.id, usuario.id), 'Reenviado para aprovação'),
+          })
+        }
+
+        const primaria = naFila ? (
+          <Botao
+            pequeno
+            variante="primario"
+            onClick={() => setAberto({ tipo: 'decidir', titulo: t, nivel: pendente.nivel })}
+          >
+            Decidir
+            <span className="so-leitor">
+              {' '}
+              nível {pendente.nivel} da cobrança {t.numeroTitulo}
+            </span>
+          </Botao>
+        ) : aReceberAgora ? (
+          <Botao pequeno onClick={() => setAberto({ tipo: 'receber', titulo: t })}>
+            Receber<span className="so-leitor"> a cobrança {t.numeroTitulo}</span>
+          </Botao>
+        ) : (
+          <Botao pequeno variante="sutil" onClick={() => setAberto({ tipo: 'detalhe', titulo: t })}>
+            Detalhes<span className="so-leitor"> da cobrança {t.numeroTitulo}</span>
+          </Botao>
+        )
+
         return (
-          <span className="linha g2 linha--acoes">
-            <Botao pequeno variante="sutil" onClick={() => setAberto({ tipo: 'detalhe', titulo: t })}>
-              Detalhes<span className="so-leitor"> da cobrança {t.numeroTitulo}</span>
-            </Botao>
-            {idsFila.has(t.id) && pendente && pode('receber:aprovar') && (
-              <Botao
-                pequeno
-                variante="primario"
-                onClick={() => setAberto({ tipo: 'decidir', titulo: t, nivel: pendente.nivel })}
-              >
-                Decidir
-                <span className="so-leitor">
-                  {' '}
-                  nível {pendente.nivel} da cobrança {t.numeroTitulo}
-                </span>
-              </Botao>
-            )}
-            {t.status === 'PENDENTE' && t.criadoPor === usuario.id && pode('receber:criar') && (
-              <Botao
-                pequeno
-                onClick={() =>
-                  agir(() => api.reenviarTituloReceber(t.id, usuario.id), 'Reenviado para aprovação')
-                }
-              >
-                Reenviar<span className="so-leitor"> a cobrança {t.numeroTitulo}</span>
-              </Botao>
-            )}
-            {['APROVADO', 'RECEBIDO_PARCIAL'].includes(t.status) && pode('receber:baixar') && (
-              <Botao pequeno onClick={() => setAberto({ tipo: 'receber', titulo: t })}>
-                Receber<span className="so-leitor"> a cobrança {t.numeroTitulo}</span>
-              </Botao>
-            )}
-          </span>
+          <AcoesDaLinha primaria={primaria}>
+            <MenuAcoes
+              rotuloAlvo={`da cobrança ${t.numeroTitulo}`}
+              titulo={`Cobrança ${t.numeroTitulo}`}
+              acoes={acoes}
+            />
+          </AcoesDaLinha>
         )
       },
     },
@@ -422,6 +462,33 @@ export function ContasReceber() {
           ) : null
         }
       >
+        {/*
+          A barra de lote ocupa o lugar da de filtros enquanto há seleção
+          (Anexo Y §Y.3.4). Aprovar vinte cobranças eram vinte idas e voltas.
+        */}
+        {alvosAprovacao.length > 0 || lote.progresso ? (
+          <BarraLote
+            quantidade={alvosAprovacao.length}
+            substantivo={['cobrança', 'cobranças']}
+            genero="f"
+            aoLimpar={lote.limpar}
+            progresso={lote.progresso}
+          >
+            <Botao
+              pequeno
+              variante="primario"
+              onClick={() => setAberto({ tipo: 'aprovar-lote', alvos: alvosAprovacao })}
+            >
+              Aprovar
+            </Botao>
+            {/*
+              Rejeitar não entra no lote: a rejeição **exige** justificativa, e
+              uma justificativa só para vinte cobranças diferentes é uma
+              justificativa que não explica nenhuma. Quem rejeita, rejeita uma
+              a uma — e é por isso que "Decidir" continua na linha.
+            */}
+          </BarraLote>
+        ) : (
         <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <Entrada
             rotulo="Buscar por número, cliente ou descrição"
@@ -461,6 +528,7 @@ export function ContasReceber() {
             Só as vencidas em aberto
           </label>
         </Filtros>
+        )}
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando cobranças">
@@ -473,6 +541,25 @@ export function ContasReceber() {
             itens={visiveis}
             chaveDe={(t) => t.id}
             ordemInicial={{ chave: 'vencimento', direcao: 'asc' }}
+            /*
+             * A seleção só aparece na fila de aprovação.
+             *
+             * Na lista completa não há ação que valha para todo título — uma
+             * cobrança recebida, uma em disputa e uma pendente não têm verbo
+             * em comum —, e oferecer caixas que levam a uma barra vazia é
+             * oferecer um caminho sem saída.
+             */
+            selecao={
+              somenteFila && pode('receber:aprovar')
+                ? {
+                    selecionados: lote.selecionados,
+                    aoMudar: lote.definirSelecao,
+                    rotuloDe: (t) => `cobrança ${t.numeroTitulo}`,
+                    impedimentoDe: (t) =>
+                      idsFila.has(t.id) ? undefined : 'não está na sua fila de aprovação',
+                  }
+                : undefined
+            }
             vazio={{
               titulo: somenteFila ? 'Nada esperando a sua aprovação' : 'Nenhuma cobrança com estes filtros',
               texto: somenteFila
@@ -498,6 +585,46 @@ export function ContasReceber() {
                   : 'Nenhuma faixa de alçada exige aprovação para este valor.',
             })
           }}
+        />
+      )}
+
+      {aberto?.tipo === 'aprovar-lote' && (
+        <ConfirmaLote
+          tom="normal"
+          titulo={`Aprovar ${aberto.alvos.length} cobranças?`}
+          explicacao="Cada cobrança é decidida no seu próprio nível, uma a uma. O servidor recusa o que a regra não permite — quem gerou a cobrança não a aprova, e nível fora da sua alçada não decide —, e os recusados aparecem no relatório."
+          alvos={aberto.alvos.map((t) => ({
+            id: t.id,
+            rotulo: `${t.numeroTitulo} · ${moeda(t.valorOriginal - t.desconto)} · ${t.descricao}`,
+          }))}
+          rotuloConfirmar={`Aprovar ${aberto.alvos.length}`}
+          aoFechar={() => setAberto(null)}
+          aoConfirmar={() => {
+            const lista = aberto.alvos
+            setAberto(null)
+            void lote.rodar(
+              lista.map((t) => ({ id: t.id, rotulo: `cobrança ${t.numeroTitulo}` })),
+              (id) => {
+                const alvo = lista.find((t) => t.id === id)!
+                const nivel = nivelPendenteReceber(alvo)?.nivel ?? 0
+                return api.decidirEmissao(id, nivel, usuario.id, {
+                  decisao: 'APROVADO',
+                  justificativa: '',
+                })
+              },
+              { titulo: 'Aprovação em lote', verbo: 'aprovadas' },
+            )
+          }}
+        />
+      )}
+
+      {lote.relatorio && (
+        <ResultadoDoLote
+          titulo={lote.relatorio.titulo}
+          verbo={lote.relatorio.verbo}
+          resultado={lote.relatorio.dados}
+          aoFechar={lote.fecharRelatorio}
+          aoSelecionarFalhas={lote.definirSelecao}
         />
       )}
 

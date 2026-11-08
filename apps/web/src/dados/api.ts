@@ -275,6 +275,7 @@ export const api = {
   criarEquipamento: (d: cmd.DadosEquipamento) => executar(() => cmd.criarEquipamento(BASE, d)),
   bloquearEquipamento: (id: string, motivo: string) => executar(() => cmd.bloquearEquipamento(BASE, id, motivo)),
   desbloquearEquipamento: (id: string) => executar(() => cmd.desbloquearEquipamento(BASE, id)),
+  baixarEquipamento: (id: string, motivo: string) => executar(() => cmd.baixarEquipamento(BASE, id, motivo)),
   registrarLeitura: (id: string, d: cmd.DadosLeitura) => executar(() => cmd.registrarLeitura(BASE, id, d)),
 
   movimentarEstoque: (pecaId: string, d: cmd.DadosMovimento) => executar(() => cmd.movimentarEstoque(BASE, pecaId, d)),

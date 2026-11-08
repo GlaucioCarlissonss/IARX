@@ -10,6 +10,8 @@ import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skelet
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import type { Contrato, ContratoStatus } from '../dados/tipos'
 import { FormContrato } from '../componentes/formularios/FormContrato'
 import { FormAlocarEquipamento } from '../componentes/formularios/FormAlocarEquipamento'
@@ -199,36 +201,53 @@ export function Contratos() {
         const aceitaItem = ['RASCUNHO', 'EM_APROVACAO', 'AGUARDANDO_ASSINATURA', 'ATIVO', 'EM_RENOVACAO'].includes(
           l.contrato.status,
         )
+        const anexos = contarAnexos(l.contrato.id)
+        const acoes: AcaoMenu[] = [
+          {
+            rotulo: 'Anexos',
+            glifo: '▣',
+            aoEscolher: () => setAberto({ tipo: 'anexos', contrato: l.contrato }),
+          },
+        ]
+        if (pode('contrato:criar')) {
+          acoes.push({
+            rotulo: 'Alocar equipamento',
+            glifo: '▤',
+            desabilitado: !aceitaItem,
+            motivoDesabilitado: `Contrato em ${l.contrato.status.toLowerCase()} não recebe novos itens`,
+            aoEscolher: () => setAberto({ tipo: 'alocar', contrato: l.contrato }),
+          })
+        }
+
+        /*
+         * A primária é o avanço de ciclo — o que o contrato está esperando.
+         *
+         * Sem próximo estado (encerrado, distratado) a linha fica só com o
+         * `⋯`: inventar uma primária só para ocupar a coluna devolveria o
+         * botão inútil que a fase veio tirar.
+         */
         return (
-          <div className="linha g2 envolver">
-            {pode('contrato:criar') && (
-              <Botao
-                pequeno
-                disabled={!aceitaItem}
-                motivoDesabilitado={`Contrato em ${l.contrato.status.toLowerCase()} não recebe novos itens`}
-                onClick={() => setAberto({ tipo: 'alocar', contrato: l.contrato })}
-              >
-                Alocar<span className="so-leitor"> equipamento no contrato {l.contrato.numero}</span>
-              </Botao>
-            )}
-            <Botao pequeno onClick={() => setAberto({ tipo: 'anexos', contrato: l.contrato })}>
-              Anexos
-              {contarAnexos(l.contrato.id) > 0 && (
-                <span className="distintivo">{contarAnexos(l.contrato.id)}</span>
-              )}
-              <span className="so-leitor"> do contrato {l.contrato.numero}</span>
-            </Botao>
-            {proximo && pode('contrato:aprovar') && (
-              <Botao
-                pequeno
-                variante="primario"
-                onClick={() => setAberto({ tipo: 'transicao', contrato: l.contrato, destino: proximo.destino })}
-              >
-                {proximo.rotulo}
-                <span className="so-leitor"> contrato {l.contrato.numero}</span>
-              </Botao>
-            )}
-          </div>
+          <AcoesDaLinha
+            primaria={
+              proximo && pode('contrato:aprovar') ? (
+                <Botao
+                  pequeno
+                  variante="primario"
+                  onClick={() => setAberto({ tipo: 'transicao', contrato: l.contrato, destino: proximo.destino })}
+                >
+                  {proximo.rotulo}
+                  <span className="so-leitor"> contrato {l.contrato.numero}</span>
+                </Botao>
+              ) : undefined
+            }
+          >
+            <MenuAcoes
+              rotuloAlvo={`do contrato ${l.contrato.numero}`}
+              titulo={`Contrato ${l.contrato.numero}`}
+              acoes={acoes}
+              distintivo={{ valor: anexos, descricao: 'anexo(s)' }}
+            />
+          </AcoesDaLinha>
         )
       },
     },

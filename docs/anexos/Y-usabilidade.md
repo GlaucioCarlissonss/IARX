@@ -1,6 +1,6 @@
 # Anexo Y — Revisão de usabilidade e plano de unificação
 
-> **Estado: fase 1 entregue; fases 2 a 5 aguardando.**
+> **Estado: fases 1 e 2 entregues; fases 3 a 5 aguardando.**
 > O protótipo em imagem precede o código por decisão do cliente.
 >
 > Decisões tomadas em 07/11/2026: começar pela navegação; o seletor de perfil é
@@ -125,7 +125,7 @@ protótipo em imagem aprovado.
 | Fase | Entrega | Risco |
 | --- | --- | --- |
 | **1** ✅ | Navegação: acordeão de 6 áreas (desktop) e barra inferior rotulada (celular) | entregue — ver §Y.6 |
-| **2** | Lista de trabalho: seleção múltipla, barra de lote, ações em `⋯`, rodapé de paginação. Primeiro no Parque, depois nas outras seis listas | médio — o componente `Tabela` é compartilhado |
+| **2** ✅ | Lista de trabalho: seleção múltipla, barra de lote, ações em `⋯`, rodapé de paginação. Primeiro no Parque, depois nas outras seis listas | entregue — ver §Y.7 |
 | **3** | Visões salvas **compartilhadas no locatário** e filtro na URL | médio — decidido: compartilhadas. Exige tabela nova e permissão `visao:gerenciar` |
 | **4** | Cartões de KPI com variação e afordância de link; barra de topo com contexto | baixo |
 | **5** | Unificação dos formulários num descritor único | médio — 18 arquivos tocados de uma vez |
@@ -226,7 +226,7 @@ documento costuma morar com suprimentos, não com o financeiro.
 Mover a tela é mudança de navegação e precisa de aprovação, então ficou como
 está. É pergunta para a próxima rodada.
 
-## Y.7 Fase 2 — protótipo aguardando aprovação
+## Y.7 Fase 2 — a lista de trabalho
 
 Desenho em `docs/prototipos/d-fase-2-lista.html` e `.png`, em cinco quadros:
 repouso, com seleção, menu `⋯` com confirmação, resultado do lote e 390 px.
@@ -267,3 +267,79 @@ A proposta é **começar sem rota nova**. O parcial é honesto, e a transação
 única esconderia que 14 das 15 preventivas podiam ter sido bloqueadas. Se a
 preferência for tudo-ou-nada, isso vira trabalho de back-end **antes** da
 fase 2.
+
+> **Decidido assim na entrega:** sem rota nova. `lib/lote.ts` chama a rota por
+> registro, em série, e o relatório separa três desfechos — concluído, recusado
+> por regra, não tentado. Reverter para rota de lote não exige desfazer nada
+> desta fase: o contrato de `executarLote` é uma função por id.
+
+### Y.7.1 O que foi entregue
+
+| Peça | Onde |
+| --- | --- |
+| Menu `⋯` com padrão de menu do APG | `componentes/ui/MenuAcoes.tsx` |
+| Seleção múltipla e rodapé de paginação | `componentes/ui/Tabela.tsx` |
+| Barra de lote, confirmação e relatório | `componentes/ui/BarraLote.tsx` |
+| Execução em série com desfecho por registro | `lib/lote.ts` |
+| Estado da lista com seleção (as cinco telas) | `lib/useLote.ts` |
+
+**As oito listas** passaram a ter uma ação visível por linha e o resto no `⋯`:
+Parque, Chamados, Contratos, Clientes, Peças, Notas fiscais, Contas a receber
+e Contas a pagar.
+
+**Cinco têm seleção e ação em lote**, e só onde há verbo comum a toda linha:
+
+| Tela | Ações em lote | Rota que já existia |
+| --- | --- | --- |
+| Parque | Bloquear · Desbloquear · Baixar ativo | `:id/bloquear`, `:id/desbloquear`, `:id/baixar` |
+| Chamados | Atribuir técnico | `ordens-servico/:id/atribuir` |
+| Contas a receber | Aprovar (só na fila) | `:id/aprovacoes/:nivel/decidir` |
+| Contas a pagar | Aprovar (só na fila) | `:id/aprovacoes/:nivel/decidir` |
+
+Contratos, Clientes e Peças ficaram **sem** seleção: não há ação que valha para
+toda linha, e caixas que levam a uma barra vazia são caminho sem saída.
+
+### Y.7.2 As regras que a fase fixou
+
+- **A barra de lote substitui a de filtros**, não se soma. Somar cresce para
+  duas linhas e empurra a tabela para baixo a cada caixa marcada.
+- **A seleção pertence à página exibida** e é esvaziada ao paginar. "Selecionar
+  os 438" agiria sobre registros que ninguém viu.
+- **A primária da linha muda com o estado** nas filas — decidir, receber,
+  reenviar. Um verbo fixo esconderia no menu justamente a ação que é a razão de
+  a linha estar ali.
+- **O mesmo verbo nunca aparece na linha e no menu.** Repetir ensina que o `⋯`
+  não vale abrir.
+- **Irreversível confirma nomeando os alvos e contando no botão** — "Baixar 3
+  ativos", nunca "Confirmar".
+- **Rejeitar não entra em lote.** A rejeição exige justificativa, e uma só para
+  vinte títulos diferentes não explica nenhum.
+
+### Y.7.3 Duas coisas que a fase corrigiu de passagem
+
+1. **Bloquear conferia a permissão errada.** O Parque testava
+   `equipamento:desbloquear` para os dois botões. Quem podia bloquear e não
+   desbloquear não via botão nenhum; quem podia desbloquear via o de bloquear
+   sem ter a permissão, e o servidor recusava depois do formulário preenchido.
+2. **O `axe` reprovava uma cor que nunca existe.** A suíte media contraste no
+   meio da animação de entrada dos cartões e lia `#808892` sobre `#fdfdfe` —
+   o cinza certo misturado com o branco de trás. `assentar()` passou a esperar
+   as animações finitas terminarem.
+
+### Y.7.4 Verificação
+
+Treze casos novos na suíte de acessibilidade, incluindo:
+
+- a linha do parque tem no máximo dois botões — a primária e o `⋯`;
+- o menu segue o APG: `aria-haspopup`, setas, Esc fechando **e devolvendo o
+  foco** ao gatilho;
+- marcar troca a barra de filtros pela de lote, e a contagem vive em região
+  `aria-live`;
+- a caixa do cabeçalho fica **indeterminada** com parte da página marcada;
+- a confirmação nomeia os alvos e conta no botão;
+- o relatório mostra o parcial com o **nome da regra** que recusou
+  (`equipamento_alocado_nao_baixa`);
+- paginar esvazia a seleção;
+- a lista reflui em 320 px **com** a barra de lote aberta;
+- e um caso que percorre **as oito listas** conferindo que nenhuma voltou a ter
+  três botões por linha.

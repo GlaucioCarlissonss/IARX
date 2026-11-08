@@ -9,6 +9,8 @@ import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skelet
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { FormEstoque } from '../componentes/formularios/FormEstoque'
 import { FormPolitica } from '../componentes/formularios/FormPolitica'
 import type { Peca } from '../dados/tipos'
@@ -165,20 +167,29 @@ export function Estoque() {
     {
       chave: 'acoes',
       titulo: 'Ações',
-      celula: (l) => (
-        <div className="linha g2 envolver">
-          {pode('estoque:movimentar') && (
-            <Botao pequeno variante="primario" onClick={() => setAberto({ tipo: 'movimentar', peca: l.peca })}>
-              Movimentar<span className="so-leitor"> {l.peca.codigo}</span>
-            </Botao>
-          )}
-          {pode('estoque:ajustar') && (
-            <Botao pequeno onClick={() => setAberto({ tipo: 'politica', peca: l.peca })}>
-              Política<span className="so-leitor"> de reposição de {l.peca.codigo}</span>
-            </Botao>
-          )}
-        </div>
-      ),
+      celula: (l) => {
+        const acoes: AcaoMenu[] = []
+        if (pode('estoque:ajustar')) {
+          acoes.push({
+            rotulo: 'Política de reposição',
+            glifo: '◵',
+            aoEscolher: () => setAberto({ tipo: 'politica', peca: l.peca }),
+          })
+        }
+        return (
+          <AcoesDaLinha
+            primaria={
+              pode('estoque:movimentar') ? (
+                <Botao pequeno variante="primario" onClick={() => setAberto({ tipo: 'movimentar', peca: l.peca })}>
+                  Movimentar<span className="so-leitor"> {l.peca.codigo}</span>
+                </Botao>
+              ) : undefined
+            }
+          >
+            <MenuAcoes rotuloAlvo={`da peça ${l.peca.codigo}`} titulo={l.peca.codigo} acoes={acoes} />
+          </AcoesDaLinha>
+        )
+      },
     },
   ]
 

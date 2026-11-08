@@ -9,6 +9,8 @@ import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skelet
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
 import { BarrasHorizontais } from '../componentes/ui/graficos'
 import { useSessao } from '../lib/contexto'
 import { FormCliente } from '../componentes/formularios/FormCliente'
@@ -179,31 +181,48 @@ export function Clientes() {
     {
       chave: 'acoes',
       titulo: 'Ações',
-      celula: (l) => (
-        <div className="linha g2 envolver">
-          <Botao pequeno onClick={() => setAberto({ tipo: 'anexos', cliente: l.cliente })}>
-            Anexos
-            {contarAnexos(l.cliente.id) > 0 && <span className="distintivo">{contarAnexos(l.cliente.id)}</span>}
-            <span className="so-leitor"> de {l.cliente.nomeFantasia}</span>
-          </Botao>
-          {pode('cliente:criar') && (
-            <Botao pequeno onClick={() => setAberto({ tipo: 'credito', cliente: l.cliente, emAberto: l.aberto })}>
-              Crédito<span className="so-leitor"> de {l.cliente.nomeFantasia}</span>
-            </Botao>
-          )}
-          {pode('contrato:criar') && (
-            <Botao
-              pequeno
-              variante="primario"
-              disabled={l.cliente.situacaoCredito === 'BLOQUEADO'}
-              motivoDesabilitado="Cliente com crédito bloqueado não pode contratar"
-              onClick={() => setAberto({ tipo: 'contrato', clienteId: l.cliente.id })}
-            >
-              Contratar<span className="so-leitor"> com {l.cliente.nomeFantasia}</span>
-            </Botao>
-          )}
-        </div>
-      ),
+      celula: (l) => {
+        const anexos = contarAnexos(l.cliente.id)
+        const acoes: AcaoMenu[] = [
+          {
+            rotulo: 'Anexos',
+            glifo: '▣',
+            aoEscolher: () => setAberto({ tipo: 'anexos', cliente: l.cliente }),
+          },
+        ]
+        if (pode('cliente:criar')) {
+          acoes.push({
+            rotulo: 'Analisar crédito',
+            glifo: '◍',
+            aoEscolher: () => setAberto({ tipo: 'credito', cliente: l.cliente, emAberto: l.aberto }),
+          })
+        }
+
+        return (
+          <AcoesDaLinha
+            primaria={
+              pode('contrato:criar') ? (
+                <Botao
+                  pequeno
+                  variante="primario"
+                  disabled={l.cliente.situacaoCredito === 'BLOQUEADO'}
+                  motivoDesabilitado="Cliente com crédito bloqueado não pode contratar"
+                  onClick={() => setAberto({ tipo: 'contrato', clienteId: l.cliente.id })}
+                >
+                  Contratar<span className="so-leitor"> com {l.cliente.nomeFantasia}</span>
+                </Botao>
+              ) : undefined
+            }
+          >
+            <MenuAcoes
+              rotuloAlvo={`de ${l.cliente.nomeFantasia}`}
+              titulo={l.cliente.nomeFantasia}
+              acoes={acoes}
+              distintivo={{ valor: anexos, descricao: 'anexo(s)' }}
+            />
+          </AcoesDaLinha>
+        )
+      },
     },
   ]
 

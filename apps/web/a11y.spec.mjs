@@ -68,6 +68,27 @@ async function assentar(page) {
    */
   await page.waitForTimeout(120)
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0, { timeout: 15000 })
+
+  /*
+   * E espera a animação de entrada terminar.
+   *
+   * Os cartões de métrica entram com `opacity: 0 → 1`, o último com 200 ms de
+   * atraso. Medir contraste no meio disso mede uma cor que nunca existe: o
+   * axe reprovou "17 equipamentos fora de operação" com 3,52:1 lendo
+   * `#808892` sobre `#fdfdfe` — o cinza correto, `#616a76`, misturado com o
+   * branco por trás na fração do fade que estava valendo naquele frame.
+   *
+   * As infinitas ficam de fora: o brilho do esqueleto nunca termina, e
+   * esperá-lo travaria a suíte inteira.
+   */
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    ),
+  )
 }
 
 /**
@@ -1075,6 +1096,52 @@ async function abrirArea(page, nome) {
   await expect(botao).toHaveAttribute('aria-expanded', 'true')
 }
 
+/**
+ * Abre o primeiro menu `⋯` que ofereça o item pedido, e escolhe-o.
+ *
+ * As ações da linha dependem da linha — leitura só existe para categoria com
+ * contador, desbloquear só para quem está bloqueado. Abrir sempre a primeira e
+ * esperar o item seria um teste refém de qual registro a base gerou primeiro.
+ */
+async function abrirMenuComItem(page, nomeGatilho, nomeItem) {
+  const gatilhos = page.getByRole('button', { name: nomeGatilho })
+  const total = await gatilhos.count()
+  expect(total, 'nenhum menu de ações na lista').toBeGreaterThan(0)
+
+  for (let i = 0; i < total; i += 1) {
+    const gatilho = gatilhos.nth(i)
+    await gatilho.click()
+    // O menu é montado em duas etapas — mede o gatilho, depois desenha —, e
+    // contar itens antes disso conta zero.
+    await expect(page.getByRole('menu')).toBeVisible()
+    const item = page.getByRole('menuitem', { name: nomeItem })
+    if ((await item.count()) > 0 && (await item.first().isEnabled())) {
+      await item.first().click()
+      return
+    }
+    await page.keyboard.press('Escape')
+  }
+  throw new Error(`nenhuma linha oferece "${nomeItem}" no menu de ações`)
+}
+
+/**
+ * Abre o detalhe da primeira cobrança da lista.
+ *
+ * "Detalhes" é a primária só quando a cobrança não espera decisão nem
+ * recebimento; nos outros estados ela está no menu `⋯`. Procurar nos dois é o
+ * que torna o teste independente do estado do registro que a massa gerou.
+ */
+async function abrirDetalhesDaCobranca(page) {
+  const linha = page.getByRole('table').getByRole('row').nth(1)
+  const naLinha = linha.getByRole('button', { name: /^Detalhes/ })
+  if ((await naLinha.count()) > 0) await naLinha.click()
+  else {
+    await linha.getByRole('button', { name: /^Mais ações da cobrança/ }).click()
+    await page.getByRole('menuitem', { name: 'Ver detalhes' }).click()
+  }
+  await expect(page.getByRole('dialog')).toBeVisible()
+}
+
 async function abrirDialogo(page, { hash = '', nomeBotao }) {
   await abrir(page, { hash })
   await page.getByRole('button', { name: nomeBotao }).first().click()
@@ -1174,8 +1241,9 @@ test('RN-001: o seletor desabilita ativo já alocado e diz onde ele está', asyn
   expect(patrimonio).toMatch(/^\d+$/)
 
   await abrir(page, { hash: '#/contratos' })
-  // Contratos encerrados têm o botão desabilitado; o teste precisa de um vivo.
-  await page.locator('button:not([disabled])', { hasText: /^Alocar/ }).first().click()
+  // "Alocar" foi para o menu `⋯`. Contratos encerrados têm o item desabilitado,
+  // e `abrirMenuComItem` procura justamente o primeiro que o ofereça ativo.
+  await abrirMenuComItem(page, /^Mais ações do contrato/, 'Alocar equipamento')
   await expect(page.getByRole('dialog')).toBeVisible()
 
   // Período que de fato colide com as alocações vigentes da massa.
@@ -1199,7 +1267,13 @@ test('RN-001: o seletor desabilita ativo já alocado e diz onde ele está', asyn
 
 test('RN-020: leitura menor que a anterior é recusada citando o valor', async ({ page }) => {
   await abrir(page, { hash: '#/parque' })
-  await page.getByRole('button', { name: /^Leitura/ }).first().click()
+  // "Leitura" saiu da linha e foi para o menu `⋯` (Anexo Y §Y.3.3): a linha
+  // mostra só a ação primária.
+  //
+  // Procurar linha a linha, e não abrir a primeira: leitura só existe para
+  // categoria com contador, e qual linha é a primeira depende de quais dados
+  // a base gerou. Um `.first()` aqui seria um teste que passa por sorte.
+  await abrirMenuComItem(page, /^Mais ações do patrimônio/, 'Registrar leitura')
   await expect(page.getByRole('dialog')).toBeVisible()
 
   const mono = page.locator('#campo-mono')
@@ -1300,15 +1374,22 @@ async function escolherArquivos(page, arquivos) {
  */
 async function abrirAnexosComDocumentos(page, hash) {
   await abrir(page, { hash })
+  // O distintivo mudou de lugar — hoje fica no gatilho do menu `⋯` —, mas
+  // continua sendo o indicador confiável, e usá-lo ainda verifica que ele
+  // reflete a realidade.
   const comAnexos = page.locator('button', { has: page.locator('.distintivo') }).first()
   await expect(comAnexos).toBeVisible()
   await comAnexos.click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await page.getByRole('menuitem', { name: /^Anexos$/ }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
 }
 
 test('anexos: aceita qualquer tipo, inclusive extensão desconhecida', async ({ page }) => {
   await abrir(page, { hash: '#/contratos' })
-  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  // "Anexos" foi para o menu `⋯` (Anexo Y §Y.3.3); a contagem continua visível
+  // na linha, no distintivo do gatilho.
+  await abrirMenuComItem(page, /^Mais ações do contrato/, /^Anexos$/)
   const dialogo = page.getByRole('dialog')
   await expect(dialogo).toBeVisible()
 
@@ -1353,7 +1434,7 @@ test('anexos: nome duplicado é recusado apontando o campo', async ({ page }) =>
 
 test('anexos: arquivo vazio é recusado', async ({ page }) => {
   await abrir(page, { hash: '#/contratos' })
-  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await abrirMenuComItem(page, /^Mais ações do contrato/, /^Anexos$/)
   await escolherArquivos(page, [{ name: 'exportacao-falhou.xlsx', mimeType: '', buffer: Buffer.from('') }])
 
   await page.getByRole('dialog').getByRole('button', { name: /^Anexar arquivo/ }).click()
@@ -1381,7 +1462,7 @@ test('anexos: remoção exige motivo', async ({ page }) => {
 
 test('anexos: download é forçado, nunca navegação para o arquivo', async ({ page }) => {
   await abrir(page, { hash: '#/contratos' })
-  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await abrirMenuComItem(page, /^Mais ações do contrato/, /^Anexos$/)
 
   // Um .html é o caso que importa: se abrisse no contexto da aplicação,
   // executaria script com acesso à sessão.
@@ -1415,7 +1496,7 @@ test('anexos: documento da massa não finge ter conteúdo', async ({ page }) => 
 
 test('anexos: o input de arquivo é alcançável e acionável por teclado', async ({ page }) => {
   await abrir(page, { hash: '#/contratos' })
-  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await abrirMenuComItem(page, /^Mais ações do contrato/, /^Anexos$/)
 
   // Arrastar-e-soltar não pode ser o único caminho. A área de soltar fica fora
   // da árvore de acessibilidade justamente por não ser operável por teclado.
@@ -1428,7 +1509,7 @@ test('anexos: o input de arquivo é alcançável e acionável por teclado', asyn
 
 test('axe no diálogo de anexos, com arquivos selecionados', async ({ page }) => {
   await abrir(page, { hash: '#/contratos' })
-  await page.getByRole('button', { name: /^Anexos/ }).first().click()
+  await abrirMenuComItem(page, /^Mais ações do contrato/, /^Anexos$/)
   await escolherArquivos(page, [
     { name: 'termo.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') },
     { name: 'foto-instalacao.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('JPG') },
@@ -1452,12 +1533,34 @@ test('axe no diálogo de anexos, com arquivos selecionados', async ({ page }) =>
  */
 
 /** Abre a primeira nota que satisfaz o recorte escolhido. */
+/** Abre o detalhe da nota de uma linha, esteja "Abrir" na linha ou no `⋯`. */
+async function abrirNotaDaLinha(page, linha) {
+  const naLinha = linha.getByRole('button', { name: /^Abrir nota/ })
+  if ((await naLinha.count()) > 0) {
+    await naLinha.click()
+  } else {
+    await linha.getByRole('button', { name: /^Mais ações da nota/ }).click()
+    await expect(page.getByRole('menu')).toBeVisible()
+    await page.getByRole('menuitem', { name: 'Abrir a nota' }).click()
+  }
+  await expect(page.getByRole('dialog')).toBeVisible()
+}
+
 async function abrirNota(page, recorte) {
   await abrir(page, { hash: '#/notas-fiscais' })
   await page.getByLabel('Recorte').selectOption(recorte)
-  const linha = page.getByRole('row').filter({ has: page.getByRole('button', { name: /^Abrir nota/ }) }).first()
-  await expect(linha).toBeVisible()
-  await linha.getByRole('button', { name: /^Abrir nota/ }).click()
+  /*
+   * "Abrir" só é a ação primária quando a nota não espera conferência nem
+   * integração (Anexo Y §Y.7.2: a primária é o passo que o registro espera).
+   * Nos demais recortes ela está no menu `⋯`, e o teste tem de procurá-la nos
+   * dois lugares — que é exatamente a regra que a fase introduziu.
+   */
+  const naLinha = page.getByRole('button', { name: /^Abrir nota/ })
+  if ((await naLinha.count()) > 0) {
+    await naLinha.first().click()
+  } else {
+    await abrirMenuComItem(page, /^Mais ações da nota/, 'Abrir a nota')
+  }
   await expect(page.getByRole('dialog')).toBeVisible()
   return page.getByRole('dialog')
 }
@@ -1724,11 +1827,9 @@ test('RN-027: quem lança a nota não pode conferi-la', async ({ page }) => {
   // Identifica as unidades, para que a recusa seguinte seja pela segregação de
   // funções e não pela conferência incompleta.
   await page.getByLabel('Número, chave ou fornecedor').fill('77001')
-  await page
-    .getByRole('row')
-    .filter({ hasText: '77001' })
-    .getByRole('button', { name: /^Abrir nota/ })
-    .click()
+  // A nota recém-lançada espera conferência, então a primária da linha é
+  // "Conferir" e "Abrir" está no menu `⋯` (Anexo Y §Y.7.2).
+  await abrirNotaDaLinha(page, page.getByRole('row').filter({ hasText: '77001' }))
   await page.getByRole('dialog').getByRole('button', { name: /séries do item/ }).click()
   const series = page.getByRole('dialog')
   for (let i = 1; i <= 3; i++) {
@@ -3621,7 +3722,7 @@ test('o desconto mostra o percentual e barra acima do teto', async ({ page }) =>
   await abrir(page, { hash: '#/contas-receber' })
   await page.getByLabel('Situação').selectOption('APROVADO')
 
-  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  await abrirDetalhesDaCobranca(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Aplicar desconto' }).click()
 
   const dialogo = page.getByRole('dialog')
@@ -3676,7 +3777,7 @@ test('a baixa sem recebimento avisa que não é receber', async ({ page }) => {
   await abrir(page, { hash: '#/contas-receber' })
   await page.getByLabel('Situação').selectOption('APROVADO')
 
-  await page.getByRole('table').getByRole('row').nth(1).getByRole('button', { name: /^Detalhes/ }).click()
+  await abrirDetalhesDaCobranca(page)
   await page.getByRole('dialog').getByRole('button', { name: 'Baixar sem receber' }).click()
 
   const dialogo = page.getByRole('dialog')
@@ -4085,4 +4186,241 @@ test('fluxo de caixa reflui em 320px sem rolagem horizontal', async ({ page }) =
 
   const v = await violacoes(page)
   expect(v, `320px:\n  ${descrever(v)}`).toEqual([])
+})
+
+/* ========================================================================
+ * Fase 2 do Anexo Y — a lista de trabalho
+ *
+ * Os casos vêm antes do uso, não depois: cada um descreve uma obrigação que o
+ * plano assumiu, e a suíte é onde a obrigação passa a existir.
+ * ====================================================================== */
+
+test('a linha do parque tem uma ação visível, e o resto no menu ⋯', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  const linha = page.getByRole('table').getByRole('row').nth(1)
+  const botoes = linha.getByRole('button')
+
+  // Dois: a primária e o gatilho do menu. Antes eram três ações por linha em
+  // 438 linhas, empurrando as colunas de dado para fora da área visível.
+  await expect(botoes).toHaveCount(2)
+  await expect(linha.getByRole('button', { name: /^Mais ações do patrimônio/ })).toBeVisible()
+})
+
+test('o menu ⋯ segue o padrão de menu do APG: teclado, Esc e foco de volta', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  const gatilho = page.getByRole('button', { name: /^Mais ações do patrimônio/ }).first()
+  await expect(gatilho).toHaveAttribute('aria-expanded', 'false')
+  await expect(gatilho).toHaveAttribute('aria-haspopup', 'menu')
+
+  await gatilho.click()
+  await expect(gatilho).toHaveAttribute('aria-expanded', 'true')
+
+  const menu = page.getByRole('menu')
+  await expect(menu).toBeVisible()
+  const itens = menu.getByRole('menuitem')
+  expect(await itens.count()).toBeGreaterThan(0)
+
+  // O foco entra no primeiro item ao abrir, e ↓ circula.
+  await expect(itens.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(itens.first()).not.toBeFocused()
+
+  // Esc fecha **e devolve o foco ao gatilho**: sem isso quem usa teclado é
+  // despejado no início do documento.
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(gatilho).toBeFocused()
+
+  const v = await violacoes(page)
+  expect(v, `menu de ações:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('selecionar linhas troca a barra de filtros pela de lote, e anuncia a contagem', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  const busca = page.getByRole('searchbox', { name: /Patrimônio, série, modelo ou cliente/ })
+  await expect(busca).toBeVisible()
+
+  const primeira = page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).first()
+  await primeira.check()
+
+  // Substitui, não soma: somar cresce a barra para duas linhas e empurra a
+  // tabela para baixo a cada caixa marcada.
+  await expect(busca).toHaveCount(0)
+
+  const contagem = page.getByRole('status').filter({ hasText: /selecionado/ })
+  await expect(contagem).toContainText('1 equipamento selecionado')
+  // Marcar uma caixa não move o foco: sem região viva, o leitor de tela não
+  // ouve nada mudar.
+  await expect(contagem).toHaveAttribute('aria-live', 'polite')
+
+  await page.getByRole('button', { name: 'limpar seleção' }).click()
+  await expect(busca).toBeVisible()
+})
+
+test('a caixa do cabeçalho marca a página toda, e fica indeterminada no meio', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  const cabeca = page.getByRole('checkbox', { name: /^Selecionar os \d+ desta página/ })
+  await cabeca.check()
+
+  const marcadas = await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).count()
+  const contagem = page.getByRole('status').filter({ hasText: /selecionados/ })
+  await expect(contagem).toContainText(`${marcadas} equipamentos selecionados`)
+
+  // Desmarcar uma deixa o cabeçalho no terceiro estado, que não existe em
+  // HTML e precisa ser posto à mão.
+  await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).first().uncheck()
+  const indeterminada = await page
+    .getByRole('checkbox', { name: /desta página/ })
+    .evaluate((el) => el.indeterminate)
+  expect(indeterminada, 'a caixa do cabeçalho precisa ficar indeterminada').toBe(true)
+})
+
+test('ação em lote irreversível confirma nomeando os alvos e contando no botão', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).nth(0).check()
+  await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).nth(1).check()
+
+  await page.getByRole('button', { name: 'Baixar ativo…' }).click()
+  const dialogo = page.getByRole('dialog')
+  await expect(dialogo).toBeVisible()
+
+  // Contar no botão é o que impede confirmar um lote diferente do que se vê.
+  // `exact`: o botão "Fechar" do diálogo tem o título no nome acessível.
+  await expect(dialogo.getByRole('button', { name: 'Baixar 2 ativos', exact: true })).toBeVisible()
+  // E os alvos são nomeados: uma lista de patrimônios é a única forma de
+  // perceber que um deles entrou por engano.
+  await expect(dialogo.getByRole('listitem')).toHaveCount(2)
+
+  // Sem motivo, não confirma — a baixa exige motivo e some do razão sem ele.
+  await expect(dialogo.getByRole('button', { name: 'Baixar 2 ativos', exact: true })).toBeDisabled()
+
+  const v = await violacoes(page)
+  expect(v, `confirmação de lote:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('o lote relata o resultado parcial com o nome da regra que recusou', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  // Seleção ampla de propósito: no parque há equipamento com contrato vigente
+  // e equipamento livre, então o lote tem de dar parcial — que é o caso que a
+  // fase existe para tratar.
+  await page.getByRole('checkbox', { name: /^Selecionar os \d+ desta página/ }).check()
+  await page.getByRole('button', { name: 'Baixar ativo…' }).click()
+
+  const dialogo = page.getByRole('dialog')
+  await dialogo.getByLabel('Motivo da baixa').fill('fim de vida útil — laudo de teste')
+  await dialogo.getByRole('button', { name: /^Baixar \d+ ativos$/ }).click()
+
+  const relatorio = page.getByRole('dialog')
+  await expect(relatorio).toBeVisible({ timeout: 30000 })
+  await expect(relatorio).toContainText('recusados por regra')
+  // O nome da regra liga a mensagem da tela ao gatilho do banco.
+  await expect(relatorio).toContainText('equipamento_alocado_nao_baixa')
+
+  const v = await violacoes(page)
+  expect(v, `relatório de lote:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('o rodapé de paginação oferece os controles, e não só os anuncia', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  // Antes: "página 1 de 18" no cabeçalho, com os controles fora da dobra.
+  await expect(page.getByRole('button', { name: 'Próxima' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Anterior' })).toBeDisabled()
+  await expect(page.getByRole('combobox', { name: 'Por página' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Próxima' }).click()
+  await expect(page.getByRole('button', { name: 'Anterior' })).toBeEnabled()
+})
+
+test('paginar esvazia a seleção — seleção invisível não vai para o lote', async ({ page }) => {
+  await abrir(page, { hash: '#/parque' })
+
+  await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).first().check()
+  await expect(page.getByRole('status').filter({ hasText: /selecionado/ })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Próxima' }).click()
+
+  // A barra some porque a seleção pertence à página exibida: uma ação em lote
+  // sobre registros fora da vista é uma ação que ninguém conferiu.
+  await expect(page.getByRole('status').filter({ hasText: /selecionado/ })).toHaveCount(0)
+  await expect(page.getByRole('searchbox', { name: /Patrimônio, série, modelo ou cliente/ })).toBeVisible()
+})
+
+test('a lista de trabalho reflui em 320px, com rodapé e barra de lote', async ({ page }) => {
+  await abrir(page, { hash: '#/parque', largura: 320, altura: 720 })
+
+  await page.getByRole('checkbox', { name: /^Selecionar patrimônio/ }).first().check()
+
+  const transborda = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  )
+  expect(transborda, 'a página transborda na largura de 320px com a barra de lote').toBe(false)
+
+  const v = await violacoes(page)
+  expect(v, `320px com lote:\n  ${descrever(v)}`).toEqual([])
+})
+
+test('a fila financeira oferece aprovação em lote, e a lista completa não', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-receber' })
+  // A tela abre na lista completa; a fila é um recorte, e é nele que a
+  // seleção existe.
+  await page.getByRole('button', { name: 'Ver a minha fila' }).click()
+
+  // A fila é o recorte em que todo registro espera o mesmo verbo.
+  const naFila = await page.getByRole('checkbox', { name: /^Selecionar cobrança/ }).count()
+  expect(naFila, 'a fila de aprovação precisa ter alguma cobrança').toBeGreaterThan(0)
+
+  await page.getByRole('checkbox', { name: /^Selecionar cobrança/ }).first().check()
+  await expect(page.getByRole('status').filter({ hasText: /selecionada/ })).toContainText('1 cobrança')
+  await expect(page.getByRole('button', { name: 'Aprovar', exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'limpar seleção' }).click()
+  await page.getByRole('button', { name: 'Ver todas as cobranças' }).click()
+
+  // Na lista completa não há verbo comum a uma cobrança recebida, uma em
+  // disputa e uma pendente: caixas levariam a uma barra vazia.
+  await expect(page.getByRole('checkbox', { name: /^Selecionar cobrança/ })).toHaveCount(0)
+})
+
+test('rejeitar continua linha a linha — a justificativa é de cada título', async ({ page }) => {
+  await abrir(page, { hash: '#/contas-pagar' })
+  await page.getByRole('button', { name: 'Ver a minha fila' }).click()
+
+  await page.getByRole('checkbox', { name: /^Selecionar título/ }).first().check()
+  const barra = page.getByRole('group', { name: /^Ações para 1 título/ })
+  await expect(barra.getByRole('button', { name: 'Aprovar', exact: true })).toBeVisible()
+  // A rejeição exige justificativa, e uma só para vários títulos diferentes
+  // não explica nenhum.
+  await expect(barra.getByRole('button', { name: /Rejeitar/ })).toHaveCount(0)
+})
+
+test('nenhuma lista do sistema voltou a ter três botões por linha', async ({ page }) => {
+  // O achado Y.3.3 em forma de verificação: a regra vale para as sete listas,
+  // não para a primeira que foi convertida.
+  for (const hash of [
+    '#/parque',
+    '#/chamados',
+    '#/contratos',
+    '#/clientes',
+    '#/estoque',
+    '#/notas-fiscais',
+    '#/contas-receber',
+    '#/contas-pagar',
+  ]) {
+    await abrir(page, { hash })
+    const linhas = page.getByRole('table').first().getByRole('row')
+    const total = Math.min(await linhas.count(), 6)
+    for (let i = 1; i < total; i += 1) {
+      const celulas = linhas.nth(i).locator('td, th')
+      const ultima = celulas.nth((await celulas.count()) - 1)
+      const n = await ultima.getByRole('button').count()
+      expect(n, `${hash}: linha ${i} tem ${n} botões na coluna de ações`).toBeLessThanOrEqual(2)
+    }
+  }
 })

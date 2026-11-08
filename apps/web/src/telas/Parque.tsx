@@ -7,10 +7,15 @@ import { CATEGORIAS, filialPorId } from '../dados/catalogo'
 import { useConsulta } from '../lib/useConsulta'
 import { useSessao } from '../lib/contexto'
 import { inteiro, percentual } from '../lib/formato'
-import { Botao, Carregando, Cartao, Chip, ErroConsulta, Selecao, Skeleton } from '../componentes/ui/primitivos'
+import { Botao, Carregando, Cartao, Chip, Entrada, ErroConsulta, Selecao, Skeleton } from '../componentes/ui/primitivos'
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
+import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
+import { useLote } from '../lib/useLote'
+import type { Resultado } from '../dados/comandos'
 import type { Equipamento, EquipamentoStatus } from '../dados/tipos'
 import { FormEquipamento } from '../componentes/formularios/FormEquipamento'
 import { FormBloqueio } from '../componentes/formularios/FormBloqueio'
@@ -23,6 +28,9 @@ type Aberto =
   | { tipo: 'bloqueio'; equipamento: Equipamento }
   | { tipo: 'leitura'; equipamento: Equipamento }
   | { tipo: 'chamado'; equipamentoId: string }
+  /** Baixa de um ou de muitos — o diálogo é o mesmo, e a contagem vem dos alvos. */
+  | { tipo: 'baixa'; alvos: LinhaParque[] }
+  | { tipo: 'bloqueio-lote'; alvos: LinhaParque[] }
   | null
 
 /** Rótulo e severidade de cada estado — dicionário único, usado em toda a tela. */
@@ -51,6 +59,15 @@ export function Parque() {
   const { situacao, dado, erro, recarregar } = useConsulta(() => api.equipamentos(), [])
   const [texto, setTexto] = useState(params.get('q') ?? '')
   const [aberto, setAberto] = useState<Aberto>(null)
+
+  /*
+   * A seleção mora na tela, não na tabela: é a tela que sabe o que fazer com
+   * ela e quais permissões a limitam. Ids e não objetos porque a lista é
+   * recalculada a cada recarga — guardar objetos manteria vivos registros já
+   * substituídos pela resposta nova.
+   */
+  const lote = useLote(() => recarregar())
+  const [motivo, setMotivo] = useState('')
 
   const estado = params.get('estado') ?? ''
   const categoria = params.get('categoria') ?? ''
@@ -171,39 +188,106 @@ export function Parque() {
         </span>
       ),
     },
+    /*
+     * Uma ação visível, o resto em `⋯` (Anexo Y §Y.3.3).
+     *
+     * A visível é "Chamado", e não "Leitura", porque leitura só existe para
+     * categoria com contador: uma ação primária que desaparece em parte das
+     * linhas deixa a coluna irregular e obriga o olho a procurar o botão em
+     * cada linha. A que vale para toda linha é a que fica.
+     */
     {
       chave: 'acoes',
       titulo: 'Ações',
       celula: (l) => {
         const eq = l.equipamento
         const temContador = categoriaPorCodigo.get(eq.categoria)?.temContador ?? false
+        const baixado = eq.status === 'BAIXADO'
+        const acoes: AcaoMenu[] = []
+
+        if (pode('equipamento:movimentar') && temContador && !baixado) {
+          acoes.push({
+            rotulo: 'Registrar leitura',
+            glifo: '◱',
+            aoEscolher: () => setAberto({ tipo: 'leitura', equipamento: eq }),
+          })
+        }
+        /*
+         * Bloquear e desbloquear são permissões distintas no catálogo e rotas
+         * distintas na API. A tela conferia só `equipamento:desbloquear` para
+         * as duas: quem podia bloquear e não desbloquear não via botão nenhum,
+         * e quem podia desbloquear via o botão de bloquear sem ter a permissão
+         * — o servidor recusaria, depois de o formulário ter sido preenchido.
+         */
+        if (!baixado && pode(eq.bloqueado ? 'equipamento:desbloquear' : 'equipamento:bloquear')) {
+          acoes.push({
+            rotulo: eq.bloqueado ? 'Desbloquear' : 'Bloquear para alocação',
+            glifo: eq.bloqueado ? '◯' : '⊘',
+            separar: true,
+            aoEscolher: () => setAberto({ tipo: 'bloqueio', equipamento: eq }),
+          })
+        }
+        if (pode('equipamento:baixar')) {
+          acoes.push({
+            rotulo: 'Baixar ativo…',
+            glifo: '⊗',
+            perigo: true,
+            separar: true,
+            desabilitado: baixado,
+            motivoDesabilitado: 'Ativo já baixado — a baixa é definitiva.',
+            aoEscolher: () => setAberto({ tipo: 'baixa', alvos: [l] }),
+          })
+        }
+
         return (
-          <div className="linha g2 envolver">
-            {pode('equipamento:movimentar') && temContador && (
-              <Botao pequeno onClick={() => setAberto({ tipo: 'leitura', equipamento: eq })}>
-                Leitura<span className="so-leitor"> do patrimônio {eq.patrimonio}</span>
-              </Botao>
-            )}
-            {pode('os:criar') && (
-              <Botao pequeno onClick={() => setAberto({ tipo: 'chamado', equipamentoId: eq.id })}>
-                Chamado<span className="so-leitor"> para o patrimônio {eq.patrimonio}</span>
-              </Botao>
-            )}
-            {pode('equipamento:desbloquear') && (
-              <Botao
-                pequeno
-                variante={eq.bloqueado ? 'primario' : 'secundario'}
-                onClick={() => setAberto({ tipo: 'bloqueio', equipamento: eq })}
-              >
-                {eq.bloqueado ? 'Desbloquear' : 'Bloquear'}
-                <span className="so-leitor"> patrimônio {eq.patrimonio}</span>
-              </Botao>
-            )}
-          </div>
+          <AcoesDaLinha
+            primaria={
+              pode('os:criar') && !baixado ? (
+                <Botao pequeno onClick={() => setAberto({ tipo: 'chamado', equipamentoId: eq.id })}>
+                  Chamado<span className="so-leitor"> para o patrimônio {eq.patrimonio}</span>
+                </Botao>
+              ) : undefined
+            }
+          >
+            <MenuAcoes rotuloAlvo={`do patrimônio ${eq.patrimonio}`} titulo={`Patrimônio ${eq.patrimonio}`} acoes={acoes} />
+          </AcoesDaLinha>
         )
       },
     },
   ]
+
+  /* --------------------------------------------------------------- lote */
+
+  const alvos = useMemo(
+    () => filtradas.filter((l) => lote.selecionados.has(l.equipamento.id)),
+    [filtradas, lote.selecionados],
+  )
+
+  const rotuloDe = (l: LinhaParque) => `patrimônio ${l.equipamento.patrimonio}`
+
+  /*
+   * Sem nenhuma ação em lote autorizada, a coluna de caixas não aparece.
+   *
+   * Oferecer seleção a quem não pode agir sobre ela é oferecer um caminho que
+   * termina em barra vazia — e ainda rouba uma coluna de largura do dado.
+   */
+  const podeAgirEmLote =
+    pode('equipamento:bloquear') || pode('equipamento:desbloquear') || pode('equipamento:baixar')
+
+  function rodar(
+    lista: LinhaParque[],
+    acao: (id: string) => Promise<Resultado<unknown>>,
+    titulo: string,
+    verbo: string,
+  ) {
+    setAberto(null)
+    setMotivo('')
+    void lote.rodar(
+      lista.map((l) => ({ id: l.equipamento.id, rotulo: rotuloDe(l) })),
+      acao,
+      { titulo, verbo },
+    )
+  }
 
   const fichas = [
     soBloqueados && { chave: 'bloqueado', texto: 'Bloqueados para alocação' },
@@ -242,6 +326,46 @@ export function Parque() {
       </div>
 
       <Cartao>
+        {/*
+          Com seleção, a barra de lote **ocupa o lugar** da de filtros
+          (Anexo Y §Y.3.4). Somar as duas cresceria a barra para duas linhas e
+          empurraria a tabela para baixo a cada caixa marcada.
+
+          O filtro não some do caminho: limpar a seleção devolve a barra, e a
+          seleção pertence à página exibida, então nunca há filtro escondido
+          agindo sobre registros fora da vista.
+        */}
+        {/* `alvos` e não `selecionados`: depois de uma recarga um id selecionado
+            pode já não estar na lista filtrada, e a barra anunciaria "0". */}
+        {alvos.length > 0 || lote.progresso ? (
+          <BarraLote
+            quantidade={alvos.length}
+            substantivo={['equipamento', 'equipamentos']}
+            aoLimpar={lote.limpar}
+            progresso={lote.progresso}
+          >
+            {pode('equipamento:bloquear') && (
+              <Botao pequeno onClick={() => setAberto({ tipo: 'bloqueio-lote', alvos })}>
+                Bloquear
+              </Botao>
+            )}
+            {pode('equipamento:desbloquear') && (
+              <Botao
+                pequeno
+                onClick={() =>
+                  rodar(alvos, (id) => api.desbloquearEquipamento(id), 'Desbloqueio em lote', 'desbloqueados')
+                }
+              >
+                Desbloquear
+              </Botao>
+            )}
+            {pode('equipamento:baixar') && (
+              <Botao pequeno variante="perigo" onClick={() => setAberto({ tipo: 'baixa', alvos })}>
+                Baixar ativo…
+              </Botao>
+            )}
+          </BarraLote>
+        ) : (
         <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
@@ -278,6 +402,7 @@ export function Parque() {
             ]}
           />
         </Filtros>
+        )}
 
         {fichas.length > 0 && (
           <div className="fichas">
@@ -307,6 +432,23 @@ export function Parque() {
             itens={filtradas}
             chaveDe={(l) => l.equipamento.id}
             ordemInicial={{ chave: 'patrimonio', direcao: 'asc' }}
+            selecao={
+              podeAgirEmLote
+                ? {
+                    selecionados: lote.selecionados,
+                    aoMudar: lote.definirSelecao,
+                    rotuloDe,
+                    /*
+                     * Ativo baixado não entra em lote: não há bloqueio nem
+                     * baixa a aplicar sobre ele. Desabilitar com o motivo à
+                     * vista é melhor que deixar marcar e devolver N recusas
+                     * idênticas no relatório.
+                     */
+                    impedimentoDe: (l) =>
+                      l.equipamento.status === 'BAIXADO' ? 'ativo baixado' : undefined,
+                  }
+                : undefined
+            }
             vazio={{
               titulo: 'Nenhum equipamento com esses filtros',
               texto: 'Ajuste os critérios ou limpe os filtros para ver o parque completo.',
@@ -334,6 +476,81 @@ export function Parque() {
       )}
       {aberto?.tipo === 'chamado' && (
         <FormAbrirChamado equipamentoId={aberto.equipamentoId} aoFechar={() => setAberto(null)} />
+      )}
+
+      {aberto?.tipo === 'baixa' && (
+        <ConfirmaLote
+          titulo={aberto.alvos.length === 1 ? 'Baixar este ativo?' : `Baixar ${aberto.alvos.length} ativos?`}
+          explicacao="A baixa é definitiva: o equipamento sai do parque e não volta a ficar disponível. O servidor recusa a baixa de equipamento com item de contrato vigente ou ordem de serviço aberta — os recusados aparecem no relatório, e os demais são baixados."
+          alvos={aberto.alvos.map((l) => ({
+            id: l.equipamento.id,
+            rotulo: `${l.equipamento.patrimonio} · ${l.modelo} · ${l.clienteNome ?? filialPorId.get(l.equipamento.filialId)?.nome ?? '—'}`,
+          }))}
+          rotuloConfirmar={
+            aberto.alvos.length === 1 ? 'Baixar o ativo' : `Baixar ${aberto.alvos.length} ativos`
+          }
+          impedidoDeConfirmar={
+            motivo.trim().length < 10 ? 'O motivo precisa de pelo menos 10 caracteres.' : undefined
+          }
+          aoFechar={() => {
+            setAberto(null)
+            setMotivo('')
+          }}
+          aoConfirmar={() => {
+            const lista = aberto.alvos
+            rodar(lista, (id) => api.baixarEquipamento(id, motivo), 'Baixa patrimonial', 'baixados')
+          }}
+        >
+          <Entrada
+            rotulo="Motivo da baixa"
+            nome="motivo"
+            dica="Fica no razão do ativo. Ex.: fim de vida útil — laudo 2026-114."
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          />
+        </ConfirmaLote>
+      )}
+
+      {aberto?.tipo === 'bloqueio-lote' && (
+        <ConfirmaLote
+          tom="normal"
+          titulo={`Bloquear ${aberto.alvos.length} equipamentos para alocação?`}
+          explicacao="O bloqueio impede nova alocação e não muda o estado operacional: o que está instalado no cliente continua instalado. O motivo é o mesmo para todos os selecionados (RN-014)."
+          alvos={aberto.alvos.map((l) => ({
+            id: l.equipamento.id,
+            rotulo: `${l.equipamento.patrimonio} · ${l.modelo}`,
+          }))}
+          rotuloConfirmar={`Bloquear ${aberto.alvos.length}`}
+          impedidoDeConfirmar={
+            motivo.trim().length < 10 ? 'O motivo precisa de pelo menos 10 caracteres.' : undefined
+          }
+          aoFechar={() => {
+            setAberto(null)
+            setMotivo('')
+          }}
+          aoConfirmar={() => {
+            const lista = aberto.alvos
+            rodar(lista, (id) => api.bloquearEquipamento(id, motivo), 'Bloqueio em lote', 'bloqueados')
+          }}
+        >
+          <Entrada
+            rotulo="Motivo do bloqueio"
+            nome="motivo"
+            dica="Ex.: preventiva vencida — aguardando peça."
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          />
+        </ConfirmaLote>
+      )}
+
+      {lote.relatorio && (
+        <ResultadoDoLote
+          titulo={lote.relatorio.titulo}
+          verbo={lote.relatorio.verbo}
+          resultado={lote.relatorio.dados}
+          aoFechar={lote.fecharRelatorio}
+          aoSelecionarFalhas={lote.definirSelecao}
+        />
       )}
     </>
   )

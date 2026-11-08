@@ -1215,6 +1215,275 @@ th.numerico {
   flex-wrap: wrap;
   font-size: var(--t-13);
   color: var(--cor-text-secondary);
+  border-top: 1px solid var(--cor-border);
+  padding-top: var(--e3);
+}
+.paginacao__controles {
+  align-items: center;
+}
+.paginacao__tamanho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e2);
+  font-size: var(--t-12);
+}
+.paginacao__tamanho select {
+  height: 30px;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  background: var(--cor-surface-raised);
+  color: var(--cor-text-primary);
+  font: inherit;
+  font-weight: 600;
+  padding: 0 var(--e2);
+}
+.paginacao__posicao {
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------- seleção em lote (Y.2) --- */
+/*
+ * A coluna da caixa é estreita e não rola junto com o resto: quem marca
+ * precisa ver o que está marcando, e a caixa é o único alvo da linha que não
+ * pode ficar fora da área visível numa tabela larga.
+ */
+.col-selecao {
+  width: 40px;
+  text-align: center;
+  padding-right: 0 !important;
+}
+.col-selecao input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--cor-primary);
+  cursor: pointer;
+  margin: 0;
+}
+.col-selecao input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+tr.linha--selecionada > td,
+tr.linha--selecionada > th {
+  background: var(--cor-primary-subtle-bg);
+}
+
+.barra-lote {
+  display: flex;
+  align-items: center;
+  gap: var(--e3);
+  flex-wrap: wrap;
+  padding: var(--e2) var(--e3);
+  background: var(--cor-primary-subtle-bg);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  color: var(--cor-primary-subtle-fg);
+}
+.barra-lote__contagem {
+  font-size: var(--t-13);
+  white-space: nowrap;
+}
+.barra-lote__separador {
+  width: 1px;
+  align-self: stretch;
+  background: var(--cor-border);
+}
+.barra-lote__acoes {
+  display: flex;
+  gap: var(--e2);
+  flex-wrap: wrap;
+}
+.barra-lote__progresso {
+  font-size: var(--t-13);
+  font-weight: 600;
+}
+.barra-lote__limpar {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  font-size: var(--t-12);
+  font-weight: 600;
+  text-decoration: underline;
+  color: var(--cor-primary-subtle-fg);
+  min-height: var(--alvo-toque-min);
+  display: inline-flex;
+  align-items: center;
+}
+.barra-lote__limpar:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lote-alvos {
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  background: var(--cor-surface);
+  padding: var(--e2) var(--e3);
+  max-height: 180px;
+  overflow: auto;
+}
+.lote-alvos ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--t-13);
+  color: var(--cor-text-secondary);
+}
+.lote-alvos li {
+  padding: 2px 0;
+}
+
+.lote-resumo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  overflow: hidden;
+}
+.lote-resumo__caixa {
+  padding: var(--e3);
+  border-right: 1px solid var(--cor-border);
+}
+.lote-resumo__caixa:last-child {
+  border-right: 0;
+}
+.lote-resumo__n {
+  display: block;
+  font-size: var(--t-21);
+  font-weight: 700;
+  line-height: 1.1;
+}
+.lote-resumo__caixa--ok .lote-resumo__n {
+  color: var(--cor-disponivel);
+}
+.lote-resumo__caixa--nao .lote-resumo__n {
+  color: var(--cor-critico);
+}
+.lote-resumo__r {
+  display: block;
+  font-size: var(--t-12);
+  color: var(--cor-text-secondary);
+  margin-top: 2px;
+}
+
+.lote-falhas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+}
+.lote-falhas li {
+  display: flex;
+  gap: var(--e3);
+  padding: var(--e2) var(--e3);
+  border-bottom: 1px solid var(--cor-surface-sunken);
+  font-size: var(--t-13);
+}
+.lote-falhas li:last-child {
+  border-bottom: 0;
+}
+.lote-falhas__alvo {
+  font-weight: 700;
+  min-width: 84px;
+}
+.lote-falhas__texto {
+  flex: 1;
+}
+.lote-falhas__codigo {
+  margin-left: var(--e2);
+  font-size: var(--t-11);
+  background: var(--cor-critico-bg);
+  color: var(--cor-critico);
+  border-radius: var(--raio-1);
+  padding: 1px 5px;
+}
+.lote-falhas__saida {
+  display: block;
+  font-size: var(--t-12);
+  color: var(--cor-text-muted);
+  margin-top: 2px;
+}
+
+/* ----------------------------------------------- menu de ações da linha --- */
+.acoes-linha {
+  display: flex;
+  gap: var(--e2);
+  align-items: center;
+  justify-content: flex-end;
+}
+.menu-acoes {
+  position: relative;
+  display: inline-block;
+}
+.menu-acoes__gatilho[aria-expanded='true'] {
+  background: var(--cor-primary-subtle-bg);
+  border-color: var(--cor-primary);
+  color: var(--cor-primary-subtle-fg);
+}
+.menu-acoes__lista {
+  /* `fixed` porque o menu é desenhado em `document.body`, fora do recorte da
+     tabela rolável. A posição vem medida do gatilho, em JS. */
+  position: fixed;
+  z-index: 60;
+  min-width: 232px;
+  background: var(--cor-surface-raised);
+  border: 1px solid var(--cor-border);
+  border-radius: var(--raio-2);
+  box-shadow: var(--sombra-2);
+  padding: 4px;
+  text-align: left;
+}
+.menu-acoes__titulo {
+  font-size: var(--t-11);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cor-text-muted);
+  padding: 6px 8px 3px;
+}
+.menu-acoes__item {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  width: 100%;
+  min-height: var(--alvo-toque-min);
+  padding: 0 8px;
+  border-radius: var(--raio-1);
+  font-size: var(--t-13);
+  color: var(--cor-text-primary);
+  cursor: pointer;
+}
+.menu-acoes__item:hover,
+.menu-acoes__item:focus-visible {
+  background: var(--cor-primary-subtle-bg);
+  color: var(--cor-primary-subtle-fg);
+}
+.menu-acoes__item[disabled] {
+  cursor: not-allowed;
+  color: var(--cor-text-muted);
+}
+.menu-acoes__item[disabled]:hover {
+  background: none;
+}
+.menu-acoes__item--perigo {
+  color: var(--cor-critico);
+}
+.menu-acoes__item--perigo:hover,
+.menu-acoes__item--perigo:focus-visible {
+  background: var(--cor-critico-bg);
+  color: var(--cor-critico);
+}
+.menu-acoes__glifo {
+  width: 16px;
+  text-align: center;
+  opacity: 0.8;
+}
+.menu-acoes__regua {
+  border: 0;
+  border-top: 1px solid var(--cor-surface-sunken);
+  margin: 4px;
 }
 
 /* ------------------------------------------------------------------ toast --- */
@@ -3060,5 +3329,69 @@ textarea {
     display: grid;
     place-items: center;
     flex: none;
+  }
+}
+
+/* ------------------------------------------------- lista de trabalho em 320px --- */
+/*
+ * O rodapé de paginação tem cinco peças — intervalo, tamanho de página,
+ * anterior, posição e próxima. Numa linha só, elas somam mais que 320 px e a
+ * página passa a rolar lateralmente (WCAG 1.4.10).
+ *
+ * A solução não é esconder controle: é empilhar. Esconder "por página"
+ * devolveria o defeito que o rodapé veio corrigir — paginação anunciada e não
+ * oferecida —, só que em celular, que é onde a lista é mais longa de percorrer.
+ */
+@media (max-width: 560px) {
+  .paginacao {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--e2);
+  }
+  .paginacao__controles {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+  .paginacao__posicao {
+    order: -1;
+    flex-basis: 100%;
+  }
+
+  /* A barra de lote segue a mesma regra: a contagem em cima, as ações abaixo,
+     e o "limpar" deixa de ser empurrado para a direita de uma linha que já
+     não existe. */
+  .barra-lote {
+    align-items: stretch;
+  }
+  .barra-lote__separador {
+    display: none;
+  }
+  .barra-lote__contagem {
+    flex-basis: 100%;
+  }
+  .barra-lote__limpar {
+    margin-left: 0;
+  }
+
+  /* O resumo do lote em três colunas fica com números ilegíveis em 320px. */
+  .lote-resumo {
+    grid-template-columns: 1fr;
+  }
+  .lote-resumo__caixa {
+    border-right: 0;
+    border-bottom: 1px solid var(--cor-border);
+  }
+  .lote-resumo__caixa:last-child {
+    border-bottom: 0;
+  }
+  .lote-falhas li {
+    flex-direction: column;
+    gap: var(--e1);
+  }
+
+  /* Ancorado à direita da linha, o menu sairia da tela numa coluna estreita. */
+  .menu-acoes__lista {
+    min-width: 0;
+    width: min(260px, calc(100vw - 32px));
   }
 }

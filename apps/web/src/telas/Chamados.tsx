@@ -11,6 +11,10 @@ import { Botao, Carregando, Cartao, Chip, ErroConsulta, Metrica, Selecao, Skelet
 import { Busca, Filtros } from '../componentes/ui/filtros'
 import { Tabela } from '../componentes/ui/Tabela'
 import type { Coluna } from '../componentes/ui/Tabela'
+import { AcoesDaLinha, MenuAcoes } from '../componentes/ui/MenuAcoes'
+import type { AcaoMenu } from '../componentes/ui/MenuAcoes'
+import { BarraLote, ConfirmaLote, ResultadoDoLote } from '../componentes/ui/BarraLote'
+import { useLote } from '../lib/useLote'
 import { FormAbrirChamado } from '../componentes/formularios/FormAbrirChamado'
 import { FormAtribuirTecnico } from '../componentes/formularios/FormAtribuirTecnico'
 import { FormConcluirChamado } from '../componentes/formularios/FormConcluirChamado'
@@ -21,6 +25,7 @@ type Aberto =
   | { tipo: 'abrir' }
   | { tipo: 'atribuir'; ordem: OrdemServico }
   | { tipo: 'concluir'; ordem: OrdemServico }
+  | { tipo: 'atribuir-lote'; alvos: LinhaChamado[] }
   | null
 
 const ENCERRADOS = ['CONCLUIDA', 'VALIDADA', 'CANCELADA']
@@ -72,6 +77,8 @@ export function Chamados() {
     setParams(new URLSearchParams(), { replace: true })
   }
   const [aberto, setAberto] = useState<Aberto>(null)
+  const lote = useLote(() => recarregar())
+  const [tecnicoLote, setTecnicoLote] = useState('')
 
   const linhas = useMemo(() => (dado ? linhasChamados() : []), [dado])
 
@@ -87,6 +94,11 @@ export function Chamados() {
       return true
     })
   }, [linhas, prioridade, status, texto])
+
+  const alvos = useMemo(
+    () => filtradas.filter((l) => lote.selecionados.has(l.ordem.id)),
+    [filtradas, lote.selecionados],
+  )
 
   const indicadores = api.baseSincrona().indicadores
   const estourados = linhas.filter((l) => l.estourado).length
@@ -159,32 +171,45 @@ export function Chamados() {
           </span>
         ),
     },
+    /*
+     * A primária é "Concluir" — é o que fecha o chamado, e é o que a fila
+     * existe para produzir. Atribuir técnico vai para o `⋯`: é frequente, mas
+     * já tem a ação em lote, que é como a triagem de verdade acontece.
+     */
     {
       chave: 'acoes',
       titulo: 'Ações',
       celula: (l) => {
         const encerrado = ENCERRADOS.includes(l.ordem.status)
         if (encerrado) return <span className="texto-atenuado">encerrado</span>
+
+        const acoes: AcaoMenu[] = []
+        if (pode('os:triar')) {
+          acoes.push({
+            rotulo: l.tecnicoNome ? 'Trocar técnico' : 'Atribuir técnico',
+            glifo: '◑',
+            aoEscolher: () => setAberto({ tipo: 'atribuir', ordem: l.ordem }),
+          })
+        }
+
         return (
-          <div className="linha g2 envolver">
-            {pode('os:triar') && (
-              <Botao pequeno onClick={() => setAberto({ tipo: 'atribuir', ordem: l.ordem })}>
-                {l.tecnicoNome ? 'Trocar' : 'Atribuir'}
-                <span className="so-leitor"> técnico do chamado {l.ordem.numero}</span>
-              </Botao>
-            )}
-            {pode('os:executar') && (
-              <Botao
-                pequeno
-                variante="primario"
-                disabled={!l.ordem.tecnicoId}
-                motivoDesabilitado="Atribua um técnico antes de concluir"
-                onClick={() => setAberto({ tipo: 'concluir', ordem: l.ordem })}
-              >
-                Concluir<span className="so-leitor"> chamado {l.ordem.numero}</span>
-              </Botao>
-            )}
-          </div>
+          <AcoesDaLinha
+            primaria={
+              pode('os:executar') ? (
+                <Botao
+                  pequeno
+                  variante="primario"
+                  disabled={!l.ordem.tecnicoId}
+                  motivoDesabilitado="Atribua um técnico antes de concluir"
+                  onClick={() => setAberto({ tipo: 'concluir', ordem: l.ordem })}
+                >
+                  Concluir<span className="so-leitor"> chamado {l.ordem.numero}</span>
+                </Botao>
+              ) : undefined
+            }
+          >
+            <MenuAcoes rotuloAlvo={`do chamado ${l.ordem.numero}`} titulo={`Chamado ${l.ordem.numero}`} acoes={acoes} />
+          </AcoesDaLinha>
         )
       },
     },
@@ -247,6 +272,21 @@ export function Chamados() {
       </div>
 
       <Cartao>
+        {/* Com seleção, a barra de lote ocupa o lugar da de filtros (Anexo Y §Y.3.4). */}
+        {alvos.length > 0 || lote.progresso ? (
+          <BarraLote
+            quantidade={alvos.length}
+            substantivo={['chamado', 'chamados']}
+            aoLimpar={lote.limpar}
+            progresso={lote.progresso}
+          >
+            {pode('os:triar') && (
+              <Botao pequeno onClick={() => setAberto({ tipo: 'atribuir-lote', alvos })}>
+                Atribuir técnico
+              </Botao>
+            )}
+          </BarraLote>
+        ) : (
         <Filtros ativos={filtrosAtivos} aoLimpar={limparFiltros}>
           <div className="campo-busca">
             <Busca
@@ -281,6 +321,7 @@ export function Chamados() {
             ]}
           />
         </Filtros>
+        )}
 
         {situacao === 'carregando' ? (
           <Carregando rotulo="Carregando fila de chamados">
@@ -293,6 +334,19 @@ export function Chamados() {
             itens={filtradas}
             chaveDe={(l) => l.ordem.id}
             ordemInicial={{ chave: 'prazo', direcao: 'asc' }}
+            selecao={
+              pode('os:triar')
+                ? {
+                    selecionados: lote.selecionados,
+                    aoMudar: lote.definirSelecao,
+                    rotuloDe: (l) => `chamado ${l.ordem.numero}`,
+                    /* Chamado encerrado não aceita atribuição — a regra é do
+                       comando, e desabilitar aqui evita N recusas idênticas. */
+                    impedimentoDe: (l) =>
+                      ENCERRADOS.includes(l.ordem.status) ? 'chamado encerrado' : undefined,
+                  }
+                : undefined
+            }
             vazio={{
               titulo: 'Nenhum chamado com esses filtros',
               texto: 'A fila pode estar realmente vazia — o que é uma boa notícia.',
@@ -318,6 +372,69 @@ export function Chamados() {
       )}
       {aberto?.tipo === 'concluir' && (
         <FormConcluirChamado ordem={aberto.ordem} aoFechar={() => setAberto(null)} />
+      )}
+
+      {aberto?.tipo === 'atribuir-lote' && (
+        <ConfirmaLote
+          tom="normal"
+          titulo={`Atribuir ${aberto.alvos.length} chamados a um técnico`}
+          explicacao="O mesmo técnico recebe todos os selecionados. Quem não tiver a especialidade do equipamento é recusado pelo servidor, um a um — os recusados aparecem no relatório e os demais são atribuídos."
+          alvos={aberto.alvos.map((l) => ({
+            id: l.ordem.id,
+            rotulo: `${l.ordem.numero} · ${l.patrimonio} · ${l.clienteNome ?? '—'}`,
+          }))}
+          rotuloConfirmar={`Atribuir ${aberto.alvos.length}`}
+          impedidoDeConfirmar={tecnicoLote ? undefined : 'Escolha o técnico responsável.'}
+          aoFechar={() => {
+            setAberto(null)
+            setTecnicoLote('')
+          }}
+          aoConfirmar={() => {
+            const lista = aberto.alvos
+            const tecnico = tecnicoLote
+            setAberto(null)
+            setTecnicoLote('')
+            void lote.rodar(
+              lista.map((l) => ({ id: l.ordem.id, rotulo: `chamado ${l.ordem.numero}` })),
+              (id) => api.atribuirTecnico(id, tecnico),
+              { titulo: 'Atribuição em lote', verbo: 'atribuídos' },
+            )
+          }}
+        >
+          {/*
+            A lista traz todos os técnicos, com a carga ao lado — e **não**
+            esconde os incompatíveis, porque a compatibilidade depende do
+            equipamento de cada chamado e o lote tem vários. Quem é incompatível
+            com parte da seleção é recusado só nesses, e o relatório diz quais.
+          */}
+          <Selecao
+            rotulo="Técnico responsável"
+            value={tecnicoLote}
+            onChange={(e) => setTecnicoLote(e.target.value)}
+            dica="A compatibilidade de especialidade é conferida chamado a chamado."
+            opcoes={[
+              { valor: '', texto: 'Escolha…' },
+              ...api
+                .baseSincrona()
+                .tecnicos.slice()
+                .sort((a, b) => a.cargaAtual - b.cargaAtual)
+                .map((t) => ({
+                  valor: t.id,
+                  texto: `${t.nome} — ${t.cargaAtual} na fila · ${t.especialidades.join(', ').toLowerCase()}`,
+                })),
+            ]}
+          />
+        </ConfirmaLote>
+      )}
+
+      {lote.relatorio && (
+        <ResultadoDoLote
+          titulo={lote.relatorio.titulo}
+          verbo={lote.relatorio.verbo}
+          resultado={lote.relatorio.dados}
+          aoFechar={lote.fecharRelatorio}
+          aoSelecionarFalhas={lote.definirSelecao}
+        />
       )}
     </>
   )
